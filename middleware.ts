@@ -3,8 +3,12 @@ import { NextResponse, type NextRequest } from "next/server";
 
 const authorizedParties =
   process.env.NODE_ENV === "development"
-    ? ["https://fintrk.io", "http://localhost:3000"]
-    : ["https://fintrk.io"];
+    ? [
+        "https://fintrk.io",
+        "https://www.fintrk.io",
+        "http://localhost:3000",
+      ]
+    : ["https://fintrk.io", "https://www.fintrk.io"];
 
 const CLERK_KEYS_PRESENT = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
