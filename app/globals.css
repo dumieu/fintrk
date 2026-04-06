@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import url("https://fonts.googleapis.com/css2?family=Aldhabi&display=swap");
 
 @custom-variant dark (&:is(.dark *));
 
@@ -113,6 +114,12 @@
   --sidebar-accent-foreground: oklch(0.93 0 0);
   --sidebar-border: oklch(1 0 0 / 12%);
   --sidebar-ring: oklch(0.55 0.02 260);
+}
+
+@layer utilities {
+  .font-aldhabi {
+    font-family: "Aldhabi", ui-serif, Georgia, serif;
+  }
 }
 
 @layer base {

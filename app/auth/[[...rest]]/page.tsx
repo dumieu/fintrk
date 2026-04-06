@@ -4,6 +4,7 @@ import { SignIn, SignUp } from "@clerk/nextjs";
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { CardDescription, CardTitle } from "@/components/ui/card";
+import { FintrkShortLogo } from "@/components/fintrk-short-logo";
 
 export async function generateMetadata(): Promise<Metadata> {
   const hdrs = await headers();
@@ -41,12 +42,10 @@ export default async function AuthPage({
 
       <div className="relative z-10 mx-4 flex w-full max-w-md flex-col items-center gap-6 sm:mx-auto">
         <div className="text-center">
-          <div className="flex justify-center mb-4">
-            <div className="h-20 w-20 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/25">
-              <span className="text-3xl font-bold text-white">F</span>
-            </div>
+          <div className="flex justify-center">
+            <FintrkShortLogo size="auth" />
           </div>
-          <CardTitle className="mt-3 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-600 bg-clip-text text-3xl font-bold text-transparent sm:text-4xl">
+          <CardTitle className="mt-3 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-600 bg-clip-text font-aldhabi text-3xl font-bold tracking-tight text-transparent sm:text-4xl">
             FinTRK
           </CardTitle>
           <CardDescription className="mt-2 text-sm text-gray-600 dark:text-gray-400 sm:text-base">

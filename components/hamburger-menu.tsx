@@ -29,6 +29,7 @@ import {
   Settings,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { FintrkShortLogo } from "@/components/fintrk-short-logo";
 
 const ACCENT_HEX = "#0BC18D";
 const ACCENT_RGB = "11,193,141";
@@ -79,10 +80,13 @@ export function HamburgerMenu() {
       />
       <SheetContent side="left" showCloseButton={false} className="w-72 p-0">
         <SheetHeader className="border-b border-border px-5 py-4">
-          <div className="flex items-center justify-between">
-            <SheetTitle className="text-lg font-bold" style={{ color: ACCENT_HEX }}>
-              FinTRK
-            </SheetTitle>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <FintrkShortLogo size="header" />
+              <SheetTitle className="font-aldhabi text-lg font-bold tracking-tight" style={{ color: ACCENT_HEX }}>
+                FinTRK
+              </SheetTitle>
+            </div>
             <ThemeToggle />
           </div>
           <SheetDescription className="sr-only">Navigation menu</SheetDescription>
