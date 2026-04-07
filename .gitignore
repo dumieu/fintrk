@@ -28,8 +28,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files
+# Environment — never commit secrets (DB, Clerk, Vercel tokens)
 .env
+.env.local
 .env*.local
 .env.clerk.fin-trk
 *.pulled

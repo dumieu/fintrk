@@ -7,6 +7,9 @@ const nextConfig: NextConfig = {
   devIndicators: false,
   poweredByHeader: false,
   compress: true,
+  ...(isDev && {
+    allowedDevOrigins: ["local.fintrk.io:3004", "local.fintrk.io"],
+  }),
 
   images: {
     formats: ["image/avif", "image/webp"],
@@ -32,6 +35,7 @@ const nextConfig: NextConfig = {
             value: [
               "default-src 'self'",
               `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.accounts.dev https://clerk.fintrk.io https://*.clerk.services https://clerk-telemetry.com https://*.clerk-telemetry.com https://challenges.cloudflare.com https://accounts.google.com${isDev ? " http://localhost:*" : ""}`,
+              "worker-src 'self' blob:",
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
               "img-src 'self' data: blob: https://*.clerk.com https://img.clerk.com",
               "font-src 'self' data: https://fonts.gstatic.com",

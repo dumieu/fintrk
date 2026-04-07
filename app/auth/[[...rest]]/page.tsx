@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { SignIn, SignUp } from "@clerk/nextjs";
-import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { CardDescription, CardTitle } from "@/components/ui/card";
 import { FintrkShortLogo } from "@/components/fintrk-short-logo";
+
+const CLERK_CONFIGURED = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
 export async function generateMetadata(): Promise<Metadata> {
   const hdrs = await headers();
@@ -21,8 +22,11 @@ export default async function AuthPage({
 }: {
   params: Promise<{ rest?: string[] }>;
 }) {
-  const { userId } = await auth();
-  if (userId) redirect("/dashboard");
+  if (CLERK_CONFIGURED) {
+    const { auth } = await import("@clerk/nextjs/server");
+    const { userId } = await auth();
+    if (userId) redirect("/dashboard");
+  }
 
   const segments = (await params).rest ?? [];
   const isSignUp = segments[0] === "sign-up";
@@ -53,20 +57,32 @@ export default async function AuthPage({
           </CardDescription>
         </div>
 
-        {isSignUp ? (
-          <SignUp
-            routing="path"
-            path="/auth/sign-up"
-            signInUrl="/auth"
-            fallbackRedirectUrl="/dashboard"
-          />
+        {CLERK_CONFIGURED ? (
+          isSignUp ? (
+            <SignUp
+              routing="path"
+              path="/auth/sign-up"
+              signInUrl="/auth"
+              fallbackRedirectUrl="/dashboard"
+            />
+          ) : (
+            <SignIn
+              routing="path"
+              path="/auth"
+              signUpUrl="/auth/sign-up"
+              fallbackRedirectUrl="/dashboard"
+            />
+          )
         ) : (
-          <SignIn
-            routing="path"
-            path="/auth"
-            signUpUrl="/auth/sign-up"
-            fallbackRedirectUrl="/dashboard"
-          />
+          <div className="rounded-xl border border-amber-300/50 bg-amber-50/80 p-6 text-center text-sm text-amber-900 shadow backdrop-blur dark:border-amber-700/40 dark:bg-amber-950/60 dark:text-amber-200">
+            <p className="font-semibold">Clerk not configured</p>
+            <p className="mt-1 text-xs opacity-80">
+              Set <code className="font-mono">NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY</code> and{" "}
+              <code className="font-mono">CLERK_SECRET_KEY</code> in{" "}
+              <code className="font-mono">.env.local</code> (or{" "}
+              <code className="font-mono">.env.clerk.fin-trk</code>) to enable auth.
+            </p>
+          </div>
         )}
       </div>
     </div>

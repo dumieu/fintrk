@@ -6,7 +6,10 @@ const authorizedParties =
     ? [
         "https://fintrk.io",
         "https://www.fintrk.io",
+        "https://local.fintrk.io:3004",
         "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:3004",
       ]
     : ["https://fintrk.io", "https://www.fintrk.io"];
 

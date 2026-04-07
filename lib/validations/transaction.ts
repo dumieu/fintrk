@@ -1,0 +1,25 @@
+import { z } from "zod";
+
+export const transactionFiltersSchema = z.object({
+  accountId: z.string().uuid().optional(),
+  categoryId: z.coerce.number().int().optional(),
+  dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  currency: z.string().length(3).optional(),
+  countryIso: z.string().length(2).optional(),
+  isRecurring: z.enum(["true", "false"]).optional(),
+  search: z.string().max(200).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(25),
+  sortBy: z.enum(["posted_date", "base_amount", "merchant_name", "category"]).default("posted_date"),
+  sortDir: z.enum(["asc", "desc"]).default("desc"),
+});
+
+export type TransactionFilters = z.infer<typeof transactionFiltersSchema>;
+
+export const updateCategorySchema = z.object({
+  transactionIds: z.array(z.string().uuid()).min(1),
+  categoryId: z.number().int(),
+});
+
+export type UpdateCategoryInput = z.infer<typeof updateCategorySchema>;

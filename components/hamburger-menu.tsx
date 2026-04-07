@@ -17,11 +17,12 @@ import {
   Menu,
   LayoutDashboard,
   User,
-  Wallet,
+  Upload,
   ArrowLeftRight,
   PiggyBank,
   Target,
-  TrendingUp,
+  BarChart3,
+  Landmark,
   Mail,
   HelpCircle,
   LogIn,
@@ -61,11 +62,12 @@ export function HamburgerMenu() {
   }, [clerk]);
 
   const navItems = [
-    { label: "Portfolio", href: `${basePath}/portfolio`, icon: Wallet },
+    { label: "Upload Statement", href: `${basePath}/upload`, icon: Upload },
     { label: "Transactions", href: `${basePath}/transactions`, icon: ArrowLeftRight },
-    { label: "Budget & Expenses", href: `${basePath}/budget`, icon: PiggyBank },
-    { label: "Financial Goals", href: `${basePath}/goals`, icon: Target },
-    { label: "Investments", href: `${basePath}/investments`, icon: TrendingUp },
+    { label: "Analytics", href: `${basePath}/analytics`, icon: BarChart3 },
+    { label: "Budget", href: `${basePath}/budget`, icon: PiggyBank },
+    { label: "Goals", href: `${basePath}/goals`, icon: Target },
+    { label: "Accounts", href: `${basePath}/accounts`, icon: Landmark },
   ];
 
   return (
@@ -95,6 +97,7 @@ export function HamburgerMenu() {
         <nav className="flex-1 px-3 py-3">
           <div className="mb-2">
             <SheetClose
+              nativeButton={false}
               render={
                 <Link
                   href={basePath}
@@ -131,6 +134,7 @@ export function HamburgerMenu() {
           <ul className="space-y-1">
             <li>
               <SheetClose
+                nativeButton={false}
                 render={
                   <Link
                     href={`${basePath}/profile`}
@@ -152,6 +156,7 @@ export function HamburgerMenu() {
               return (
                 <li key={item.href}>
                   <SheetClose
+                    nativeButton={false}
                     render={
                       <Link
                         href={item.href}
@@ -176,6 +181,7 @@ export function HamburgerMenu() {
           <ul className="space-y-1">
             <li>
               <SheetClose
+                nativeButton={false}
                 render={
                   <Link
                     href={`${basePath}/contact`}
@@ -193,6 +199,7 @@ export function HamburgerMenu() {
             </li>
             <li>
               <SheetClose
+                nativeButton={false}
                 render={
                   <Link
                     href={`${basePath}/faq`}
@@ -237,6 +244,7 @@ export function HamburgerMenu() {
             </ul>
           ) : (
             <SheetClose
+              nativeButton={false}
               render={
                 <Link
                   href="/auth"
