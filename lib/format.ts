@@ -68,15 +68,108 @@ export function formatFxSpread(bps: number | string): string {
   return `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`;
 }
 
-export function formatDate(dateStr: string, style: "short" | "long" = "short"): string {
+export function formatDate(
+  dateStr: string,
+  style: "short" | "long" | "ddMmmYy" = "short",
+): string {
   try {
     const d = new Date(dateStr + "T00:00:00");
     if (style === "long") {
       return d.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
     }
+    if (style === "ddMmmYy") {
+      const day = String(d.getDate()).padStart(2, "0");
+      const mon = d.toLocaleDateString("en-GB", { month: "short" });
+      const yy = String(d.getFullYear()).slice(-2);
+      return `${day} ${mon} ${yy}`;
+    }
     return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   } catch {
     return dateStr;
+  }
+}
+
+const NETWORK_LABELS: Record<string, string> = {
+  visa: "Visa",
+  mastercard: "Mastercard",
+  amex: "AMEX",
+  discover: "Discover",
+  jcb: "JCB",
+  unionpay: "UnionPay",
+  diners: "Diners Club",
+};
+
+/** Display name for `accounts.card_network` (empty if unknown / not a card). */
+export function cardNetworkLabel(network: string | null | undefined): string {
+  if (!network || network === "unknown") return "";
+  return NETWORK_LABELS[network] ?? "";
+}
+
+/**
+ * Combines card network + account type into a human label.
+ * E.g. "Visa Credit", "Mastercard Debit", "AMEX Credit", "Checking", "Savings".
+ */
+export function accountProductLabel(
+  accountType: string | null | undefined,
+  cardNetwork?: string | null,
+): string {
+  const networkLabel = cardNetwork ? NETWORK_LABELS[cardNetwork] : undefined;
+
+  const typeLabel = (() => {
+    switch (accountType) {
+      case "credit":
+        return networkLabel ? "Credit" : "Credit card";
+      case "checking":
+        return networkLabel ? "Debit" : "Checking";
+      case "savings":
+        return "Savings";
+      case "investment":
+        return "Investment";
+      case "loan":
+        return "Loan";
+      default:
+        return networkLabel ? "" : "Account";
+    }
+  })();
+
+  if (networkLabel && typeLabel) return `${networkLabel} ${typeLabel}`;
+  if (networkLabel) return networkLabel;
+  return typeLabel || "Account";
+}
+
+/** Format masked number as ******1234. */
+export function formatMaskedNumber(masked: string | null | undefined): string {
+  if (!masked) return "";
+  const digits = masked.replace(/\D/g, "");
+  if (digits.length < 2) return "";
+  const last4 = digits.slice(-4);
+  return `******${last4}`;
+}
+
+/** Separator between subtitle segments (NBSP ×3 so spaces don’t collapse in HTML). */
+export const TRANSACTION_SUBTITLE_SEPARATOR = "\u00A0\u00A0\u00A0";
+
+/**
+ * User-facing account kind for transaction subtitles: Credit Card, Debit Card, Checking Account, etc.
+ */
+export function accountKindSubtitleLabel(
+  accountType: string | null | undefined,
+  cardNetwork: string | null | undefined,
+): string {
+  const hasNetwork = !!cardNetwork && cardNetwork !== "unknown";
+  switch (accountType) {
+    case "credit":
+      return "Credit Card";
+    case "checking":
+      return hasNetwork ? "Debit Card" : "Checking Account";
+    case "savings":
+      return "Savings Account";
+    case "investment":
+      return "Investment Account";
+    case "loan":
+      return "Loan Account";
+    default:
+      return "Account";
   }
 }
 

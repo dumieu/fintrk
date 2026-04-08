@@ -1,50 +1,114 @@
 import { NextResponse } from "next/server";
+import { eq, or, isNull, isNotNull, asc, and, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
-import { transactions, categories } from "@/lib/db/schema";
-import { eq, sql, isNotNull } from "drizzle-orm";
+import { categories, transactions } from "@/lib/db/schema";
 import { logServerError } from "@/lib/safe-error";
+import { flowThemeForCategoryNames, type CategoryFlowTheme } from "@/lib/category-flow-theme";
 
 export const dynamic = "force-dynamic";
 
 const NO_STORE = { "Cache-Control": "no-store" } as const;
+
+const FLOW_SORT_ORDER: Record<CategoryFlowTheme, number> = {
+  inflow: 0,
+  savings: 1,
+  outflow: 2,
+  unknown: 3,
+};
+
+export interface CategoryFilterOption {
+  value: string;
+  label: string;
+  categoryName: string | null;
+  subcategoryName: string | null;
+  flowTheme: CategoryFlowTheme;
+}
 
 export async function GET() {
   try {
     const { userId } = await resilientAuth();
     if (!userId) return unauthorizedResponse();
 
-    const [catRows, currRows, countryRows] = await Promise.all([
+    const parent = alias(categories, "cat_parent");
+
+    const [categoryRows, volumeRows] = await Promise.all([
       resilientQuery(() =>
-        db.selectDistinct({ id: categories.id, name: categories.name })
+        db
+          .select({
+            id: categories.id,
+            name: categories.name,
+            parentName: parent.name,
+          })
           .from(categories)
-          .innerJoin(transactions, eq(transactions.categoryId, categories.id))
-          .where(eq(transactions.userId, userId))
-          .orderBy(categories.name),
+          .leftJoin(parent, eq(categories.parentId, parent.id))
+          .where(or(isNull(categories.userId), eq(categories.userId, userId))),
       ),
       resilientQuery(() =>
-        db.selectDistinct({ currency: transactions.baseCurrency })
+        db
+          .select({
+            categoryId: transactions.categoryId,
+            totalAbs: sql<string>`coalesce(sum(abs(cast(${transactions.baseAmount} as numeric))), 0)::text`,
+          })
           .from(transactions)
-          .where(eq(transactions.userId, userId))
-          .orderBy(transactions.baseCurrency),
-      ),
-      resilientQuery(() =>
-        db.selectDistinct({ country: transactions.countryIso })
-          .from(transactions)
-          .where(eq(transactions.userId, userId))
-          .orderBy(transactions.countryIso),
+          .where(and(eq(transactions.userId, userId), isNotNull(transactions.categoryId)))
+          .groupBy(transactions.categoryId),
       ),
     ]);
 
-    return NextResponse.json({
-      categories: catRows.map((c) => ({ value: String(c.id), label: c.name })),
-      currencies: currRows.map((c) => ({ value: c.currency, label: c.currency })),
-      countries: countryRows
-        .filter((c) => c.country)
-        .map((c) => ({ value: c.country!, label: c.country! })),
-    }, { headers: NO_STORE });
+    const volumeByCategoryId = new Map<number, number>();
+    for (const row of volumeRows) {
+      if (row.categoryId == null) continue;
+      volumeByCategoryId.set(row.categoryId, parseFloat(row.totalAbs ?? "0") || 0);
+    }
+
+    /** Slicer chips only for categories the user has actually used (non-zero total |amount| on assigned rows). */
+    const categoryList: CategoryFilterOption[] = categoryRows
+      .filter((row) => (volumeByCategoryId.get(row.id) ?? 0) > 0)
+      .map((row) => {
+        const isSub = row.parentName != null && row.parentName !== "";
+        return {
+          value: String(row.id),
+          label: row.name,
+          categoryName: isSub ? row.parentName! : row.name,
+          subcategoryName: isSub ? row.name : null,
+          flowTheme: flowThemeForCategoryNames(isSub ? row.parentName : null, row.name),
+        };
+      });
+
+    categoryList.sort((a, b) => {
+      const fa = FLOW_SORT_ORDER[a.flowTheme];
+      const fb = FLOW_SORT_ORDER[b.flowTheme];
+      if (fa !== fb) return fa - fb;
+      const ta = volumeByCategoryId.get(Number(a.value)) ?? 0;
+      const tb = volumeByCategoryId.get(Number(b.value)) ?? 0;
+      if (tb !== ta) return tb - ta;
+      return a.label.localeCompare(b.label, undefined, { sensitivity: "base" });
+    });
+
+    const countryRows = await resilientQuery(() =>
+      db
+        .selectDistinct({ iso: transactions.countryIso })
+        .from(transactions)
+        .where(and(eq(transactions.userId, userId), isNotNull(transactions.countryIso))),
+    );
+
+    const countries = countryRows
+      .map((r) => r.iso)
+      .filter((iso): iso is string => iso != null && iso !== "")
+      .sort()
+      .map((iso) => ({ value: iso, label: iso.toUpperCase() }));
+
+    return NextResponse.json(
+      { categories: categoryList, countries },
+      { headers: NO_STORE },
+    );
   } catch (err) {
-    logServerError("api/transactions/filter-options", err);
-    return NextResponse.json({ error: "Failed" }, { status: 500, headers: NO_STORE });
+    logServerError("api/transactions/filter-options/GET", err);
+    return NextResponse.json(
+      { error: "Failed to load filter options", categories: [], countries: [] },
+      { status: 500, headers: NO_STORE },
+    );
   }
 }

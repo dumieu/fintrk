@@ -162,3 +162,117 @@
     border-radius: 9999px;
   }
 }
+
+/* ── Amount range slider thumbs ──────────────────────────── */
+.amount-range-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+}
+.amount-range-thumb::-webkit-slider-runnable-track {
+  height: 5px;
+  background: transparent;
+}
+.amount-range-thumb::-moz-range-track {
+  height: 5px;
+  background: transparent;
+}
+.amount-range-thumb::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  pointer-events: auto;
+  position: relative;
+  z-index: 1;
+  width: 22px;
+  height: 22px;
+  margin-top: -8.5px;
+  border-radius: 50%;
+  cursor: grab;
+  border: 2px solid rgba(126,87,194,.7);
+  background:
+    radial-gradient(circle at 50% 40%, rgba(167,243,208,.35), transparent 60%),
+    linear-gradient(135deg, #1e1142, #120a28);
+  box-shadow:
+    0 0 6px 1px rgba(126,87,194,.4),
+    0 0 14px rgba(126,87,194,.15);
+  transition: box-shadow .15s, transform .1s;
+}
+.amount-range-thumb::-moz-range-thumb {
+  pointer-events: auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  cursor: grab;
+  border: 2px solid rgba(126,87,194,.7);
+  background:
+    radial-gradient(circle at 50% 40%, rgba(167,243,208,.35), transparent 60%),
+    linear-gradient(135deg, #1e1142, #120a28);
+  box-shadow:
+    0 0 6px 1px rgba(126,87,194,.4),
+    0 0 14px rgba(126,87,194,.15);
+  transition: box-shadow .15s, transform .1s;
+}
+.amount-range-thumb::-webkit-slider-thumb:hover {
+  box-shadow:
+    0 0 10px 2px rgba(126,87,194,.6),
+    0 0 20px rgba(11,193,141,.25);
+  transform: scale(1.12);
+}
+.amount-range-thumb::-moz-range-thumb:hover {
+  box-shadow:
+    0 0 10px 2px rgba(126,87,194,.6),
+    0 0 20px rgba(11,193,141,.25);
+  transform: scale(1.12);
+}
+.amount-range-thumb::-webkit-slider-thumb:active {
+  cursor: grabbing;
+  box-shadow:
+    0 0 12px 3px rgba(126,87,194,.7),
+    0 0 24px rgba(11,193,141,.3);
+  transform: scale(1.18);
+}
+.amount-range-thumb::-moz-range-thumb:active {
+  cursor: grabbing;
+  box-shadow:
+    0 0 12px 3px rgba(126,87,194,.7),
+    0 0 24px rgba(11,193,141,.3);
+  transform: scale(1.18);
+}
+
+/* ── Mind-map particle atmosphere ────────────────────────── */
+
+@keyframes mm-float {
+  0%, 100% { transform: translate(0, 0) scale(1); opacity: var(--mm-o, 0.3); }
+  25% { transform: translate(14px, -22px) scale(1.1); }
+  50% { transform: translate(-10px, 16px) scale(0.9); opacity: calc(var(--mm-o, 0.3) * 1.4); }
+  75% { transform: translate(18px, 6px) scale(1.05); }
+}
+@keyframes mm-nebula {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.55; }
+  33% { transform: translate(-46%, -54%) scale(1.08); opacity: 0.7; }
+  66% { transform: translate(-54%, -47%) scale(0.92); opacity: 0.45; }
+}
+@keyframes mm-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.04); }
+}
+@keyframes mm-dash {
+  to { stroke-dashoffset: -22; }
+}
+
+.mm-star {
+  animation: mm-float ease-in-out infinite;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+.mm-nebula {
+  animation: mm-nebula 28s ease-in-out infinite;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+.mm-breathe {
+  animation: mm-breathe 4.5s ease-in-out infinite;
+  will-change: transform;
+}
+.mm-conn {
+  stroke-dasharray: 4 14;
+  animation: mm-dash 2.8s linear infinite;
+}

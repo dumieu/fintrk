@@ -70,7 +70,7 @@ export async function GET() {
           .select({
             id: transactions.id,
             postedDate: transactions.postedDate,
-            cleanDescription: transactions.cleanDescription,
+            rawDescription: transactions.rawDescription,
             merchantName: transactions.merchantName,
             baseAmount: transactions.baseAmount,
             baseCurrency: transactions.baseCurrency,

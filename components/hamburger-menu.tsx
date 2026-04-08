@@ -28,6 +28,7 @@ import {
   LogIn,
   LogOut,
   Settings,
+  Network,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { FintrkShortLogo } from "@/components/fintrk-short-logo";
@@ -68,6 +69,7 @@ export function HamburgerMenu() {
     { label: "Budget", href: `${basePath}/budget`, icon: PiggyBank },
     { label: "Goals", href: `${basePath}/goals`, icon: Target },
     { label: "Accounts", href: `${basePath}/accounts`, icon: Landmark },
+    { label: "Category Mapping", href: `${basePath}/categories`, icon: Network },
   ];
 
   return (

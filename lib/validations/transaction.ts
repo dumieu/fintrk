@@ -5,7 +5,12 @@ export const transactionFiltersSchema = z.object({
   categoryId: z.coerce.number().int().optional(),
   dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  currency: z.string().length(3).optional(),
+  /** Credit card / debit card (checking + card network) / checking account (no card network). */
+  accountKind: z.enum(["credit_card", "debit_card", "checking"]).optional(),
+  /** Match digits against stored masked number (e.g. 4480). */
+  accountNumber: z.string().max(32).optional(),
+  amountMin: z.coerce.number().optional(),
+  amountMax: z.coerce.number().optional(),
   countryIso: z.string().length(2).optional(),
   isRecurring: z.enum(["true", "false"]).optional(),
   search: z.string().max(200).optional(),
@@ -23,3 +28,9 @@ export const updateCategorySchema = z.object({
 });
 
 export type UpdateCategoryInput = z.infer<typeof updateCategorySchema>;
+
+export const deleteTransactionsSchema = z.object({
+  transactionIds: z.array(z.string().uuid()).min(1).max(500),
+});
+
+export type DeleteTransactionsInput = z.infer<typeof deleteTransactionsSchema>;

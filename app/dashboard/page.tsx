@@ -39,7 +39,7 @@ interface DashboardData {
   recentTransactions: {
     id: string;
     postedDate: string;
-    cleanDescription: string;
+    rawDescription: string;
     merchantName: string | null;
     baseAmount: string;
     baseCurrency: string;
@@ -222,11 +222,11 @@ export default function DashboardPage() {
                               "w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0",
                               isIncome ? "bg-[#0BC18D]/10 text-[#0BC18D]" : "bg-[#2CA2FF]/10 text-[#2CA2FF]",
                             )}>
-                              {(txn.merchantName ?? txn.cleanDescription).charAt(0).toUpperCase()}
+                              {(txn.merchantName ?? txn.rawDescription).charAt(0).toUpperCase()}
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className="text-xs font-medium text-white/90 truncate">
-                                {txn.merchantName ?? txn.cleanDescription}
+                                {txn.merchantName ?? txn.rawDescription}
                               </p>
                               <p className="text-[10px] text-white/50">
                                 {formatDate(txn.postedDate)}

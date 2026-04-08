@@ -82,11 +82,16 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Aldhabi&display=swap" rel="stylesheet" />
       </head>
-      <body className={`${inter.className} flex min-h-screen min-w-0 flex-col`}>
+      <body
+        className={`${inter.className} flex h-dvh max-h-dvh min-h-0 min-w-0 flex-col overflow-hidden`}
+      >
         <ClerkProviderWrapper>
           <Providers>
-            <div className="min-w-0 w-full flex-1 overflow-x-clip">{children}</div>
-            <SiteFooter />
+            <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+              {/* flex + min-h-0 so dashboard routes can fill height; overflow-y-auto for long non-dashboard pages */}
+              <div className="flex min-h-0 flex-1 flex-col overflow-x-clip overflow-y-auto">{children}</div>
+              <SiteFooter />
+            </div>
           </Providers>
         </ClerkProviderWrapper>
       </body>

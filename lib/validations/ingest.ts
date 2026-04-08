@@ -4,7 +4,7 @@ export const aiTransactionSchema = z.object({
   posted_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   value_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   raw_description: z.string().min(1),
-  clean_description: z.string().min(1),
+  reference_id: z.string().nullable().optional(),
   merchant_name: z.string().nullable().optional(),
   base_amount: z.number(),
   base_currency: z.string().length(3),
@@ -26,6 +26,8 @@ export const aiResponseSchema = z.object({
     country_iso: z.string().length(2).nullable().optional(),
     statement_period_start: z.string().nullable().optional(),
     statement_period_end: z.string().nullable().optional(),
+    card_network: z.enum(["visa", "mastercard", "amex", "discover", "jcb", "unionpay", "diners", "unknown"]).nullable().optional(),
+    masked_last_four: z.union([z.string(), z.number()]).nullable().optional(),
   }),
   transactions: z.array(aiTransactionSchema),
 });

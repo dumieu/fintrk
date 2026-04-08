@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Upload,
@@ -11,22 +11,40 @@ import {
   FileText,
   FileSpreadsheet,
   X,
+  Ban,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import Papa from "papaparse";
 import * as XLSX from "xlsx";
+import { dispatchTransactionsChanged } from "@/lib/notify-transactions-changed";
 
 const ACCEPT = ".csv,.xls,.xlsx,.pdf";
-const MAX_SIZE = 10 * 1024 * 1024;
+const MAX_SIZE = 1 * 1024 * 1024;
+const SESSION_KEY = "fintrk:upload-queue";
 
-type LocalStatus = "queued" | "parsing" | "submitting" | "submitted" | "error";
+type LocalStatus = "queued" | "parsing" | "checking" | "submitting" | "submitted" | "completed" | "failed" | "duplicate" | "error";
 
 interface QueuedFile {
   id: string;
-  file: File;
+  fileName: string;
+  fileSize: number;
+  hash: string;
   status: LocalStatus;
   error: string | null;
+  statementId?: number;
+  imported?: number;
+  duplicateTxns?: number;
+}
+
+interface SerializedQueue {
+  items: QueuedFile[];
+  ts: number;
+}
+
+function fileFingerprint(f: File): string {
+  const normalName = f.name.trim().toLowerCase();
+  return `${normalName}|${f.size}|${f.lastModified}`;
 }
 
 function fileIcon(name: string) {
@@ -74,33 +92,230 @@ async function clientParse(f: File): Promise<{ headers: string[]; rows: Record<s
   return null;
 }
 
+async function isPasswordProtected(f: File): Promise<boolean> {
+  const ext = f.name.split(".").pop()?.toLowerCase();
+
+  if (ext === "pdf") {
+    const buf = await f.arrayBuffer();
+    const bytes = new Uint8Array(buf);
+    const text = new TextDecoder("latin1").decode(bytes);
+    return text.includes("/Encrypt");
+  }
+
+  if (ext === "xls" || ext === "xlsx") {
+    try {
+      const buf = await f.arrayBuffer();
+      XLSX.read(buf, { type: "array" });
+      return false;
+    } catch {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+async function checkDuplicatesOnServer(
+  files: { hash: string; size: number; name: string }[],
+): Promise<Map<string, { isDuplicate: boolean; reason: string | null }>> {
+  const result = new Map<string, { isDuplicate: boolean; reason: string | null }>();
+  try {
+    const res = await fetch("/api/ingest/check-duplicates", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ files }),
+    });
+    if (res.ok) {
+      const { results } = await res.json();
+      for (const r of results as { hash: string; isDuplicate: boolean; reason: string | null }[]) {
+        result.set(r.hash, { isDuplicate: r.isDuplicate, reason: r.reason });
+      }
+    }
+  } catch {}
+  return result;
+}
+
+function persistQueue(items: QueuedFile[]) {
+  try {
+    const data: SerializedQueue = { items, ts: Date.now() };
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(data));
+  } catch {}
+}
+
+function loadPersistedQueue(): QueuedFile[] {
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY);
+    if (!raw) return [];
+    const data = JSON.parse(raw) as SerializedQueue;
+    if (Date.now() - data.ts > 30 * 60 * 1000) {
+      sessionStorage.removeItem(SESSION_KEY);
+      return [];
+    }
+    return data.items.filter((f) => f.status !== "queued" && f.status !== "parsing" && f.status !== "checking" && f.status !== "submitting");
+  } catch {
+    return [];
+  }
+}
+
 export function StatementUpload() {
   const [queue, setQueue] = useState<QueuedFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileStash = useRef<Map<string, File>>(new Map());
+  const initialized = useRef(false);
 
-  const addFiles = useCallback((files: FileList | File[]) => {
-    const newItems: QueuedFile[] = [];
+  useEffect(() => {
+    if (initialized.current) return;
+    initialized.current = true;
+    const restored = loadPersistedQueue();
+    if (restored.length > 0) setQueue(restored);
+  }, []);
+
+  useEffect(() => {
+    if (queue.length > 0) persistQueue(queue);
+  }, [queue]);
+
+  // Poll /api/ingest/status to update submitted items when AI finishes
+  const pendingCount = queue.filter((f) => f.status === "submitted").length;
+  useEffect(() => {
+    if (pendingCount === 0) return;
+
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const res = await fetch("/api/ingest/status");
+        if (!res.ok || cancelled) return;
+        const data = await res.json() as {
+          processing: { id: number; fileName: string; status: string }[];
+          recentlyFinished: { id: number; fileName: string; status: string; transactionsImported: number | null; transactionsDuplicate: number | null; aiError: string | null }[];
+        };
+
+        const processingIds = new Set(data.processing.map((s) => s.id));
+        const finishedMap = new Map(data.recentlyFinished.map((s) => [s.id, s]));
+        const finishedByName = new Map(data.recentlyFinished.map((s) => [s.fileName, s]));
+
+        setQueue((prev) => {
+          let becameCompleted = false;
+          const next = prev.map((item) => {
+            if (item.status !== "submitted") return item;
+
+            if (item.statementId) {
+              if (processingIds.has(item.statementId)) return item;
+              const finished = finishedMap.get(item.statementId);
+              if (finished) {
+                if (finished.status === "completed") {
+                  becameCompleted = true;
+                  return { ...item, status: "completed" as const, imported: finished.transactionsImported ?? 0, duplicateTxns: finished.transactionsDuplicate ?? 0 };
+                }
+                return { ...item, status: "failed" as const, error: finished.aiError ?? "Processing failed" };
+              }
+            }
+
+            const byName = finishedByName.get(item.fileName);
+            if (byName && !processingIds.has(byName.id)) {
+              if (byName.status === "completed") {
+                becameCompleted = true;
+                return { ...item, status: "completed" as const, statementId: byName.id, imported: byName.transactionsImported ?? 0, duplicateTxns: byName.transactionsDuplicate ?? 0 };
+              }
+              return { ...item, status: "failed" as const, statementId: byName.id, error: byName.aiError ?? "Processing failed" };
+            }
+
+            // If we have a statementId and it's not in processing or recentlyFinished,
+            // it finished outside the 5-min window — mark as completed
+            if (item.statementId && !processingIds.has(item.statementId) && !finishedMap.has(item.statementId)) {
+              becameCompleted = true;
+              return { ...item, status: "completed" as const, imported: 0, duplicateTxns: 0 };
+            }
+
+            return item;
+          });
+          if (becameCompleted) queueMicrotask(() => dispatchTransactionsChanged());
+          return next;
+        });
+      } catch {}
+    };
+
+    poll();
+    const interval = setInterval(poll, 3000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [pendingCount]);
+
+  const addFiles = useCallback(async (files: FileList | File[]) => {
+    const candidates: { file: File; hash: string }[] = [];
+    const rejected: QueuedFile[] = [];
+
     for (const f of Array.from(files)) {
       if (f.size > MAX_SIZE) continue;
       const ext = f.name.split(".").pop()?.toLowerCase();
       if (!ext || !["csv", "xls", "xlsx", "pdf"].includes(ext)) continue;
+      candidates.push({ file: f, hash: fileFingerprint(f) });
+    }
+    if (candidates.length === 0) return;
 
-      newItems.push({
-        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        file: f,
-        status: "queued",
-        error: null,
-      });
+    // Dedup against current queue
+    const currentHashes = new Set(queue.map((q) => q.hash));
+    const fresh = candidates.filter((c) => !currentHashes.has(c.hash));
+    if (fresh.length === 0) return;
+
+    // Check for password-protected files
+    const checked: { file: File; hash: string }[] = [];
+    for (const c of fresh) {
+      if (await isPasswordProtected(c.file)) {
+        rejected.push({
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          fileName: c.file.name,
+          fileSize: c.file.size,
+          hash: c.hash,
+          status: "error",
+          error: "Password-protected files are not supported",
+        });
+      } else {
+        checked.push(c);
+      }
     }
-    if (newItems.length > 0) {
-      setQueue((prev) => [...prev, ...newItems]);
-    }
-  }, []);
+
+    // Immediately add to queue as "checking"
+    const newItems: QueuedFile[] = checked.map((c) => ({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      fileName: c.file.name,
+      fileSize: c.file.size,
+      hash: c.hash,
+      status: "checking" as const,
+      error: null,
+    }));
+
+    for (const c of checked) fileStash.current.set(c.hash, c.file);
+    setQueue((prev) => [...prev, ...rejected, ...newItems]);
+
+    if (checked.length === 0) return;
+
+    // Server-side duplicate check
+    const serverResults = await checkDuplicatesOnServer(
+      fresh.map((c) => ({ hash: c.hash, size: c.file.size, name: c.file.name })),
+    );
+
+    setQueue((prev) =>
+      prev.map((item) => {
+        const check = serverResults.get(item.hash);
+        if (item.status !== "checking") return item;
+        if (!check) return { ...item, status: "queued" };
+        if (check.isDuplicate && check.reason !== "previously_failed") {
+          return { ...item, status: "duplicate", error: "Already uploaded — skipped to save AI costs" };
+        }
+        return { ...item, status: "queued" };
+      }),
+    );
+  }, [queue]);
 
   const removeFile = useCallback((id: string) => {
-    setQueue((prev) => prev.filter((f) => f.id !== id));
+    setQueue((prev) => {
+      const updated = prev.filter((f) => f.id !== id);
+      if (updated.length === 0) {
+        try { sessionStorage.removeItem(SESSION_KEY); } catch {}
+      }
+      return updated;
+    });
   }, []);
 
   const updateFile = useCallback((id: string, patch: Partial<QueuedFile>) => {
@@ -112,19 +327,25 @@ export function StatementUpload() {
     setIsSubmitting(true);
 
     const pending = queue.filter((f) => f.status === "queued");
+    if (pending.length === 0) { setIsSubmitting(false); return; }
 
-    const structuredPayloads: { data: Record<string, unknown>[]; headers: string[]; fileName: string }[] = [];
-    const binaryFiles: { id: string; file: File }[] = [];
+    const structuredPayloads: { data: Record<string, unknown>[]; headers: string[]; fileName: string; fileHash: string; id: string }[] = [];
+    const binaryFiles: { id: string; file: File; hash: string }[] = [];
 
     for (const item of pending) {
+      const file = fileStash.current.get(item.hash);
+      if (!file) {
+        updateFile(item.id, { status: "error", error: "File reference lost — please re-add" });
+        continue;
+      }
       updateFile(item.id, { status: "parsing" });
       try {
-        const parsed = await clientParse(item.file);
+        const parsed = await clientParse(file);
         if (parsed) {
-          structuredPayloads.push({ data: parsed.rows, headers: parsed.headers, fileName: item.file.name });
+          structuredPayloads.push({ data: parsed.rows, headers: parsed.headers, fileName: file.name, fileHash: item.hash, id: item.id });
           updateFile(item.id, { status: "submitting" });
         } else {
-          binaryFiles.push({ id: item.id, file: item.file });
+          binaryFiles.push({ id: item.id, file, hash: item.hash });
           updateFile(item.id, { status: "submitting" });
         }
       } catch (err) {
@@ -134,23 +355,33 @@ export function StatementUpload() {
 
     if (structuredPayloads.length > 0) {
       try {
+        const payloads = structuredPayloads.map(({ data, headers, fileName, fileHash }) => ({ data, headers, fileName, fileHash }));
         const res = await fetch("/api/ingest", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(structuredPayloads.length === 1 ? structuredPayloads[0] : structuredPayloads),
+          body: JSON.stringify(payloads.length === 1 ? payloads[0] : payloads),
         });
         if (!res.ok) {
           const err = await res.json().catch(() => ({ error: "Submission failed" }));
-          for (const item of pending.filter((f) => !f.file.name.endsWith(".pdf"))) {
+          for (const item of structuredPayloads) {
             updateFile(item.id, { status: "error", error: err.error ?? "Submission failed" });
           }
         } else {
-          for (const item of pending.filter((f) => !f.file.name.endsWith(".pdf"))) {
-            updateFile(item.id, { status: "submitted" });
+          const json = await res.json();
+          const stmtIds: number[] = json.statementIds ?? [];
+          const fileNames: string[] = json.files ?? [];
+          const dupSkipped: string[] = json.duplicatesSkipped ?? [];
+          for (const item of structuredPayloads) {
+            if (dupSkipped.includes(item.fileName)) {
+              updateFile(item.id, { status: "duplicate", error: "Server rejected — already processed" });
+            } else {
+              const idx = fileNames.indexOf(item.fileName);
+              updateFile(item.id, { status: "submitted", statementId: idx >= 0 ? stmtIds[idx] : undefined });
+            }
           }
         }
       } catch (err) {
-        for (const item of pending.filter((f) => !f.file.name.endsWith(".pdf"))) {
+        for (const item of structuredPayloads) {
           updateFile(item.id, { status: "error", error: err instanceof Error ? err.message : "Network error" });
         }
       }
@@ -158,16 +389,32 @@ export function StatementUpload() {
 
     if (binaryFiles.length > 0) {
       const formData = new FormData();
-      for (const { file } of binaryFiles) {
+      const hashMap: Record<string, string> = {};
+      for (const { file, hash } of binaryFiles) {
         formData.append("file", file);
+        hashMap[file.name] = hash;
       }
+      formData.append("fileHashes", JSON.stringify(hashMap));
       try {
         const res = await fetch("/api/ingest", { method: "POST", body: formData });
         if (!res.ok) {
           const err = await res.json().catch(() => ({ error: "Submission failed" }));
           for (const { id } of binaryFiles) updateFile(id, { status: "error", error: err.error ?? "Submission failed" });
         } else {
-          for (const { id } of binaryFiles) updateFile(id, { status: "submitted" });
+          const json = await res.json();
+          const stmtIds: number[] = json.statementIds ?? [];
+          const fileNames: string[] = json.files ?? [];
+          const dupSkipped: string[] = json.duplicatesSkipped ?? [];
+          for (const bf of binaryFiles) {
+            const file = fileStash.current.get(bf.hash);
+            const name = file?.name ?? "";
+            if (dupSkipped.includes(name)) {
+              updateFile(bf.id, { status: "duplicate", error: "Server rejected — already processed" });
+            } else {
+              const idx = fileNames.indexOf(name);
+              updateFile(bf.id, { status: "submitted", statementId: idx >= 0 ? stmtIds[idx] : undefined });
+            }
+          }
         }
       } catch (err) {
         for (const { id } of binaryFiles) {
@@ -193,12 +440,19 @@ export function StatementUpload() {
   const reset = useCallback(() => {
     setQueue([]);
     setIsSubmitting(false);
+    fileStash.current.clear();
+    try { sessionStorage.removeItem(SESSION_KEY); } catch {}
   }, []);
 
   const hasQueued = queue.some((f) => f.status === "queued");
-  const allSubmitted = queue.length > 0 && queue.every((f) => f.status === "submitted" || f.status === "error");
+  const hasChecking = queue.some((f) => f.status === "checking");
+  const hasSubmitted = queue.some((f) => f.status === "submitted");
+  const terminalStatuses: LocalStatus[] = ["completed", "failed", "error", "duplicate"];
+  const allDone = queue.length > 0 && queue.every((f) => terminalStatuses.includes(f.status));
+  const completedCount = queue.filter((f) => f.status === "completed").length;
   const submittedCount = queue.filter((f) => f.status === "submitted").length;
-  const errorCount = queue.filter((f) => f.status === "error").length;
+  const duplicateCount = queue.filter((f) => f.status === "duplicate").length;
+  const errorCount = queue.filter((f) => f.status === "error" || f.status === "failed").length;
 
   return (
     <div className="w-full max-w-3xl mx-auto space-y-4">
@@ -259,7 +513,7 @@ export function StatementUpload() {
             </span>
           ))}
         </div>
-        <p className="mt-3 text-[11px] text-white/50">Max 10MB per file</p>
+        <p className="mt-3 text-[11px] text-white/50">Max 1MB per file</p>
       </motion.div>
 
       <AnimatePresence>
@@ -274,9 +528,10 @@ export function StatementUpload() {
               <p className="text-xs font-medium text-white/70">
                 {queue.length} file{queue.length !== 1 ? "s" : ""}
                 {submittedCount > 0 && <span className="text-[#0BC18D] ml-2">{submittedCount} queued for processing</span>}
+                {duplicateCount > 0 && <span className="text-[#ECAA0B] ml-2">{duplicateCount} duplicate{duplicateCount !== 1 ? "s" : ""} skipped</span>}
                 {errorCount > 0 && <span className="text-[#FF6F69] ml-2">{errorCount} failed</span>}
               </p>
-              {allSubmitted && (
+              {allDone && (
                 <Button onClick={reset} variant="ghost" size="sm" className="text-white/60 hover:text-white h-7 text-xs">
                   Clear
                 </Button>
@@ -294,40 +549,64 @@ export function StatementUpload() {
                   className="px-5 py-3 flex items-center gap-3"
                 >
                   <div className="shrink-0">
-                    {item.status === "submitted" ? (
+                    {item.status === "completed" ? (
                       <div className="w-8 h-8 rounded-lg bg-[#0BC18D]/10 flex items-center justify-center">
                         <CheckCircle2 className="w-4 h-4 text-[#0BC18D]" />
+                      </div>
+                    ) : item.status === "submitted" ? (
+                      <div className="w-8 h-8 rounded-lg bg-[#AD74FF]/10 flex items-center justify-center">
+                        <Loader2 className="w-4 h-4 text-[#AD74FF] animate-spin" />
+                      </div>
+                    ) : item.status === "failed" ? (
+                      <div className="w-8 h-8 rounded-lg bg-[#FF6F69]/10 flex items-center justify-center">
+                        <AlertCircle className="w-4 h-4 text-[#FF6F69]" />
+                      </div>
+                    ) : item.status === "duplicate" ? (
+                      <div className="w-8 h-8 rounded-lg bg-[#ECAA0B]/10 flex items-center justify-center">
+                        <Ban className="w-4 h-4 text-[#ECAA0B]" />
                       </div>
                     ) : item.status === "error" ? (
                       <div className="w-8 h-8 rounded-lg bg-[#FF6F69]/10 flex items-center justify-center">
                         <AlertCircle className="w-4 h-4 text-[#FF6F69]" />
                       </div>
-                    ) : (item.status === "parsing" || item.status === "submitting") ? (
+                    ) : (item.status === "parsing" || item.status === "submitting" || item.status === "checking") ? (
                       <div className="w-8 h-8 rounded-lg bg-[#AD74FF]/10 flex items-center justify-center">
                         <Loader2 className="w-4 h-4 text-[#AD74FF] animate-spin" />
                       </div>
                     ) : (
                       <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center">
-                        {fileIcon(item.file.name)}
+                        {fileIcon(item.fileName)}
                       </div>
                     )}
                   </div>
 
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-white/90 truncate">{item.file.name}</p>
+                    <p className="text-xs font-medium text-white/90 truncate">{item.fileName}</p>
                     <p className="text-[10px] text-white/50">
-                      {item.status === "queued" && formatSize(item.file.size)}
+                      {item.status === "queued" && formatSize(item.fileSize)}
+                      {item.status === "checking" && "Checking for duplicates…"}
                       {item.status === "parsing" && "Parsing file…"}
                       {item.status === "submitting" && "Submitting to server…"}
                       {item.status === "submitted" && (
-                        <span className="text-[#0BC18D]">Queued — AI is processing in the background</span>
+                        <span className="text-[#AD74FF]">AI is processing…</span>
+                      )}
+                      {item.status === "completed" && (
+                        <span className="text-[#0BC18D]">
+                          {item.imported ?? 0} imported{(item.duplicateTxns ?? 0) > 0 && `, ${item.duplicateTxns} duplicate txns`}
+                        </span>
+                      )}
+                      {item.status === "failed" && (
+                        <span className="text-[#FF6F69]">{item.error ?? "Processing failed"}</span>
+                      )}
+                      {item.status === "duplicate" && (
+                        <span className="text-[#ECAA0B]">{item.error}</span>
                       )}
                       {item.status === "error" && <span className="text-[#FF6F69]">{item.error}</span>}
                     </p>
                   </div>
 
                   <div className="shrink-0">
-                    {item.status === "queued" && (
+                    {(item.status === "queued" || item.status === "duplicate" || item.status === "error" || item.status === "completed" || item.status === "failed") && (
                       <button type="button" onClick={(e) => { e.stopPropagation(); removeFile(item.id); }} className="p-1 text-white/40 hover:text-white/70 transition-colors">
                         <X className="w-3.5 h-3.5" />
                       </button>
@@ -338,14 +617,35 @@ export function StatementUpload() {
             </div>
 
             <div className="px-5 py-3 border-t border-white/15 flex items-center justify-between">
-              {allSubmitted ? (
+              {allDone ? (
                 <div className="flex items-center gap-2 w-full">
-                  <CheckCircle2 className="w-4 h-4 text-[#0BC18D] shrink-0" />
-                  <p className="text-xs text-white/75">
-                    All files submitted. AI is processing in the background — you can navigate away safely.
-                  </p>
+                  {duplicateCount > 0 && completedCount === 0 && errorCount === 0 ? (
+                    <>
+                      <Ban className="w-4 h-4 text-[#ECAA0B] shrink-0" />
+                      <p className="text-xs text-white/75">
+                        {duplicateCount === 1 ? "This file was" : "All files were"} already processed — no AI costs incurred.
+                      </p>
+                    </>
+                  ) : completedCount > 0 ? (
+                    <>
+                      <CheckCircle2 className="w-4 h-4 text-[#0BC18D] shrink-0" />
+                      <p className="text-xs text-white/75">
+                        Processing complete.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <AlertCircle className="w-4 h-4 text-[#FF6F69] shrink-0" />
+                      <p className="text-xs text-white/75">Done.</p>
+                    </>
+                  )}
                 </div>
-              ) : hasQueued && !isSubmitting ? (
+              ) : hasSubmitted ? (
+                <div className="flex items-center gap-2 w-full justify-center">
+                  <Loader2 className="w-4 h-4 text-[#AD74FF] animate-spin" />
+                  <p className="text-xs text-white/65">AI is processing — you can navigate away safely</p>
+                </div>
+              ) : hasQueued && !isSubmitting && !hasChecking ? (
                 <div className="flex items-center justify-between w-full">
                   <p className="text-[10px] text-white/50">
                     {queue.filter((f) => f.status === "queued").length} file{queue.filter((f) => f.status === "queued").length !== 1 ? "s" : ""} ready
@@ -359,10 +659,10 @@ export function StatementUpload() {
                     Process {queue.filter((f) => f.status === "queued").length > 1 ? "All" : ""} with AI
                   </Button>
                 </div>
-              ) : isSubmitting ? (
+              ) : (isSubmitting || hasChecking) ? (
                 <div className="flex items-center gap-2 w-full justify-center">
                   <Loader2 className="w-4 h-4 text-[#AD74FF] animate-spin" />
-                  <p className="text-xs text-white/65">Submitting files…</p>
+                  <p className="text-xs text-white/65">{hasChecking ? "Checking files…" : "Submitting files…"}</p>
                 </div>
               ) : null}
             </div>

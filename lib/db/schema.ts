@@ -44,6 +44,7 @@ export const accounts = pgTable(
     institutionName: varchar("institution_name", { length: 255 }),
     accountName: varchar("account_name", { length: 255 }).notNull(),
     accountType: accountTypeEnum("account_type").default("unknown").notNull(),
+    cardNetwork: varchar("card_network", { length: 20 }),
     maskedNumber: varchar("masked_number", { length: 20 }),
     primaryCurrency: varchar("primary_currency", { length: 3 }).notNull(),
     countryIso: varchar("country_iso", { length: 2 }),
@@ -51,7 +52,11 @@ export const accounts = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (t) => [index("accounts_user_id_idx").on(t.userId)],
+  (t) => [
+    index("accounts_user_id_idx").on(t.userId),
+    uniqueIndex("accounts_user_type_mask_currency_idx")
+      .on(t.userId, t.accountType, t.maskedNumber, t.primaryCurrency),
+  ],
 );
 
 // ─── Statements (uploaded files) ─────────────────────────────────────────────
@@ -65,6 +70,7 @@ export const statements = pgTable(
     fileName: varchar("file_name", { length: 512 }).notNull(),
     fileSize: integer("file_size").notNull(),
     fileMimeType: varchar("file_mime_type", { length: 128 }).notNull(),
+    fileHash: varchar("file_hash", { length: 128 }),
     fileData: text("file_data"),
     status: statementStatusEnum("status").default("uploaded").notNull(),
     aiModel: varchar("ai_model", { length: 128 }),
@@ -76,7 +82,10 @@ export const statements = pgTable(
     periodEnd: date("period_end"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (t) => [index("statements_user_id_idx").on(t.userId)],
+  (t) => [
+    index("statements_user_id_idx").on(t.userId),
+    index("statements_file_hash_idx").on(t.userId, t.fileHash),
+  ],
 );
 
 // ─── Categories (hierarchical spending taxonomy) ─────────────────────────────
@@ -124,7 +133,7 @@ export const transactions = pgTable(
     postedDate: date("posted_date").notNull(),
     valueDate: date("value_date"),
     rawDescription: text("raw_description").notNull(),
-    cleanDescription: text("clean_description").notNull(),
+    referenceId: varchar("reference_id", { length: 128 }),
     merchantId: integer("merchant_id").references(() => merchants.id),
     merchantName: varchar("merchant_name", { length: 255 }),
     mccCode: integer("mcc_code"),
@@ -326,6 +335,25 @@ export const aiCosts = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [index("ai_costs_user_idx").on(t.userId)],
+);
+
+// ─── File Upload Log (append-only, survives statement deletion) ─────────────
+
+export const fileUploadLog = pgTable(
+  "file_upload_log",
+  {
+    id: serial("id").primaryKey(),
+    userId: varchar("user_id", { length: 255 }).notNull(),
+    fileName: varchar("file_name", { length: 512 }).notNull(),
+    fileSize: integer("file_size").notNull(),
+    fileHash: varchar("file_hash", { length: 128 }),
+    outcome: varchar("outcome", { length: 16 }).notNull().default("processed"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("file_log_user_hash_idx").on(t.userId, t.fileHash),
+    index("file_log_user_name_size_idx").on(t.userId, t.fileName, t.fileSize),
+  ],
 );
 
 // ─── Relations ───────────────────────────────────────────────────────────────

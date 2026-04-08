@@ -9,6 +9,7 @@ cd "$ROOT"
 bash "$ROOT/scripts/gen-local-certs.sh"
 
 export NEXT_PUBLIC_APP_URL="${NEXT_PUBLIC_APP_URL:-https://local.fintrk.io:3004}"
+export NODE_EXTRA_CA_CERTS="$(mkcert -CAROOT)/rootCA.pem"
 
 if [[ -f "$ROOT/.env.clerk.fin-trk" ]]; then
   set -a

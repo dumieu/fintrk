@@ -2,7 +2,7 @@ import Link from "next/link";
 
 export function SiteFooter() {
   return (
-    <footer className="border-t border-border/40 bg-background/80 backdrop-blur-sm">
+    <footer className="shrink-0 border-t border-border/40 bg-background/80 backdrop-blur-sm">
       <div className="mx-auto flex max-w-7xl flex-col items-center gap-3 px-4 py-4 text-xs text-muted-foreground sm:py-3">
         <div className="flex flex-col items-center gap-2 sm:flex-row sm:justify-between sm:w-full">
           <p className="text-xs">&copy; {new Date().getFullYear()} FinTRK. All rights reserved.</p>

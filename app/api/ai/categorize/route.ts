@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
     const txns = await resilientQuery(() =>
       db.select({
         id: transactions.id,
-        cleanDescription: transactions.cleanDescription,
+        rawDescription: transactions.rawDescription,
         merchantName: transactions.merchantName,
       }).from(transactions).where(
         and(eq(transactions.userId, userId), inArray(transactions.id, parsed.data.transactionIds)),
@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
     const allCategories = await resilientQuery(() => db.select({ id: categories.id, name: categories.name, slug: categories.slug }).from(categories));
     const categoryList = allCategories.map((c) => c.name).join(", ");
 
-    const txnList = txns.map((t) => `ID: ${t.id} | Description: ${t.cleanDescription} | Merchant: ${t.merchantName ?? "unknown"}`).join("\n");
+    const txnList = txns.map((t) => `ID: ${t.id} | Description: ${t.rawDescription} | Merchant: ${t.merchantName ?? "unknown"}`).join("\n");
 
     const prompt = `Categorize each transaction into exactly one category from this list:
 ${categoryList}
