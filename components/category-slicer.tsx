@@ -267,7 +267,7 @@ export function FlowThemeSlicer({
   selectedFlowTheme,
   onSelect,
 }: {
-  /** `""` = all flows. */
+  /** `""` = no parent-flow filter (all). */
   selectedFlowTheme: string;
   onSelect: (flowTheme: string) => void;
 }) {
@@ -409,7 +409,7 @@ export function FlowThemeSlicer({
               )}
               aria-pressed={allSelected}
             >
-              <span className="text-[10px] font-semibold leading-none">All flows</span>
+              <span className="text-[10px] font-semibold leading-none">All</span>
             </button>
 
             {FLOW_THEME_OPTIONS.map((opt) => {

@@ -448,7 +448,7 @@ export function CategoryTableManager() {
               onClick={() => selectMetaFlow(null)}
               className={cnMetaFlowPill(metaFlowFilter === null, "all")}
             >
-              All flows
+              All
             </button>
             {META_FLOW_ORDER.map((theme) => {
               const active = metaFlowFilter === theme;
