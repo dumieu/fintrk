@@ -248,11 +248,11 @@ export async function PATCH(request: NextRequest) {
     let bulkMerchantCount = 0;
 
     if (parsed.data.merchantName !== undefined) {
-      const newName = parsed.data.merchantName.trim().toLowerCase() || null;
+      const newName = parsed.data.merchantName.trim() || null;
       setPayload.merchantName = newName;
 
       if (parsed.data.applyToAllMerchants && parsed.data.oldMerchantName) {
-        const oldName = parsed.data.oldMerchantName.trim().toLowerCase();
+        const oldName = parsed.data.oldMerchantName.trim();
         if (oldName && newName && oldName !== newName) {
           const bulkResult = await resilientQuery(() =>
             db.update(transactions)
