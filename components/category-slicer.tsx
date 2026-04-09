@@ -61,10 +61,13 @@ export function CategorySlicer({
   options,
   selectedId,
   onSelect,
+  showLabel = true,
 }: {
   options: CategorySlicerOption[];
   selectedId: string;
   onSelect: (categoryId: string) => void;
+  /** When false, hides the left "Category" title (e.g. Category Mapping page). */
+  showLabel?: boolean;
 }) {
   const allSelected = selectedId === "";
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -161,10 +164,12 @@ export function CategorySlicer({
 
   return (
     <div className="rounded-xl border border-white/[0.09] bg-gradient-to-b from-white/[0.07] to-white/[0.02] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] sm:rounded-2xl sm:p-2">
-      <div className="flex min-w-0 items-center gap-1.5 sm:gap-3">
-        <p className="shrink-0 whitespace-nowrap px-0.5 text-[9px] font-medium uppercase tracking-wider text-white/40 sm:px-1 sm:text-[10px]">
-          Category
-        </p>
+      <div className={cn("flex min-w-0 items-center", showLabel ? "gap-1.5 sm:gap-3" : "gap-0")}>
+        {showLabel ? (
+          <p className="shrink-0 whitespace-nowrap px-0.5 text-[9px] font-medium uppercase tracking-wider text-white/40 sm:px-1 sm:text-[10px]">
+            Category
+          </p>
+        ) : null}
         <div className="flex min-w-0 flex-1 items-center gap-0.5 sm:gap-1.5">
         <button
           type="button"
@@ -266,10 +271,13 @@ const FLOW_THEME_OPTIONS: { value: CategoryFlowTheme; label: string }[] = [
 export function FlowThemeSlicer({
   selectedFlowTheme,
   onSelect,
+  showLabel = true,
 }: {
   /** `""` = no parent-flow filter (all). */
   selectedFlowTheme: string;
   onSelect: (flowTheme: string) => void;
+  /** When false, hides the left "Flow" title (e.g. Category Mapping page). */
+  showLabel?: boolean;
 }) {
   const allSelected = selectedFlowTheme === "";
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -367,10 +375,12 @@ export function FlowThemeSlicer({
 
   return (
     <div className="rounded-xl border border-white/[0.09] bg-gradient-to-b from-white/[0.07] to-white/[0.02] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] sm:rounded-2xl sm:p-2">
-      <div className="flex min-w-0 items-center gap-1.5 sm:gap-3">
-        <p className="shrink-0 whitespace-nowrap px-0.5 text-[9px] font-medium uppercase tracking-wider text-white/40 sm:px-1 sm:text-[10px]">
-          Flow
-        </p>
+      <div className={cn("flex min-w-0 items-center", showLabel ? "gap-1.5 sm:gap-3" : "gap-0")}>
+        {showLabel ? (
+          <p className="shrink-0 whitespace-nowrap px-0.5 text-[9px] font-medium uppercase tracking-wider text-white/40 sm:px-1 sm:text-[10px]">
+            Flow
+          </p>
+        ) : null}
         <div className="flex min-w-0 flex-1 items-center gap-0.5 sm:gap-1.5">
           <button
             type="button"

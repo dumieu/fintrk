@@ -15,6 +15,11 @@ import {
   flowThemeForCategoryNames,
   type CategoryFlowTheme,
 } from "@/lib/category-flow-theme";
+import {
+  CategorySlicer,
+  FlowThemeSlicer,
+  type CategorySlicerOption,
+} from "@/components/category-slicer";
 
 /* ════════════════════════════════ TYPES ══════════════════════════════════ */
 
@@ -39,50 +44,12 @@ interface CategoryItem {
 
 /* ════════════════════════════════ HELPERS ═════════════════════════════════ */
 
-function cnPill(active: boolean) {
-  return [
-    "inline-flex items-center rounded-full px-3 py-1.5 text-[11px] font-medium transition-colors cursor-pointer shrink-0",
-    active
-      ? "bg-[#0BC18D]/20 text-[#0BC18D]"
-      : "text-white/45 hover:bg-white/[0.06] hover:text-white/70",
-  ].join(" ");
-}
-
-const META_FLOW_ORDER: CategoryFlowTheme[] = ["inflow", "savings", "outflow"];
 const META_FLOW_LABEL: Record<CategoryFlowTheme, string> = {
   inflow: "Inflow",
   savings: "Savings & investments",
   outflow: "Outflow",
   unknown: "Other",
 };
-
-function cnMetaFlowPill(active: boolean, theme: "all" | CategoryFlowTheme) {
-  const base =
-    "inline-flex items-center rounded-full px-3 py-1.5 text-[11px] font-medium transition-colors cursor-pointer shrink-0";
-  if (theme === "all") {
-    return [
-      base,
-      active
-        ? "bg-[#0BC18D]/20 text-[#0BC18D]"
-        : "text-white/45 hover:bg-white/[0.06] hover:text-white/70",
-    ].join(" ");
-  }
-  const themed = {
-    inflow: active
-      ? "bg-[#22C55E]/20 text-[#4ADE80] ring-1 ring-[#22C55E]/35"
-      : "text-white/45 hover:bg-[#22C55E]/10 hover:text-white/75",
-    savings: active
-      ? "bg-[#9333EA]/20 text-[#C084FC] ring-1 ring-[#9333EA]/35"
-      : "text-white/45 hover:bg-[#9333EA]/10 hover:text-white/75",
-    outflow: active
-      ? "bg-[#EF4444]/18 text-[#FCA5A5] ring-1 ring-[#EF4444]/35"
-      : "text-white/45 hover:bg-[#EF4444]/10 hover:text-white/75",
-    unknown: active
-      ? "bg-white/[0.10] text-white/90 ring-1 ring-white/20"
-      : "text-white/45 hover:bg-white/[0.06] hover:text-white/70",
-  }[theme];
-  return `${base} ${themed}`;
-}
 
 function InlineInput({
   value,
@@ -356,14 +323,29 @@ export function CategoryTableManager() {
     return metaFilteredParents.filter((c) => c.id === flowFilterId);
   }, [metaFilteredParents, flowFilterId]);
 
-  const selectMetaFlow = useCallback((theme: CategoryFlowTheme | null) => {
-    setMetaFlowFilter(theme);
+  const mappingCategorySlicerOptions = useMemo((): CategorySlicerOption[] => {
+    return metaFilteredParents.map((c) => ({
+      value: String(c.id),
+      label: c.name,
+      categoryName: c.name,
+      subcategoryName: null,
+      flowTheme: flowThemeForCategoryNames(null, c.name),
+    }));
+  }, [metaFilteredParents]);
+
+  const onMappingFlowSelect = useCallback((ft: string) => {
+    setMetaFlowFilter(ft === "" ? null : (ft as CategoryFlowTheme));
   }, []);
 
-  const selectFlow = useCallback((id: number | null) => {
-    setFlowFilterId(id);
-    if (id !== null) {
-      setExpandedCats((p) => new Set(p).add(id));
+  const onMappingCategorySelect = useCallback((id: string) => {
+    if (id === "") {
+      setFlowFilterId(null);
+      return;
+    }
+    const num = Number(id);
+    if (!Number.isNaN(num)) {
+      setFlowFilterId(num);
+      setExpandedCats((p) => new Set(p).add(num));
     }
   }, []);
 
@@ -434,77 +416,23 @@ export function CategoryTableManager() {
   return (
     <div className="min-h-[80vh] bg-gradient-to-b from-[#08051a] via-[#10082a] to-[#160e35]">
       <div className="mx-auto max-w-4xl px-4 py-8">
-        {/* Parent flow (Inflow / Savings / Outflow) */}
-        <div className="flex justify-center mb-4">
-          <div
-            role="tablist"
-            aria-label="Filter by parent flow"
-            className="flex flex-wrap items-center justify-center gap-1.5 rounded-full border border-white/[0.10] bg-white/[0.03] p-1 max-w-full"
-          >
-            <button
-              type="button"
-              role="tab"
-              aria-selected={metaFlowFilter === null}
-              onClick={() => selectMetaFlow(null)}
-              className={cnMetaFlowPill(metaFlowFilter === null, "all")}
-            >
-              All
-            </button>
-            {META_FLOW_ORDER.map((theme) => {
-              const active = metaFlowFilter === theme;
-              return (
-                <button
-                  key={theme}
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  onClick={() => selectMetaFlow(active ? null : theme)}
-                  className={cnMetaFlowPill(active, theme)}
-                >
-                  {META_FLOW_LABEL[theme]}
-                </button>
-              );
-            })}
-          </div>
+        {/* Parent flow — same slicer as Transactions, no title */}
+        <div className="mb-4 w-full min-w-0">
+          <FlowThemeSlicer
+            showLabel={false}
+            selectedFlowTheme={metaFlowFilter ?? ""}
+            onSelect={onMappingFlowSelect}
+          />
         </div>
 
-        {/* Top-level category slicer (within selected parent flow) */}
-        <div className="flex justify-center mb-6">
-          <div
-            role="tablist"
-            aria-label="Filter by category"
-            className="flex flex-wrap items-center justify-center gap-1.5 rounded-full border border-white/[0.10] bg-white/[0.03] p-1 max-w-full"
-          >
-            <button
-              type="button"
-              role="tab"
-              aria-selected={flowFilterId === null}
-              onClick={() => selectFlow(null)}
-              className={cnPill(flowFilterId === null)}
-            >
-              All
-            </button>
-            {metaFilteredParents.map((flow) => {
-              const active = flowFilterId === flow.id;
-              return (
-                <button
-                  key={flow.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  onClick={() => selectFlow(flow.id)}
-                  className={cnPill(active)}
-                >
-                  <span
-                    className="mr-1.5 inline-block size-1.5 shrink-0 rounded-full"
-                    style={{ backgroundColor: flow.color ?? "#808080" }}
-                    aria-hidden
-                  />
-                  {flow.name}
-                </button>
-              );
-            })}
-          </div>
+        {/* Top-level categories — same slicer as Transactions, no title */}
+        <div className="mb-6 w-full min-w-0">
+          <CategorySlicer
+            showLabel={false}
+            options={mappingCategorySlicerOptions}
+            selectedId={flowFilterId === null ? "" : String(flowFilterId)}
+            onSelect={onMappingCategorySelect}
+          />
         </div>
 
         {/* Toolbar */}
