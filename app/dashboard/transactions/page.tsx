@@ -29,7 +29,11 @@ import { cn } from "@/lib/utils";
 import { CardNetworkLogo } from "@/components/card-network-logo";
 import { TransactionInsightHover } from "@/components/transaction-insight-hover";
 import { TransactionCategoryIcon } from "@/components/transaction-category-icon";
-import { CategorySlicer, type CategorySlicerOption } from "@/components/category-slicer";
+import {
+  CategorySlicer,
+  FlowThemeSlicer,
+  type CategorySlicerOption,
+} from "@/components/category-slicer";
 import { TimeSlicer } from "@/components/time-slicer";
 import { detectTimePreset, rollingRange, type TimePresetId } from "@/lib/time-range-presets";
 import {
@@ -83,6 +87,8 @@ interface Filters {
   isRecurring: string;
   accountId: string;
   categoryId: string;
+  /** Mind-map parent flow filter; empty = all. */
+  flowTheme: string;
   accountKind: string;
   accountNumber: string;
   amountMin: number;
@@ -124,6 +130,7 @@ function buildTransactionQueryParams(f: Filters, page: number): URLSearchParams 
   if (f.isRecurring) params.set("isRecurring", f.isRecurring);
   if (f.accountId) params.set("accountId", f.accountId);
   if (f.categoryId) params.set("categoryId", f.categoryId);
+  if (f.flowTheme) params.set("flowTheme", f.flowTheme);
   if (f.accountKind) params.set("accountKind", f.accountKind);
   if (f.accountNumber.trim()) params.set("accountNumber", f.accountNumber.trim());
   if (f.amountMin > AMOUNT_RANGE_MIN) params.set("amountMin", f.amountMin.toString());
@@ -992,6 +999,7 @@ export default function TransactionsPage() {
     isRecurring: "",
     accountId: "",
     categoryId: "",
+    flowTheme: "",
     accountKind: "",
     accountNumber: "",
     amountMin: AMOUNT_RANGE_MIN,
@@ -1010,6 +1018,25 @@ export default function TransactionsPage() {
   const [categoryOptions, setCategoryOptions] = useState<CategorySlicerOption[]>([]);
   const [amountTotals, setAmountTotals] = useState<AmountTotalRow[]>([]);
   const [userCats, setUserCats] = useState<UserCategory[]>([]);
+
+  const categoryOptionsForSlicer = useMemo(() => {
+    if (!filters.flowTheme) return categoryOptions;
+    return categoryOptions.filter((o) => o.flowTheme === filters.flowTheme);
+  }, [categoryOptions, filters.flowTheme]);
+
+  const onFlowThemeSelect = useCallback(
+    (ft: string) => {
+      setFilters((f) => {
+        let categoryId = f.categoryId;
+        if (ft && f.categoryId) {
+          const opt = categoryOptions.find((o) => o.value === f.categoryId);
+          if (opt && opt.flowTheme !== ft) categoryId = "";
+        }
+        return { ...f, flowTheme: ft, categoryId };
+      });
+    },
+    [categoryOptions],
+  );
 
   useEffect(() => {
     fetch("/api/transactions/filter-options")
@@ -1039,12 +1066,18 @@ export default function TransactionsPage() {
     return () => window.removeEventListener(FINTRK_TRANSACTIONS_CHANGED, reloadFilterOptions);
   }, []);
 
-  /** Drop category filter if that category no longer appears (e.g. no history after data change). */
+  /** Drop category filter if missing, or if it does not match the selected parent flow. */
   useEffect(() => {
     if (!filters.categoryId) return;
-    const stillValid = categoryOptions.some((o) => o.value === filters.categoryId);
-    if (!stillValid) setFilters((f) => ({ ...f, categoryId: "" }));
-  }, [categoryOptions, filters.categoryId]);
+    const opt = categoryOptions.find((o) => o.value === filters.categoryId);
+    if (!opt) {
+      setFilters((f) => ({ ...f, categoryId: "" }));
+      return;
+    }
+    if (filters.flowTheme && opt.flowTheme !== filters.flowTheme) {
+      setFilters((f) => ({ ...f, categoryId: "" }));
+    }
+  }, [categoryOptions, filters.categoryId, filters.flowTheme]);
 
   useEffect(() => {
     setSelectedIds(new Set());
@@ -1052,6 +1085,7 @@ export default function TransactionsPage() {
     filters.search,
     filters.accountId,
     filters.categoryId,
+    filters.flowTheme,
     filters.dateFrom,
     filters.dateTo,
     filters.isRecurring,
@@ -1509,11 +1543,23 @@ export default function TransactionsPage() {
         <motion.div
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1, duration: 0.25 }}
+          className="mb-2 shrink-0 sm:mb-3"
+        >
+          <FlowThemeSlicer
+            selectedFlowTheme={filters.flowTheme}
+            onSelect={onFlowThemeSelect}
+          />
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.12, duration: 0.25 }}
           className="mb-3 shrink-0 sm:mb-4"
         >
           <CategorySlicer
-            options={categoryOptions}
+            options={categoryOptionsForSlicer}
             selectedId={filters.categoryId}
             onSelect={(categoryId) => setFilters((f) => ({ ...f, categoryId }))}
           />

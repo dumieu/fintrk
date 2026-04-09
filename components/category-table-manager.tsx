@@ -11,6 +11,10 @@ import {
   Store, Loader2,
 } from "lucide-react";
 import { FINTRK_TRANSACTIONS_CHANGED } from "@/lib/notify-transactions-changed";
+import {
+  flowThemeForCategoryNames,
+  type CategoryFlowTheme,
+} from "@/lib/category-flow-theme";
 
 /* ════════════════════════════════ TYPES ══════════════════════════════════ */
 
@@ -42,6 +46,42 @@ function cnPill(active: boolean) {
       ? "bg-[#0BC18D]/20 text-[#0BC18D]"
       : "text-white/45 hover:bg-white/[0.06] hover:text-white/70",
   ].join(" ");
+}
+
+const META_FLOW_ORDER: CategoryFlowTheme[] = ["inflow", "savings", "outflow", "unknown"];
+const META_FLOW_LABEL: Record<CategoryFlowTheme, string> = {
+  inflow: "Inflow",
+  savings: "Savings & investments",
+  outflow: "Outflow",
+  unknown: "Other",
+};
+
+function cnMetaFlowPill(active: boolean, theme: "all" | CategoryFlowTheme) {
+  const base =
+    "inline-flex items-center rounded-full px-3 py-1.5 text-[11px] font-medium transition-colors cursor-pointer shrink-0";
+  if (theme === "all") {
+    return [
+      base,
+      active
+        ? "bg-[#0BC18D]/20 text-[#0BC18D]"
+        : "text-white/45 hover:bg-white/[0.06] hover:text-white/70",
+    ].join(" ");
+  }
+  const themed = {
+    inflow: active
+      ? "bg-[#22C55E]/20 text-[#4ADE80] ring-1 ring-[#22C55E]/35"
+      : "text-white/45 hover:bg-[#22C55E]/10 hover:text-white/75",
+    savings: active
+      ? "bg-[#9333EA]/20 text-[#C084FC] ring-1 ring-[#9333EA]/35"
+      : "text-white/45 hover:bg-[#9333EA]/10 hover:text-white/75",
+    outflow: active
+      ? "bg-[#EF4444]/18 text-[#FCA5A5] ring-1 ring-[#EF4444]/35"
+      : "text-white/45 hover:bg-[#EF4444]/10 hover:text-white/75",
+    unknown: active
+      ? "bg-white/[0.10] text-white/90 ring-1 ring-white/20"
+      : "text-white/45 hover:bg-white/[0.06] hover:text-white/70",
+  }[theme];
+  return `${base} ${themed}`;
 }
 
 function InlineInput({
@@ -241,7 +281,10 @@ export function CategoryTableManager() {
   const [categories, setCategories] = useState<CategoryItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  /** `null` = all top-level flows; otherwise show one parent category (flow). */
+  /** Mind-map parent flow (inflow / savings / outflow / other). `null` = all. */
+  const [metaFlowFilter, setMetaFlowFilter] = useState<CategoryFlowTheme | null>(null);
+
+  /** `null` = all top-level categories within meta flow; otherwise one parent category. */
   const [flowFilterId, setFlowFilterId] = useState<number | null>(null);
 
   // Expand state
@@ -295,16 +338,27 @@ export function CategoryTableManager() {
     return () => window.removeEventListener(FINTRK_TRANSACTIONS_CHANGED, onTxn);
   }, [loadMerchants]);
 
+  const metaFilteredParents = useMemo(() => {
+    if (metaFlowFilter === null) return categories;
+    return categories.filter(
+      (c) => flowThemeForCategoryNames(null, c.name) === metaFlowFilter,
+    );
+  }, [categories, metaFlowFilter]);
+
   useEffect(() => {
-    if (flowFilterId !== null && !categories.some((c) => c.id === flowFilterId)) {
+    if (flowFilterId !== null && !metaFilteredParents.some((c) => c.id === flowFilterId)) {
       setFlowFilterId(null);
     }
-  }, [categories, flowFilterId]);
+  }, [metaFilteredParents, flowFilterId]);
 
-  const filteredCategories = useMemo(
-    () => (flowFilterId === null ? categories : categories.filter((c) => c.id === flowFilterId)),
-    [categories, flowFilterId],
-  );
+  const filteredCategories = useMemo(() => {
+    if (flowFilterId === null) return metaFilteredParents;
+    return metaFilteredParents.filter((c) => c.id === flowFilterId);
+  }, [metaFilteredParents, flowFilterId]);
+
+  const selectMetaFlow = useCallback((theme: CategoryFlowTheme | null) => {
+    setMetaFlowFilter(theme);
+  }, []);
 
   const selectFlow = useCallback((id: number | null) => {
     setFlowFilterId(id);
@@ -367,6 +421,7 @@ export function CategoryTableManager() {
   // Stats
   const totalCats = categories.length;
   const totalSubs = categories.reduce((s, c) => s + c.subcategories.length, 0);
+  const visibleSubs = filteredCategories.reduce((s, c) => s + c.subcategories.length, 0);
 
   if (loading) {
     return (
@@ -379,11 +434,45 @@ export function CategoryTableManager() {
   return (
     <div className="min-h-[80vh] bg-gradient-to-b from-[#08051a] via-[#10082a] to-[#160e35]">
       <div className="mx-auto max-w-4xl px-4 py-8">
-        {/* Flow slicer — center-aligned */}
+        {/* Parent flow (Inflow / Savings / Outflow / Other) */}
+        <div className="flex justify-center mb-4">
+          <div
+            role="tablist"
+            aria-label="Filter by parent flow"
+            className="flex flex-wrap items-center justify-center gap-1.5 rounded-full border border-white/[0.10] bg-white/[0.03] p-1 max-w-full"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={metaFlowFilter === null}
+              onClick={() => selectMetaFlow(null)}
+              className={cnMetaFlowPill(metaFlowFilter === null, "all")}
+            >
+              All flows
+            </button>
+            {META_FLOW_ORDER.map((theme) => {
+              const active = metaFlowFilter === theme;
+              return (
+                <button
+                  key={theme}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => selectMetaFlow(active ? null : theme)}
+                  className={cnMetaFlowPill(active, theme)}
+                >
+                  {META_FLOW_LABEL[theme]}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Top-level category slicer (within selected parent flow) */}
         <div className="flex justify-center mb-6">
           <div
             role="tablist"
-            aria-label="Filter by flow"
+            aria-label="Filter by category"
             className="flex flex-wrap items-center justify-center gap-1.5 rounded-full border border-white/[0.10] bg-white/[0.03] p-1 max-w-full"
           >
             <button
@@ -395,7 +484,7 @@ export function CategoryTableManager() {
             >
               All
             </button>
-            {categories.map((flow) => {
+            {metaFilteredParents.map((flow) => {
               const active = flowFilterId === flow.id;
               return (
                 <button
@@ -423,19 +512,34 @@ export function CategoryTableManager() {
           <div>
             <h1 className="text-2xl font-bold text-white sm:text-3xl">Category Mapping</h1>
             <p className="text-sm text-white/50 mt-1">
-              {flowFilterId === null ? (
+              {metaFlowFilter === null && flowFilterId === null ? (
                 <>
                   {totalCats} categories · {totalSubs} subcategories
                 </>
               ) : (
                 <>
                   Showing{" "}
-                  <span className="text-white/70">
-                    {categories.find((c) => c.id === flowFilterId)?.name ?? "—"}
-                  </span>
-                  {" · "}
-                  {categories.find((c) => c.id === flowFilterId)?.subcategories.length ?? 0}{" "}
-                  subcategories
+                  {metaFlowFilter !== null && (
+                    <span className="text-white/70">{META_FLOW_LABEL[metaFlowFilter]}</span>
+                  )}
+                  {flowFilterId !== null ? (
+                    <>
+                      {metaFlowFilter !== null ? " · " : null}
+                      <span className="text-white/70">
+                        {categories.find((c) => c.id === flowFilterId)?.name ?? "—"}
+                      </span>
+                      {" · "}
+                      {categories.find((c) => c.id === flowFilterId)?.subcategories.length ?? 0}{" "}
+                      subcategories
+                    </>
+                  ) : (
+                    <>
+                      {metaFlowFilter !== null ? " — " : null}
+                      <span className="text-white/70 tabular-nums">
+                        {filteredCategories.length} categories · {visibleSubs} subcategories
+                      </span>
+                    </>
+                  )}
                 </>
               )}
             </p>
