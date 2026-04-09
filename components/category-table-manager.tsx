@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  useState, useRef, useEffect, useCallback,
+  useState, useRef, useEffect, useCallback, useMemo,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -34,6 +34,15 @@ interface CategoryItem {
 }
 
 /* ════════════════════════════════ HELPERS ═════════════════════════════════ */
+
+function cnPill(active: boolean) {
+  return [
+    "inline-flex items-center rounded-full px-3 py-1.5 text-[11px] font-medium transition-colors cursor-pointer shrink-0",
+    active
+      ? "bg-[#0BC18D]/20 text-[#0BC18D]"
+      : "text-white/45 hover:bg-white/[0.06] hover:text-white/70",
+  ].join(" ");
+}
 
 function InlineInput({
   value,
@@ -232,6 +241,9 @@ export function CategoryTableManager() {
   const [categories, setCategories] = useState<CategoryItem[]>([]);
   const [loading, setLoading] = useState(true);
 
+  /** `null` = all top-level flows; otherwise show one parent category (flow). */
+  const [flowFilterId, setFlowFilterId] = useState<number | null>(null);
+
   // Expand state
   const [expandedCats, setExpandedCats] = useState<Set<number>>(new Set());
 
@@ -283,6 +295,24 @@ export function CategoryTableManager() {
     return () => window.removeEventListener(FINTRK_TRANSACTIONS_CHANGED, onTxn);
   }, [loadMerchants]);
 
+  useEffect(() => {
+    if (flowFilterId !== null && !categories.some((c) => c.id === flowFilterId)) {
+      setFlowFilterId(null);
+    }
+  }, [categories, flowFilterId]);
+
+  const filteredCategories = useMemo(
+    () => (flowFilterId === null ? categories : categories.filter((c) => c.id === flowFilterId)),
+    [categories, flowFilterId],
+  );
+
+  const selectFlow = useCallback((id: number | null) => {
+    setFlowFilterId(id);
+    if (id !== null) {
+      setExpandedCats((p) => new Set(p).add(id));
+    }
+  }, []);
+
   // Toggle helpers
   const toggleCat = useCallback((id: number) => {
     setExpandedCats((p) => {
@@ -293,8 +323,8 @@ export function CategoryTableManager() {
   }, []);
 
   const expandAll = useCallback(() => {
-    setExpandedCats(new Set(categories.map((c) => c.id)));
-  }, [categories]);
+    setExpandedCats(new Set(filteredCategories.map((c) => c.id)));
+  }, [filteredCategories]);
 
   const collapseAll = useCallback(() => {
     setExpandedCats(new Set());
@@ -349,12 +379,65 @@ export function CategoryTableManager() {
   return (
     <div className="min-h-[80vh] bg-gradient-to-b from-[#08051a] via-[#10082a] to-[#160e35]">
       <div className="mx-auto max-w-4xl px-4 py-8">
+        {/* Flow slicer — center-aligned */}
+        <div className="flex justify-center mb-6">
+          <div
+            role="tablist"
+            aria-label="Filter by flow"
+            className="flex flex-wrap items-center justify-center gap-1.5 rounded-full border border-white/[0.10] bg-white/[0.03] p-1 max-w-full"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={flowFilterId === null}
+              onClick={() => selectFlow(null)}
+              className={cnPill(flowFilterId === null)}
+            >
+              All
+            </button>
+            {categories.map((flow) => {
+              const active = flowFilterId === flow.id;
+              return (
+                <button
+                  key={flow.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => selectFlow(flow.id)}
+                  className={cnPill(active)}
+                >
+                  <span
+                    className="mr-1.5 inline-block size-1.5 shrink-0 rounded-full"
+                    style={{ backgroundColor: flow.color ?? "#808080" }}
+                    aria-hidden
+                  />
+                  {flow.name}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Toolbar */}
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold text-white sm:text-3xl">Category Mapping</h1>
             <p className="text-sm text-white/50 mt-1">
-              {totalCats} categories · {totalSubs} subcategories
+              {flowFilterId === null ? (
+                <>
+                  {totalCats} categories · {totalSubs} subcategories
+                </>
+              ) : (
+                <>
+                  Showing{" "}
+                  <span className="text-white/70">
+                    {categories.find((c) => c.id === flowFilterId)?.name ?? "—"}
+                  </span>
+                  {" · "}
+                  {categories.find((c) => c.id === flowFilterId)?.subcategories.length ?? 0}{" "}
+                  subcategories
+                </>
+              )}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -377,7 +460,7 @@ export function CategoryTableManager() {
 
         {/* Category sections */}
         <div className="space-y-1">
-          {categories.map((cat) => {
+          {filteredCategories.map((cat) => {
             const catExpanded = expandedCats.has(cat.id);
             const catColor = cat.color ?? "#808080";
 
