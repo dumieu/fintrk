@@ -105,6 +105,8 @@ Below is a JSON object representing this user's existing category → subcategor
 
 3. NEW MERCHANTS: Only create a new merchant_name (still all lowercase) when no existing merchant in the history is a reasonable match. Even then, prefer assigning it to an existing subcategory from the history that best fits.
 
+5. DESCRIPTION-BASED CLASSIFICATION: When a known merchant's transaction description contains clear category signals (e.g. "rental", "groceries", "fuel", "salary"), those signals may override the merchant's historical category IF the description clearly indicates a different type of spend. Always read the full raw_description for context clues.
+
 4. EMPTY MERCHANT ARRAYS: Some subcategories have empty arrays — those are valid categories the user has but no merchants yet. You may assign new merchants to them.
 
 User's merchant history:
@@ -138,6 +140,7 @@ For EACH transaction, you MUST:
    - mcc_code: Merchant Category Code (4-digit integer) if determinable from merchant name, null otherwise
    - country_iso: ISO 3166-1 alpha-2 country code, inferred from explicit country indicators, currency, or merchant name recognition. Default to the account's country if ambiguous.
    - category_suggestion: your best category from this exact list: ${subcategoryList}
+     IMPORTANT: To determine the correct category, you MUST analyze the ENTIRE raw_description — not only the merchant name. Transaction descriptions often contain keywords like "rental", "groceries", "salary", "insurance", "transfer", "loan", "utilities", "dining", "fuel", etc. that are strong category signals. Always use every available clue from the full description text, any embedded notes, and the merchant name together to pick the most accurate category.
 
 5. PATTERNS:
    - is_recurring: true if this merchant appears to charge on a regular schedule (subscriptions, rent, salary, insurance, loan payments)
