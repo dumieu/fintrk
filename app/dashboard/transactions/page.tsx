@@ -691,7 +691,7 @@ function CategoryCellEditor({
         className="absolute left-0 top-[calc(100%+4px)] z-50 w-[280px] max-h-[340px] flex flex-col rounded-xl border border-white/15 bg-[#120a28]/98 shadow-2xl backdrop-blur-lg overflow-hidden"
       >
         {/* Search */}
-        <div className="shrink-0 border-b border-white/10 px-2.5 py-2">
+        <div className="shrink-0 px-2.5 pt-2 pb-1.5">
           <div className="relative">
             <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-white/30" />
             <input
@@ -702,6 +702,57 @@ function CategoryCellEditor({
               placeholder="Search categories…"
               className="w-full rounded-md border border-white/10 bg-white/[0.04] py-1.5 pl-7 pr-2 text-[11px] text-white/90 placeholder:text-white/30 outline-none focus:border-[#0BC18D]/40 focus:ring-1 focus:ring-[#0BC18D]/20"
             />
+          </div>
+        </div>
+
+        {/* Triple toggle — directly under search */}
+        <div className="shrink-0 border-b border-white/10 px-2.5 pb-2 pt-0">
+          <div className="flex items-center gap-1.5">
+            <span className="shrink-0 text-[9px] text-white/35">Apply to:</span>
+            <div className="inline-flex h-[22px] rounded-full border border-white/10 bg-white/[0.04] p-px text-[9px] font-medium">
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setScope("merchant")}
+                className={cn(
+                  "rounded-full px-2 transition-colors whitespace-nowrap cursor-pointer",
+                  scope === "merchant"
+                    ? "bg-[#0BC18D]/20 text-[#0BC18D]"
+                    : "text-white/40 hover:text-white/60",
+                )}
+              >
+                All with this name
+              </button>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => { if (hasLabel) setScope("label"); }}
+                className={cn(
+                  "rounded-full px-2 transition-colors whitespace-nowrap",
+                  !hasLabel
+                    ? "text-white/15 cursor-not-allowed"
+                    : scope === "label"
+                      ? "bg-[#0BC18D]/20 text-[#0BC18D] cursor-pointer"
+                      : "text-white/40 hover:text-white/60 cursor-pointer",
+                )}
+                title={hasLabel ? `Label: ${txn.label}` : "No label assigned"}
+              >
+                {hasLabel ? txn.label : "No label"}
+              </button>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setScope("this")}
+                className={cn(
+                  "rounded-full px-2 transition-colors whitespace-nowrap cursor-pointer",
+                  scope === "this"
+                    ? "bg-[#0BC18D]/20 text-[#0BC18D]"
+                    : "text-white/40 hover:text-white/60",
+                )}
+              >
+                Only this
+              </button>
+            </div>
           </div>
         </div>
 
@@ -760,57 +811,6 @@ function CategoryCellEditor({
               </div>
             ))
           )}
-        </div>
-
-        {/* Triple toggle */}
-        <div className="shrink-0 border-t border-white/10 px-2.5 py-2">
-          <div className="flex items-center gap-1.5">
-            <span className="shrink-0 text-[9px] text-white/35">Apply to:</span>
-            <div className="inline-flex h-[22px] rounded-full border border-white/10 bg-white/[0.04] p-px text-[9px] font-medium">
-              <button
-                type="button"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => setScope("merchant")}
-                className={cn(
-                  "rounded-full px-2 transition-colors whitespace-nowrap cursor-pointer",
-                  scope === "merchant"
-                    ? "bg-[#0BC18D]/20 text-[#0BC18D]"
-                    : "text-white/40 hover:text-white/60",
-                )}
-              >
-                All with this name
-              </button>
-              <button
-                type="button"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => { if (hasLabel) setScope("label"); }}
-                className={cn(
-                  "rounded-full px-2 transition-colors whitespace-nowrap",
-                  !hasLabel
-                    ? "text-white/15 cursor-not-allowed"
-                    : scope === "label"
-                      ? "bg-[#0BC18D]/20 text-[#0BC18D] cursor-pointer"
-                      : "text-white/40 hover:text-white/60 cursor-pointer",
-                )}
-                title={hasLabel ? `Label: ${txn.label}` : "No label assigned"}
-              >
-                {hasLabel ? txn.label : "No label"}
-              </button>
-              <button
-                type="button"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => setScope("this")}
-                className={cn(
-                  "rounded-full px-2 transition-colors whitespace-nowrap cursor-pointer",
-                  scope === "this"
-                    ? "bg-[#0BC18D]/20 text-[#0BC18D]"
-                    : "text-white/40 hover:text-white/60",
-                )}
-              >
-                Only this
-              </button>
-            </div>
-          </div>
         </div>
       </div>
     </div>
