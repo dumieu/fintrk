@@ -35,7 +35,7 @@ export const deleteTransactionsSchema = z.object({
 
 export type DeleteTransactionsInput = z.infer<typeof deleteTransactionsSchema>;
 
-/** PATCH body: update `note`, `label`, and/or `merchantName` (omit fields you are not changing). */
+/** PATCH body: update `note`, `label`, `merchantName`, and/or `categoryId`. */
 export const patchTransactionSchema = z
   .object({
     transactionId: z.string().uuid(),
@@ -49,9 +49,22 @@ export const patchTransactionSchema = z
     applyToAllMerchants: z.boolean().optional(),
     /** The original merchant name (needed for bulk rename when applyToAllMerchants is true). */
     oldMerchantName: z.string().max(255).optional(),
+    /** Reassign category (subcategory id). */
+    categoryId: z.number().int().optional(),
+    /** Scope for category reassignment. */
+    categoryApplyScope: z.enum(["this", "merchant", "label"]).optional(),
+    /** Merchant name for bulk category reassignment by merchant. */
+    categoryMerchantName: z.string().max(255).optional(),
+    /** Label value for bulk category reassignment by label. */
+    categoryLabel: z.string().max(20).optional(),
   })
-  .refine((d) => d.note !== undefined || d.label !== undefined || d.merchantName !== undefined, {
-    message: "Provide note, label, and/or merchantName",
-  });
+  .refine(
+    (d) =>
+      d.note !== undefined ||
+      d.label !== undefined ||
+      d.merchantName !== undefined ||
+      d.categoryId !== undefined,
+    { message: "Provide note, label, merchantName, and/or categoryId" },
+  );
 
 export type PatchTransactionInput = z.infer<typeof patchTransactionSchema>;

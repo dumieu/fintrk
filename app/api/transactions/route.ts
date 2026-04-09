@@ -268,6 +268,43 @@ export async function PATCH(request: NextRequest) {
       }
     }
 
+    let bulkCategoryCount = 0;
+
+    if (parsed.data.categoryId !== undefined) {
+      (setPayload as Record<string, unknown>).categoryId = parsed.data.categoryId;
+      const scope = parsed.data.categoryApplyScope ?? "this";
+
+      if (scope === "merchant" && parsed.data.categoryMerchantName) {
+        const mName = parsed.data.categoryMerchantName.trim().toLowerCase();
+        if (mName) {
+          const bulkResult = await resilientQuery(() =>
+            db.update(transactions)
+              .set({ categoryId: parsed.data.categoryId!, updatedAt: new Date() })
+              .where(and(
+                eq(transactions.userId, userId),
+                sql`LOWER(TRIM(${transactions.merchantName})) = ${mName}`,
+              ))
+              .returning({ id: transactions.id }),
+          );
+          bulkCategoryCount = bulkResult.length;
+        }
+      } else if (scope === "label" && parsed.data.categoryLabel) {
+        const lbl = parsed.data.categoryLabel.trim();
+        if (lbl) {
+          const bulkResult = await resilientQuery(() =>
+            db.update(transactions)
+              .set({ categoryId: parsed.data.categoryId!, updatedAt: new Date() })
+              .where(and(
+                eq(transactions.userId, userId),
+                eq(transactions.label, lbl),
+              ))
+              .returning({ id: transactions.id }),
+          );
+          bulkCategoryCount = bulkResult.length;
+        }
+      }
+    }
+
     const updated = await resilientQuery(() =>
       db.update(transactions)
         .set(setPayload)
@@ -285,6 +322,7 @@ export async function PATCH(request: NextRequest) {
         ...(parsed.data.note !== undefined ? { note: setPayload.note ?? null } : {}),
         ...(parsed.data.label !== undefined ? { label: setPayload.label ?? null } : {}),
         ...(parsed.data.merchantName !== undefined ? { merchantName: setPayload.merchantName ?? null, bulkMerchantCount } : {}),
+        ...(parsed.data.categoryId !== undefined ? { categoryId: parsed.data.categoryId, bulkCategoryCount } : {}),
       },
       { headers: NO_STORE },
     );

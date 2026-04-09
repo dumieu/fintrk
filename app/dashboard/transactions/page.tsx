@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useState, useCallback, useRef } from "react";
+import { Fragment, useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { motion } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import {
   ArrowLeftRight,
   Trash2,
   Loader2,
+  ChevronDown,
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -543,6 +544,279 @@ function MerchantNameEditor({
   );
 }
 
+/* ═══════════════════════ CATEGORY TYPES ════════════════════════════════ */
+
+interface UserSubcategory {
+  id: number;
+  name: string;
+}
+
+interface UserCategory {
+  id: number;
+  name: string;
+  color: string | null;
+  subcategories: UserSubcategory[];
+}
+
+/* ═══════════════════════ CATEGORY CELL EDITOR ═════════════════════════ */
+
+function CategoryCellEditor({
+  txn,
+  userCategories,
+  onSaved,
+}: {
+  txn: Transaction;
+  userCategories: UserCategory[];
+  onSaved: (
+    txnId: string,
+    categoryId: number,
+    scope: "this" | "merchant" | "label",
+    merchantName: string | null,
+    label: string | null,
+    resolvedCategoryName: string | null,
+    resolvedSubcategoryName: string | null,
+  ) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [scope, setScope] = useState<"merchant" | "label" | "this">("merchant");
+  const containerRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) { setSearch(""); return; }
+    requestAnimationFrame(() => searchRef.current?.focus());
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const q = search.trim().toLowerCase();
+  const filtered = useMemo(() => {
+    if (!q) return userCategories;
+    return userCategories
+      .map((cat) => ({
+        ...cat,
+        subcategories: cat.subcategories.filter(
+          (s) => s.name.toLowerCase().includes(q) || cat.name.toLowerCase().includes(q),
+        ),
+      }))
+      .filter((cat) => cat.subcategories.length > 0 || cat.name.toLowerCase().includes(q));
+  }, [userCategories, q]);
+
+  const hasLabel = Boolean(txn.label?.trim());
+
+  const selectCategory = (subcatId: number) => {
+    let resolvedCat: string | null = null;
+    let resolvedSub: string | null = null;
+    for (const cat of userCategories) {
+      if (cat.id === subcatId) { resolvedCat = cat.name; break; }
+      const sub = cat.subcategories.find((s) => s.id === subcatId);
+      if (sub) { resolvedCat = cat.name; resolvedSub = sub.name; break; }
+    }
+    onSaved(txn.id, subcatId, scope, txn.merchantName, txn.label, resolvedCat, resolvedSub);
+    setOpen(false);
+  };
+
+  if (!open) {
+    return (
+      <div
+        className="flex min-w-0 w-full h-full items-center gap-2.5 cursor-pointer rounded-md py-0.5 -my-0.5 pr-1 ring-0 hover:ring-1 hover:ring-white/15 hover:bg-white/[0.04] transition-[box-shadow,background]"
+        onClick={(e) => { e.stopPropagation(); setOpen(true); }}
+      >
+        <TransactionCategoryIcon
+          categoryName={txn.categoryName}
+          subcategoryName={txn.subcategoryName}
+          categorySuggestion={txn.categorySuggestion}
+          size="md"
+        />
+        <div className="flex min-w-0 flex-1 flex-col items-start justify-center gap-0.5 text-left">
+          <span className="block w-full max-w-full truncate text-[12px] text-white/75">
+            {txn.categoryName ?? txn.categorySuggestion ?? "Uncategorized"}
+          </span>
+          {txn.subcategoryName ? (
+            <span className="block w-full max-w-full truncate text-[11px] text-white/45">
+              {txn.subcategoryName}
+            </span>
+          ) : null}
+        </div>
+        <ChevronDown className="w-3 h-3 shrink-0 text-white/20" />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      ref={containerRef}
+      className="relative min-w-0 w-full"
+      onClick={(e) => e.stopPropagation()}
+    >
+      {/* Current value + chevron */}
+      <button
+        type="button"
+        onClick={() => setOpen(false)}
+        className="flex min-w-0 w-full items-center gap-2.5 rounded-md py-0.5 pr-1 ring-1 ring-[#0BC18D]/40 bg-white/[0.04] cursor-pointer"
+      >
+        <TransactionCategoryIcon
+          categoryName={txn.categoryName}
+          subcategoryName={txn.subcategoryName}
+          categorySuggestion={txn.categorySuggestion}
+          size="md"
+        />
+        <div className="flex min-w-0 flex-1 flex-col items-start justify-center gap-0.5 text-left">
+          <span className="block w-full max-w-full truncate text-[12px] text-white/75">
+            {txn.categoryName ?? txn.categorySuggestion ?? "Uncategorized"}
+          </span>
+          {txn.subcategoryName ? (
+            <span className="block w-full max-w-full truncate text-[11px] text-white/45">
+              {txn.subcategoryName}
+            </span>
+          ) : null}
+        </div>
+        <ChevronDown className="w-3 h-3 shrink-0 text-[#0BC18D] rotate-180 transition-transform" />
+      </button>
+
+      {/* Dropdown */}
+      <div
+        ref={dropdownRef}
+        className="absolute left-0 top-[calc(100%+4px)] z-50 w-[280px] max-h-[340px] flex flex-col rounded-xl border border-white/15 bg-[#120a28]/98 shadow-2xl backdrop-blur-lg overflow-hidden"
+      >
+        {/* Search */}
+        <div className="shrink-0 border-b border-white/10 px-2.5 py-2">
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-white/30" />
+            <input
+              ref={searchRef}
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search categories…"
+              className="w-full rounded-md border border-white/10 bg-white/[0.04] py-1.5 pl-7 pr-2 text-[11px] text-white/90 placeholder:text-white/30 outline-none focus:border-[#0BC18D]/40 focus:ring-1 focus:ring-[#0BC18D]/20"
+            />
+          </div>
+        </div>
+
+        {/* Grouped list */}
+        <div className="flex-1 overflow-y-auto overscroll-contain py-1">
+          {filtered.length === 0 ? (
+            <p className="px-3 py-4 text-center text-[11px] text-white/30">No categories found</p>
+          ) : (
+            filtered.map((cat) => (
+              <div key={cat.id}>
+                {/* Parent category header — clickable if it has no subcategories */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (cat.subcategories.length === 0) selectCategory(cat.id);
+                  }}
+                  className={cn(
+                    "w-full flex items-center gap-2 px-3 py-1.5 text-left text-[11px] font-semibold tracking-wide",
+                    cat.subcategories.length === 0
+                      ? "text-white/70 hover:bg-white/[0.06] cursor-pointer"
+                      : "text-white/40 cursor-default",
+                  )}
+                >
+                  <div
+                    className="w-1.5 h-1.5 rounded-full shrink-0"
+                    style={{ backgroundColor: cat.color ?? "#808080" }}
+                  />
+                  {cat.name}
+                </button>
+                {/* Subcategories */}
+                {cat.subcategories.map((sub) => {
+                  const isActive = txn.categoryId === sub.id;
+                  return (
+                    <button
+                      key={sub.id}
+                      type="button"
+                      onClick={() => selectCategory(sub.id)}
+                      className={cn(
+                        "w-full flex items-center gap-2 pl-7 pr-3 py-1.5 text-left text-[11px] transition-colors cursor-pointer",
+                        isActive
+                          ? "bg-[#0BC18D]/10 text-[#0BC18D]"
+                          : "text-white/60 hover:bg-white/[0.06] hover:text-white/80",
+                      )}
+                    >
+                      <div
+                        className="w-1 h-1 rounded-full shrink-0"
+                        style={{ backgroundColor: `${cat.color ?? "#808080"}60` }}
+                      />
+                      <span className="truncate">{sub.name}</span>
+                      {isActive && (
+                        <span className="ml-auto shrink-0 text-[9px] font-medium text-[#0BC18D]/60">current</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Triple toggle */}
+        <div className="shrink-0 border-t border-white/10 px-2.5 py-2">
+          <div className="flex items-center gap-1.5">
+            <span className="shrink-0 text-[9px] text-white/35">Apply to:</span>
+            <div className="inline-flex h-[22px] rounded-full border border-white/10 bg-white/[0.04] p-px text-[9px] font-medium">
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setScope("merchant")}
+                className={cn(
+                  "rounded-full px-2 transition-colors whitespace-nowrap cursor-pointer",
+                  scope === "merchant"
+                    ? "bg-[#0BC18D]/20 text-[#0BC18D]"
+                    : "text-white/40 hover:text-white/60",
+                )}
+              >
+                All with this name
+              </button>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => { if (hasLabel) setScope("label"); }}
+                className={cn(
+                  "rounded-full px-2 transition-colors whitespace-nowrap",
+                  !hasLabel
+                    ? "text-white/15 cursor-not-allowed"
+                    : scope === "label"
+                      ? "bg-[#0BC18D]/20 text-[#0BC18D] cursor-pointer"
+                      : "text-white/40 hover:text-white/60 cursor-pointer",
+                )}
+                title={hasLabel ? `Label: ${txn.label}` : "No label assigned"}
+              >
+                {hasLabel ? txn.label : "No label"}
+              </button>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setScope("this")}
+                className={cn(
+                  "rounded-full px-2 transition-colors whitespace-nowrap cursor-pointer",
+                  scope === "this"
+                    ? "bg-[#0BC18D]/20 text-[#0BC18D]"
+                    : "text-white/40 hover:text-white/60",
+                )}
+              >
+                Only this
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function formatCompact(n: number): string {
   const abs = Math.abs(n);
   const sign = n < 0 ? "−" : "";
@@ -691,12 +965,19 @@ export default function TransactionsPage() {
   const listVersionRef = useRef(0);
   const [categoryOptions, setCategoryOptions] = useState<CategorySlicerOption[]>([]);
   const [amountTotals, setAmountTotals] = useState<AmountTotalRow[]>([]);
+  const [userCats, setUserCats] = useState<UserCategory[]>([]);
 
   useEffect(() => {
     fetch("/api/transactions/filter-options")
       .then((r) => r.json())
       .then((d) => {
         if (Array.isArray(d.categories)) setCategoryOptions(d.categories);
+      })
+      .catch(() => {});
+    fetch("/api/user-categories")
+      .then((r) => r.json())
+      .then((d) => {
+        if (Array.isArray(d.categories)) setUserCats(d.categories);
       })
       .catch(() => {});
   }, []);
@@ -784,6 +1065,50 @@ export default function TransactionsPage() {
           ));
         } else {
           setTxns((prev) => prev.map((t) => (t.id === id ? { ...t, merchantName: newName } : t)));
+        }
+        dispatchTransactionsChanged();
+      }
+    } catch { /* keep existing */ }
+  }, []);
+
+  const saveCategory = useCallback(async (
+    txnId: string,
+    categoryId: number,
+    scope: "this" | "merchant" | "label",
+    merchantName: string | null,
+    label: string | null,
+    resolvedCategoryName: string | null,
+    resolvedSubcategoryName: string | null,
+  ) => {
+    try {
+      const res = await fetch("/api/transactions", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          transactionId: txnId,
+          categoryId,
+          categoryApplyScope: scope,
+          categoryMerchantName: scope === "merchant" ? merchantName : undefined,
+          categoryLabel: scope === "label" ? label : undefined,
+        }),
+      });
+      if (res.ok) {
+        const patch = {
+          categoryId,
+          categoryName: resolvedCategoryName,
+          subcategoryName: resolvedSubcategoryName,
+        };
+        if (scope === "merchant" && merchantName) {
+          const mLower = merchantName.trim().toLowerCase();
+          setTxns((prev) => prev.map((t) =>
+            t.merchantName?.trim().toLowerCase() === mLower ? { ...t, ...patch } : t,
+          ));
+        } else if (scope === "label" && label) {
+          setTxns((prev) => prev.map((t) =>
+            t.label?.trim() === label.trim() ? { ...t, ...patch } : t,
+          ));
+        } else {
+          setTxns((prev) => prev.map((t) => (t.id === txnId ? { ...t, ...patch } : t)));
         }
         dispatchTransactionsChanged();
       }
@@ -1231,33 +1556,12 @@ export default function TransactionsPage() {
                             onSaved={saveTransactionLabel}
                           />
                         </div>
-                        <div className="hidden min-w-0 sm:flex sm:h-full sm:w-full sm:items-center sm:justify-start sm:gap-2.5">
-                          <TransactionCategoryIcon
-                            categoryName={txn.categoryName}
-                            subcategoryName={txn.subcategoryName}
-                            categorySuggestion={txn.categorySuggestion}
-                            size="md"
+                        <div className="hidden min-w-0 sm:flex sm:h-full sm:w-full sm:items-center sm:justify-start">
+                          <CategoryCellEditor
+                            txn={txn}
+                            userCategories={userCats}
+                            onSaved={saveCategory}
                           />
-                          <div className="flex min-w-0 flex-1 flex-col sm:items-start sm:justify-center sm:gap-0.5 sm:text-left">
-                            <span
-                              className="block w-full max-w-full truncate text-[12px] text-white/75"
-                              title={
-                                txn.subcategoryName
-                                  ? `${txn.categoryName ?? ""} · ${txn.subcategoryName}`
-                                  : (txn.categoryName ?? txn.categorySuggestion ?? "Uncategorized")
-                              }
-                            >
-                              {txn.categoryName ?? txn.categorySuggestion ?? "Uncategorized"}
-                            </span>
-                            {txn.subcategoryName ? (
-                              <span
-                                className="block w-full max-w-full truncate text-[11px] text-white/45"
-                                title={txn.subcategoryName}
-                              >
-                                {txn.subcategoryName}
-                              </span>
-                            ) : null}
-                          </div>
                         </div>
                         <div className="flex min-h-0 w-max max-w-full flex-col items-start justify-center text-left sm:h-full sm:min-h-[2.5rem]">
                           <span className={cn(
