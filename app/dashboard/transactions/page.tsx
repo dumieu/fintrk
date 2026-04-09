@@ -448,8 +448,8 @@ function MerchantNameEditor({
 
   const save = useCallback(() => {
     if (savingRef.current) return;
-    const trimmed = draft.trim();
-    const oldTrimmed = (txn.merchantName ?? "").trim();
+    const trimmed = draft.trim().toLowerCase();
+    const oldTrimmed = (txn.merchantName ?? "").trim().toLowerCase();
     if (!trimmed || trimmed === oldTrimmed) {
       setEditing(false);
       return;
