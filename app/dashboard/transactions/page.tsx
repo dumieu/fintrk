@@ -342,18 +342,21 @@ function TransactionLabelCell({
 
 function TransactionNoteCell({
   transactionId,
+  merchantName,
   value,
   onSaved,
 }: {
   transactionId: string;
+  merchantName: string | null;
   value: string | null;
-  onSaved: (id: string, note: string | null) => void;
+  onSaved: (id: string, note: string | null, scope: "this" | "merchant", merchantName: string | null) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value ?? "");
+  const [scope, setScope] = useState<"this" | "merchant">("this");
 
   useEffect(() => {
-    if (!editing) setDraft(value ?? "");
+    if (!editing) { setDraft(value ?? ""); setScope("this"); }
   }, [value, editing]);
 
   const persist = async () => {
@@ -368,11 +371,16 @@ function TransactionNoteCell({
       const res = await fetch("/api/transactions", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transactionId, note: trimmed }),
+        body: JSON.stringify({
+          transactionId,
+          note: trimmed,
+          noteApplyScope: scope,
+          noteMerchantName: scope === "merchant" ? merchantName : undefined,
+        }),
       });
       if (res.ok) {
         const json = (await res.json()) as { note?: string | null };
-        onSaved(transactionId, json.note ?? next);
+        onSaved(transactionId, json.note ?? next, scope, merchantName);
         dispatchTransactionsChanged();
       }
     } finally {
@@ -386,22 +394,58 @@ function TransactionNoteCell({
       onClick={(e) => e.stopPropagation()}
     >
       {editing ? (
-        <textarea
-          autoFocus
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={() => void persist()}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") {
-              setDraft(value ?? "");
-              setEditing(false);
-            }
-          }}
-          rows={2}
-          className="w-full min-h-[2.25rem] resize-y rounded-md border border-white/20 bg-white/[0.06] px-1.5 py-1 text-[11px] leading-snug text-white/90 placeholder:text-white/35 outline-none focus:border-[#0BC18D]/60 focus:ring-1 focus:ring-[#0BC18D]/30"
-          placeholder="Note…"
-          aria-label="Transaction note"
-        />
+        <div className="flex flex-col gap-1.5">
+          <textarea
+            autoFocus
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={(e) => {
+              if (e.relatedTarget?.closest("[data-note-toggle]")) return;
+              void persist();
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                setDraft(value ?? "");
+                setEditing(false);
+              }
+            }}
+            rows={2}
+            className="w-full min-h-[2.25rem] resize-y rounded-md border border-white/20 bg-white/[0.06] px-1.5 py-1 text-[11px] leading-snug text-white/90 placeholder:text-white/35 outline-none focus:border-[#0BC18D]/60 focus:ring-1 focus:ring-[#0BC18D]/30"
+            placeholder="Note…"
+            aria-label="Transaction note"
+          />
+          <div className="flex items-center gap-1.5" data-note-toggle>
+            <span className="shrink-0 text-[9px] text-white/35">Update for:</span>
+            <div className="inline-flex h-[20px] rounded-full border border-white/10 bg-white/[0.04] p-px text-[9px] font-medium">
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setScope("this")}
+                className={cn(
+                  "rounded-full px-2 transition-colors whitespace-nowrap cursor-pointer",
+                  scope === "this"
+                    ? "bg-[#0BC18D]/20 text-[#0BC18D]"
+                    : "text-white/40 hover:text-white/60",
+                )}
+              >
+                This item
+              </button>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setScope("merchant")}
+                className={cn(
+                  "rounded-full px-2 transition-colors whitespace-nowrap cursor-pointer",
+                  scope === "merchant"
+                    ? "bg-[#0BC18D]/20 text-[#0BC18D]"
+                    : "text-white/40 hover:text-white/60",
+                )}
+              >
+                All with this name
+              </button>
+            </div>
+          </div>
+        </div>
       ) : (
         <button
           type="button"
@@ -1029,8 +1073,15 @@ export default function TransactionsPage() {
     });
   }, []);
 
-  const saveTransactionNote = useCallback((id: string, note: string | null) => {
-    setTxns((prev) => prev.map((t) => (t.id === id ? { ...t, note } : t)));
+  const saveTransactionNote = useCallback((id: string, note: string | null, scope: "this" | "merchant", mName: string | null) => {
+    if (scope === "merchant" && mName) {
+      const mLower = mName.trim().toLowerCase();
+      setTxns((prev) => prev.map((t) =>
+        t.merchantName?.trim().toLowerCase() === mLower ? { ...t, note } : t,
+      ));
+    } else {
+      setTxns((prev) => prev.map((t) => (t.id === id ? { ...t, note } : t)));
+    }
   }, []);
 
   const saveTransactionLabel = useCallback((id: string, label: string | null) => {
@@ -1589,6 +1640,7 @@ export default function TransactionsPage() {
                         <div className="col-span-2 flex min-h-0 items-center sm:col-span-1 sm:h-full">
                           <TransactionNoteCell
                             transactionId={txn.id}
+                            merchantName={txn.merchantName}
                             value={txn.note ?? null}
                             onSaved={saveTransactionNote}
                           />

@@ -236,9 +236,27 @@ export async function PATCH(request: NextRequest) {
     }
 
     const setPayload: { updatedAt: Date; note?: string | null; label?: string | null; merchantName?: string | null } = { updatedAt: new Date() };
+    let bulkNoteCount = 0;
+
     if (parsed.data.note !== undefined) {
       const t = parsed.data.note.trim();
       setPayload.note = t === "" ? null : t;
+
+      if (parsed.data.noteApplyScope === "merchant" && parsed.data.noteMerchantName) {
+        const mName = parsed.data.noteMerchantName.trim().toLowerCase();
+        if (mName) {
+          const bulkResult = await resilientQuery(() =>
+            db.update(transactions)
+              .set({ note: setPayload.note, updatedAt: new Date() })
+              .where(and(
+                eq(transactions.userId, userId),
+                sql`LOWER(TRIM(${transactions.merchantName})) = ${mName}`,
+              ))
+              .returning({ id: transactions.id }),
+          );
+          bulkNoteCount = bulkResult.length;
+        }
+      }
     }
     if (parsed.data.label !== undefined) {
       const t = parsed.data.label.trim().slice(0, 20);
@@ -319,7 +337,7 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json(
       {
         success: true,
-        ...(parsed.data.note !== undefined ? { note: setPayload.note ?? null } : {}),
+        ...(parsed.data.note !== undefined ? { note: setPayload.note ?? null, bulkNoteCount } : {}),
         ...(parsed.data.label !== undefined ? { label: setPayload.label ?? null } : {}),
         ...(parsed.data.merchantName !== undefined ? { merchantName: setPayload.merchantName ?? null, bulkMerchantCount } : {}),
         ...(parsed.data.categoryId !== undefined ? { categoryId: parsed.data.categoryId, bulkCategoryCount } : {}),

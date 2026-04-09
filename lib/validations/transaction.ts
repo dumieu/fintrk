@@ -41,6 +41,10 @@ export const patchTransactionSchema = z
     transactionId: z.string().uuid(),
     /** Empty string clears the note (stored as null). */
     note: z.string().max(20000).optional(),
+    /** Scope for note update: "this" (single) or "merchant" (all with same merchant). */
+    noteApplyScope: z.enum(["this", "merchant"]).optional(),
+    /** Merchant name for bulk note update when noteApplyScope is "merchant". */
+    noteMerchantName: z.string().max(255).optional(),
     /** Max 20 characters; empty string clears (stored as null). */
     label: z.string().max(20).optional(),
     /** Merchant name update; max 255 chars. */
