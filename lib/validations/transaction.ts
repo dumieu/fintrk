@@ -35,7 +35,7 @@ export const deleteTransactionsSchema = z.object({
 
 export type DeleteTransactionsInput = z.infer<typeof deleteTransactionsSchema>;
 
-/** PATCH body: update `note` and/or `label` (omit fields you are not changing). */
+/** PATCH body: update `note`, `label`, and/or `merchantName` (omit fields you are not changing). */
 export const patchTransactionSchema = z
   .object({
     transactionId: z.string().uuid(),
@@ -43,9 +43,15 @@ export const patchTransactionSchema = z
     note: z.string().max(20000).optional(),
     /** Max 20 characters; empty string clears (stored as null). */
     label: z.string().max(20).optional(),
+    /** Merchant name update; max 255 chars. */
+    merchantName: z.string().max(255).optional(),
+    /** When true, update merchantName for ALL transactions matching the old name for this user. */
+    applyToAllMerchants: z.boolean().optional(),
+    /** The original merchant name (needed for bulk rename when applyToAllMerchants is true). */
+    oldMerchantName: z.string().max(255).optional(),
   })
-  .refine((d) => d.note !== undefined || d.label !== undefined, {
-    message: "Provide note and/or label",
+  .refine((d) => d.note !== undefined || d.label !== undefined || d.merchantName !== undefined, {
+    message: "Provide note, label, and/or merchantName",
   });
 
 export type PatchTransactionInput = z.infer<typeof patchTransactionSchema>;

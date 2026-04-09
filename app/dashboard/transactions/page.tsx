@@ -420,6 +420,129 @@ function TransactionNoteCell({
   );
 }
 
+function MerchantNameEditor({
+  txn,
+  onSaved,
+}: {
+  txn: Transaction;
+  onSaved: (id: string, newName: string | null, applyAll: boolean, oldName: string | null) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(txn.merchantName ?? "");
+  const [applyAll, setApplyAll] = useState(true);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const savingRef = useRef(false);
+
+  useEffect(() => {
+    if (!editing) setDraft(txn.merchantName ?? "");
+  }, [txn.merchantName, editing]);
+
+  useEffect(() => {
+    if (editing) {
+      requestAnimationFrame(() => {
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      });
+    }
+  }, [editing]);
+
+  const save = useCallback(() => {
+    if (savingRef.current) return;
+    const trimmed = draft.trim().toLowerCase();
+    const oldTrimmed = (txn.merchantName ?? "").trim().toLowerCase();
+    if (!trimmed || trimmed === oldTrimmed) {
+      setEditing(false);
+      return;
+    }
+    savingRef.current = true;
+    onSaved(txn.id, trimmed, applyAll, txn.merchantName);
+    setEditing(false);
+    savingRef.current = false;
+  }, [draft, txn.merchantName, txn.id, applyAll, onSaved]);
+
+  if (!editing) {
+    return (
+      <div className="min-w-0">
+        <div
+          className="min-w-0 cursor-pointer rounded-md py-0.5 -my-0.5 pr-1 ring-0 hover:ring-1 hover:ring-white/15 hover:bg-white/[0.04] transition-[box-shadow,background]"
+          onClick={(e) => {
+            e.stopPropagation();
+            setEditing(true);
+            setApplyAll(true);
+          }}
+        >
+          <p className="text-xs font-medium text-white/90 truncate">
+            {txn.merchantName ?? txn.rawDescription}
+          </p>
+          <TransactionSourceSubtitle txn={txn} />
+          {transactionReferenceDisplay(txn) != null && (
+            <p
+              className="mt-0.5 min-w-0 max-w-full text-[9px] leading-snug"
+              title={transactionReferenceTitle(txn)}
+            >
+              <span className="block min-w-0 truncate text-white/45">
+                {transactionReferenceDisplay(txn)}
+              </span>
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="min-w-0 space-y-1.5"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <input
+        ref={inputRef}
+        type="text"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => save()}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") { e.preventDefault(); save(); }
+          if (e.key === "Escape") { e.preventDefault(); setDraft(txn.merchantName ?? ""); setEditing(false); }
+        }}
+        className="w-full min-w-0 rounded-md border border-white/20 bg-white/[0.06] px-2 py-1 text-xs font-medium text-white/90 outline-none focus:border-[#0BC18D]/60 focus:ring-1 focus:ring-[#0BC18D]/30"
+        aria-label="Merchant name"
+      />
+      <div className="flex items-center gap-1.5">
+        <span className="shrink-0 text-[9px] text-white/35">Apply to:</span>
+        <div className="inline-flex h-[22px] rounded-full border border-white/10 bg-white/[0.04] p-px text-[9px] font-medium">
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => setApplyAll(true)}
+            className={cn(
+              "rounded-full px-2 transition-colors whitespace-nowrap cursor-pointer",
+              applyAll
+                ? "bg-[#0BC18D]/20 text-[#0BC18D]"
+                : "text-white/40 hover:text-white/60",
+            )}
+          >
+            All with this name
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => setApplyAll(false)}
+            className={cn(
+              "rounded-full px-2 transition-colors whitespace-nowrap cursor-pointer",
+              !applyAll
+                ? "bg-[#0BC18D]/20 text-[#0BC18D]"
+                : "text-white/40 hover:text-white/60",
+            )}
+          >
+            Only this
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function formatCompact(n: number): string {
   const abs = Math.abs(n);
   const sign = n < 0 ? "−" : "";
@@ -631,6 +754,40 @@ export default function TransactionsPage() {
 
   const saveTransactionLabel = useCallback((id: string, label: string | null) => {
     setTxns((prev) => prev.map((t) => (t.id === id ? { ...t, label } : t)));
+  }, []);
+
+  const saveMerchantName = useCallback(async (
+    id: string,
+    newName: string | null,
+    applyAll: boolean,
+    oldName: string | null,
+  ) => {
+    if (!newName) return;
+    try {
+      const res = await fetch("/api/transactions", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          transactionId: id,
+          merchantName: newName,
+          applyToAllMerchants: applyAll,
+          oldMerchantName: oldName,
+        }),
+      });
+      if (res.ok) {
+        if (applyAll && oldName) {
+          const oldLower = oldName.trim().toLowerCase();
+          setTxns((prev) => prev.map((t) =>
+            t.merchantName?.trim().toLowerCase() === oldLower
+              ? { ...t, merchantName: newName }
+              : t,
+          ));
+        } else {
+          setTxns((prev) => prev.map((t) => (t.id === id ? { ...t, merchantName: newName } : t)));
+        }
+        dispatchTransactionsChanged();
+      }
+    } catch { /* keep existing */ }
   }, []);
 
   const handleTimePreset = useCallback((preset: TimePresetId) => {
@@ -1046,24 +1203,12 @@ export default function TransactionsPage() {
                           </div>
                         </TransactionInsightHover>
                         <div className="min-w-0">
-                          <TransactionInsightHover txn={txn}>
-                            <div className="min-w-0 rounded-md py-0.5 -my-0.5 pr-1 ring-0 group-hover/txninsight:ring-1 group-hover/txninsight:ring-white/15 group-hover/txninsight:bg-white/[0.04] transition-[box-shadow,background]">
-                              <p className="text-xs font-medium text-white/90 truncate">
-                                {txn.merchantName ?? txn.rawDescription}
-                              </p>
-                              <TransactionSourceSubtitle txn={txn} />
-                              {transactionReferenceDisplay(txn) != null && (
-                                <p
-                                  className="mt-0.5 min-w-0 max-w-full text-[9px] leading-snug"
-                                  title={transactionReferenceTitle(txn)}
-                                >
-                                  <span className="block min-w-0 truncate text-white/45">
-                                    {transactionReferenceDisplay(txn)}
-                                  </span>
-                                </p>
-                              )}
-                            </div>
-                          </TransactionInsightHover>
+                          <div className="min-w-0 py-0.5 -my-0.5 pr-1">
+                            <MerchantNameEditor
+                              txn={txn}
+                              onSaved={saveMerchantName}
+                            />
+                          </div>
                           <div className="mt-0.5 flex items-start gap-2 text-[12px] text-white/50 sm:hidden">
                             <TransactionCategoryIcon
                               categoryName={txn.categoryName}

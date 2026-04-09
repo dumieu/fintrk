@@ -235,7 +235,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "Invalid input" }, { status: 400, headers: NO_STORE });
     }
 
-    const setPayload: { updatedAt: Date; note?: string | null; label?: string | null } = { updatedAt: new Date() };
+    const setPayload: { updatedAt: Date; note?: string | null; label?: string | null; merchantName?: string | null } = { updatedAt: new Date() };
     if (parsed.data.note !== undefined) {
       const t = parsed.data.note.trim();
       setPayload.note = t === "" ? null : t;
@@ -243,6 +243,29 @@ export async function PATCH(request: NextRequest) {
     if (parsed.data.label !== undefined) {
       const t = parsed.data.label.trim().slice(0, 20);
       setPayload.label = t === "" ? null : t;
+    }
+
+    let bulkMerchantCount = 0;
+
+    if (parsed.data.merchantName !== undefined) {
+      const newName = parsed.data.merchantName.trim().toLowerCase() || null;
+      setPayload.merchantName = newName;
+
+      if (parsed.data.applyToAllMerchants && parsed.data.oldMerchantName) {
+        const oldName = parsed.data.oldMerchantName.trim().toLowerCase();
+        if (oldName && newName && oldName !== newName) {
+          const bulkResult = await resilientQuery(() =>
+            db.update(transactions)
+              .set({ merchantName: newName, updatedAt: new Date() })
+              .where(and(
+                eq(transactions.userId, userId),
+                sql`LOWER(TRIM(${transactions.merchantName})) = ${oldName}`,
+              ))
+              .returning({ id: transactions.id }),
+          );
+          bulkMerchantCount = bulkResult.length;
+        }
+      }
     }
 
     const updated = await resilientQuery(() =>
@@ -261,6 +284,7 @@ export async function PATCH(request: NextRequest) {
         success: true,
         ...(parsed.data.note !== undefined ? { note: setPayload.note ?? null } : {}),
         ...(parsed.data.label !== undefined ? { label: setPayload.label ?? null } : {}),
+        ...(parsed.data.merchantName !== undefined ? { merchantName: setPayload.merchantName ?? null, bulkMerchantCount } : {}),
       },
       { headers: NO_STORE },
     );
