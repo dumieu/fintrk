@@ -1,13 +1,117 @@
 import "server-only";
 import { db, resilientQuery } from "@/lib/db";
-import { accounts, transactions, statements, categories, merchants, fileUploadLog } from "@/lib/db/schema";
+import { accounts, transactions, statements, userCategories, merchants, fileUploadLog } from "@/lib/db/schema";
+import { ensureUserCategories } from "@/lib/ensure-user-categories";
 import { ai, GEMINI_MODEL } from "@/lib/gemini";
 import { logAiCost } from "@/lib/ai-cost";
 import { logServerError } from "@/lib/safe-error";
 import { aiResponseSchema } from "@/lib/validations/ingest";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 
-const SYSTEM_INSTRUCTION = `You are FinTRK, a financial data extraction engine. You receive bank statement data (as a markdown table or as a PDF/image) and extract every transaction into a strictly structured JSON array.
+/**
+ * Queries the categories table and the user's transactions to build:
+ *  - historyJson: compact category → subcategory → merchants hierarchy
+ *  - subcategoryNames: the allowed subcategory names for category_suggestion
+ *
+ * For first-time users the hierarchy still contains every system
+ * category/subcategory (with empty merchant arrays).
+ */
+async function buildUserContext(userId: string) {
+  await ensureUserCategories(userId);
+
+  const [allCats, userMerchantRows] = await Promise.all([
+    resilientQuery(() =>
+      db
+        .select({ id: userCategories.id, name: userCategories.name, parentId: userCategories.parentId })
+        .from(userCategories)
+        .where(eq(userCategories.userId, userId))
+        .orderBy(userCategories.sortOrder),
+    ),
+    resilientQuery(() =>
+      db
+        .select({
+          categoryName: userCategories.name,
+          merchantName: transactions.merchantName,
+        })
+        .from(transactions)
+        .innerJoin(userCategories, eq(transactions.categoryId, userCategories.id))
+        .where(
+          sql`${transactions.userId} = ${userId}
+            AND ${transactions.merchantName} IS NOT NULL
+            AND TRIM(${transactions.merchantName}) != ''`,
+        )
+        .groupBy(userCategories.name, transactions.merchantName),
+    ),
+  ]);
+
+  const parentById = new Map<number, { name: string; parentId: number | null }>();
+  for (const c of allCats) parentById.set(c.id, { name: c.name, parentId: c.parentId });
+
+  const tree: Record<string, Record<string, Set<string>>> = {};
+  const subcategoryNames: string[] = [];
+
+  for (const c of allCats) {
+    if (c.parentId == null) {
+      tree[c.name.trim().toLowerCase()] ??= {};
+    } else {
+      const parent = parentById.get(c.parentId);
+      if (parent) {
+        const parentName = parent.name.trim().toLowerCase();
+        const childName = c.name.trim().toLowerCase();
+        tree[parentName] ??= {};
+        tree[parentName][childName] ??= new Set();
+        subcategoryNames.push(c.name.trim());
+      }
+    }
+  }
+
+  for (const row of userMerchantRows) {
+    const merchant = (row.merchantName ?? "").trim().toLowerCase();
+    if (!merchant) continue;
+    const leafName = (row.categoryName ?? "").trim().toLowerCase();
+    const leafCat = allCats.find((c) => c.name.trim().toLowerCase() === leafName);
+    if (leafCat?.parentId != null) {
+      const parent = parentById.get(leafCat.parentId);
+      if (parent) {
+        const parentName = parent.name.trim().toLowerCase();
+        tree[parentName] ??= {};
+        tree[parentName][leafName] ??= new Set();
+        tree[parentName][leafName].add(merchant);
+      }
+    } else {
+      tree[leafName] ??= {};
+      (tree[leafName]["general"] ??= new Set()).add(merchant);
+    }
+  }
+
+  const result: Record<string, Record<string, string[]>> = {};
+  for (const cat of Object.keys(tree).sort()) {
+    result[cat] = {};
+    for (const sub of Object.keys(tree[cat]).sort()) {
+      result[cat][sub] = [...tree[cat][sub]].sort();
+    }
+  }
+
+  return { historyJson: JSON.stringify(result), subcategoryNames };
+}
+
+const MERCHANT_HISTORY_INSTRUCTIONS = `
+MERCHANT & CATEGORY HISTORY (CRITICAL — read carefully):
+Below is a JSON object representing this user's existing category → subcategory → merchant assignments from previously processed statements. You MUST follow these rules strictly:
+
+1. REUSE EXISTING MERCHANT NAMES: If a transaction's merchant matches or is clearly the same entity as a merchant already listed in the history, you MUST use the EXACT same lowercase merchant_name string from the history. Do NOT create a new variant, abbreviation, or spelling. For example, if the history contains "starbucks coffee" and you see "STARBUCKS COFFEE SG", output "starbucks coffee" — not a new string.
+
+2. REUSE EXISTING CATEGORIES: If a merchant already appears under a specific subcategory in the history, assign category_suggestion to that SAME subcategory for new transactions from that merchant. Do NOT reassign known merchants to different categories.
+
+3. NEW MERCHANTS: Only create a new merchant_name (still all lowercase) when no existing merchant in the history is a reasonable match. Even then, prefer assigning it to an existing subcategory from the history that best fits.
+
+4. EMPTY MERCHANT ARRAYS: Some subcategories have empty arrays — those are valid categories the user has but no merchants yet. You may assign new merchants to them.
+
+User's merchant history:
+`;
+
+function buildSystemInstruction(subcategoryList: string): string {
+  return `You are FinTRK, a financial data extraction engine. You receive bank statement data (as a markdown table or as a PDF/image) and extract every transaction into a strictly structured JSON array.
 
 For EACH transaction, you MUST:
 
@@ -20,7 +124,7 @@ For EACH transaction, you MUST:
      * Extract ONLY the code value (strip labels and punctuation). Examples: "Ref No: 74556226089108636068214" → reference_id "74556226089108636068214" | "Auth 123456" → "123456" | "E2E1234567890123456789012" → that full string.
      * The value MUST contain at least one digit OR be a compact alphanumeric code (6–40 chars) clearly separate from merchant text. Long numeric strings (10–35+ digits) are common for bank references.
      * If the line has NO such code — only merchant or free text — set reference_id to null. Never copy merchant_name into reference_id. Never use title-case merchant text as reference_id.
-   - merchant_name: the canonical merchant name (e.g., "AMZN*2847362" → "Amazon", "UBER *EATS" → "Uber Eats", "DD *DOORDASH" → "DoorDash")
+   - merchant_name: the canonical merchant name in **all lowercase** (e.g., "AMZN*2847362" → "amazon", "UBER *EATS" → "uber eats", "DD *DOORDASH" → "doordash", "GRAB FOOD" → "grab food")
 
 3. AMOUNTS:
    - base_amount: transaction amount in the account's primary currency. NEGATIVE for debits/expenses, POSITIVE for credits/income.
@@ -33,7 +137,7 @@ For EACH transaction, you MUST:
 4. CLASSIFICATION:
    - mcc_code: Merchant Category Code (4-digit integer) if determinable from merchant name, null otherwise
    - country_iso: ISO 3166-1 alpha-2 country code, inferred from explicit country indicators, currency, or merchant name recognition. Default to the account's country if ambiguous.
-   - category_suggestion: your best category from this exact list: Salary, Freelance, Investment Returns, Refunds, Side Income, Rent / Mortgage, Utilities, Insurance, Maintenance, Property Tax, Fuel, Public Transit, Ride Share, Parking, Car Payment, Car Insurance, Groceries, Restaurants, Coffee, Delivery, Bars & Nightlife, Clothing, Electronics, Home & Garden, Personal Care, Online Shopping, Streaming, Gaming, Events & Concerts, Hobbies, Books & Media, Medical, Pharmacy, Fitness, Health Insurance, Mental Health, Bank Fees, Interest Charges, FX Fees, Investment Fees, ATM Fees, Flights, Hotels, Activities, Travel Insurance, Car Rental, Tuition, Books & Supplies, Courses & Certifications, Charity, Gifts, Religious, Internal Transfer, Loan Payment, Credit Card Payment, Savings Transfer, ATM Withdrawal, Cash, Miscellaneous, Uncategorized
+   - category_suggestion: your best category from this exact list: ${subcategoryList}
 
 5. PATTERNS:
    - is_recurring: true if this merchant appears to charge on a regular schedule (subscriptions, rent, salary, insurance, loan payments)
@@ -67,6 +171,7 @@ RESPONSE FORMAT: Return ONLY valid JSON with this exact shape:
   },
   "transactions": [...]
 }`;
+}
 
 function dataToMarkdownTable(headers: string[], rows: Record<string, unknown>[]): string {
   const sep = "| " + headers.map(() => "---").join(" | ") + " |";
@@ -86,7 +191,8 @@ function canonicalizeMerchant(name: string): string {
     .replace(/[*#]+/g, " ")
     .replace(/\s{2,}/g, " ")
     .replace(/\b(PAYPAL|SQ |DD |AMZN|CKO)\s?\*/i, "")
-    .trim();
+    .trim()
+    .toLowerCase();
 }
 
 /** Reject AI mistakes: merchant name, raw description, or narrative copied as "reference". */
@@ -241,6 +347,10 @@ export async function processStatement(statementId: number) {
     const parsed = JSON.parse(payload);
     const fileHint = `Original file name: ${stmt.fileName}\nUse this together with the document to infer account_type (e.g. ACC_/account exports vs CC_/card exports).\n\n`;
 
+    const { historyJson, subcategoryNames } = await buildUserContext(userId);
+    const historyBlock = `${MERCHANT_HISTORY_INSTRUCTIONS}${historyJson}\n\n`;
+    const systemInstruction = buildSystemInstruction(subcategoryNames.join(", "));
+
     if (parsed.type === "binary") {
       const result = await ai.models.generateContent({
         model: GEMINI_MODEL,
@@ -248,11 +358,11 @@ export async function processStatement(statementId: number) {
           role: "user",
           parts: [
             { inlineData: { mimeType: parsed.mimeType, data: parsed.base64 } },
-            { text: `${fileHint}Extract all transactions from this bank statement.` },
+            { text: `${historyBlock}${fileHint}Extract all transactions from this bank statement.` },
           ],
         }],
         config: {
-          systemInstruction: SYSTEM_INSTRUCTION,
+          systemInstruction,
           responseMimeType: "application/json",
           temperature: 0.1,
           thinkingConfig: { thinkingBudget: 1024 },
@@ -267,10 +377,10 @@ export async function processStatement(statementId: number) {
         model: GEMINI_MODEL,
         contents: [{
           role: "user",
-          parts: [{ text: `${fileHint}Extract all transactions from this bank statement data:\n\n${markdown}` }],
+          parts: [{ text: `${historyBlock}${fileHint}Extract all transactions from this bank statement data:\n\n${markdown}` }],
         }],
         config: {
-          systemInstruction: SYSTEM_INSTRUCTION,
+          systemInstruction,
           responseMimeType: "application/json",
           temperature: 0.1,
           thinkingConfig: { thinkingBudget: 0 },
@@ -342,7 +452,12 @@ export async function processStatement(statementId: number) {
         .from(accounts)
         .where(and(eq(accounts.userId, userId), eq(accounts.primaryCurrency, meta.primary_currency))),
     ),
-    resilientQuery(() => db.select({ id: categories.id, name: categories.name, slug: categories.slug }).from(categories)),
+    resilientQuery(() =>
+      db
+        .select({ id: userCategories.id, name: userCategories.name, slug: userCategories.slug })
+        .from(userCategories)
+        .where(eq(userCategories.userId, userId)),
+    ),
   ]);
 
   const picked = pickAccountForStatement(currencyAccounts, meta, lastFourDigits);
@@ -463,7 +578,7 @@ export async function processStatement(statementId: number) {
       postedDate: txn.posted_date, valueDate: txn.value_date ?? undefined,
       rawDescription: txn.raw_description,
       referenceId: sanitizeAiReferenceId(txn.reference_id, txn.merchant_name ?? null, txn.raw_description),
-      merchantName: txn.merchant_name ?? undefined, merchantId: merchantId ?? undefined,
+      merchantName: txn.merchant_name?.toLowerCase() ?? undefined, merchantId: merchantId ?? undefined,
       mccCode: txn.mcc_code ?? undefined, categoryId: catId,
       categorySuggestion: txn.category_suggestion ?? undefined,
       categoryConfidence: txn.confidence?.toString(),

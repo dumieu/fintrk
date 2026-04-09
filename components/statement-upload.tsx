@@ -23,7 +23,9 @@ const ACCEPT = ".csv,.xls,.xlsx,.pdf";
 const MAX_SIZE = 1 * 1024 * 1024;
 const SESSION_KEY = "fintrk:upload-queue";
 
-type LocalStatus = "queued" | "parsing" | "checking" | "submitting" | "submitted" | "completed" | "failed" | "duplicate" | "error";
+type LocalStatus = "queued" | "deferred" | "parsing" | "checking" | "submitting" | "submitted" | "completed" | "failed" | "duplicate" | "error";
+
+const BATCH_LIMIT = 50;
 
 interface QueuedFile {
   id: string;
@@ -151,7 +153,7 @@ function loadPersistedQueue(): QueuedFile[] {
       sessionStorage.removeItem(SESSION_KEY);
       return [];
     }
-    return data.items.filter((f) => f.status !== "queued" && f.status !== "parsing" && f.status !== "checking" && f.status !== "submitting");
+    return data.items.filter((f) => f.status !== "queued" && f.status !== "parsing" && f.status !== "checking" && f.status !== "submitting" && f.status !== "deferred");
   } catch {
     return [];
   }
@@ -176,12 +178,41 @@ export function StatementUpload() {
     if (queue.length > 0) persistQueue(queue);
   }, [queue]);
 
-  // Poll /api/ingest/status to update submitted items when AI finishes
+  // Poll status + trigger AI processing one statement at a time.
+  // Each /api/ingest/process call gets its own 120s serverless invocation,
+  // so even 50 statements won't time out.
   const pendingCount = queue.filter((f) => f.status === "submitted").length;
+  const processingRef = useRef(false);
   useEffect(() => {
     if (pendingCount === 0) return;
 
     let cancelled = false;
+
+    const triggerNext = async (activelyProcessingIds: Set<number>, uploadedIds: Set<number>) => {
+      if (processingRef.current || cancelled) return;
+      // Only trigger if nothing is currently being processed by AI
+      if (activelyProcessingIds.size > 0) return;
+
+      // Find a submitted item whose statement is "uploaded" (saved but AI hasn't started)
+      const candidate = queue.find(
+        (item) =>
+          item.status === "submitted" &&
+          item.statementId &&
+          uploadedIds.has(item.statementId),
+      );
+      if (!candidate?.statementId) return;
+
+      processingRef.current = true;
+      try {
+        await fetch("/api/ingest/process", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ statementId: candidate.statementId }),
+        });
+      } catch {}
+      processingRef.current = false;
+    };
+
     const poll = async () => {
       try {
         const res = await fetch("/api/ingest/status");
@@ -221,8 +252,6 @@ export function StatementUpload() {
               return { ...item, status: "failed" as const, statementId: byName.id, error: byName.aiError ?? "Processing failed" };
             }
 
-            // If we have a statementId and it's not in processing or recentlyFinished,
-            // it finished outside the 5-min window — mark as completed
             if (item.statementId && !processingIds.has(item.statementId) && !finishedMap.has(item.statementId)) {
               becameCompleted = true;
               return { ...item, status: "completed" as const, imported: 0, duplicateTxns: 0 };
@@ -233,13 +262,45 @@ export function StatementUpload() {
           if (becameCompleted) queueMicrotask(() => dispatchTransactionsChanged());
           return next;
         });
+
+        // Separate "uploaded" (waiting for AI) from "processing" (AI running)
+        const activelyProcessingIds = new Set(
+          data.processing.filter((s) => s.status === "processing").map((s) => s.id),
+        );
+        const uploadedIds = new Set(
+          data.processing.filter((s) => s.status === "uploaded").map((s) => s.id),
+        );
+
+        // Trigger AI for the next unprocessed statement (one at a time)
+        void triggerNext(activelyProcessingIds, uploadedIds);
       } catch {}
     };
 
     poll();
-    const interval = setInterval(poll, 3000);
+    const interval = setInterval(poll, 4000);
     return () => { cancelled = true; clearInterval(interval); };
-  }, [pendingCount]);
+  }, [pendingCount, queue]);
+
+  // Auto-promote deferred files when active batch slots free up
+  useEffect(() => {
+    const activeCount = queue.filter((f) =>
+      f.status === "queued" || f.status === "parsing" || f.status === "submitting" || f.status === "submitted" || f.status === "checking",
+    ).length;
+    const deferredCount = queue.filter((f) => f.status === "deferred").length;
+    if (deferredCount === 0 || activeCount >= BATCH_LIMIT) return;
+
+    const slotsToFill = Math.min(BATCH_LIMIT - activeCount, deferredCount);
+    if (slotsToFill <= 0) return;
+
+    let promoted = 0;
+    setQueue((prev) =>
+      prev.map((item) => {
+        if (item.status !== "deferred" || promoted >= slotsToFill) return item;
+        promoted++;
+        return { ...item, status: "queued", error: null };
+      }),
+    );
+  }, [queue]);
 
   const addFiles = useCallback(async (files: FileList | File[]) => {
     const candidates: { file: File; hash: string }[] = [];
@@ -295,17 +356,23 @@ export function StatementUpload() {
       fresh.map((c) => ({ hash: c.hash, size: c.file.size, name: c.file.name })),
     );
 
-    setQueue((prev) =>
-      prev.map((item) => {
+    setQueue((prev) => {
+      const alreadyQueued = prev.filter((f) => f.status === "queued" || f.status === "parsing" || f.status === "submitting" || f.status === "submitted").length;
+      let slotsLeft = Math.max(0, BATCH_LIMIT - alreadyQueued);
+
+      return prev.map((item) => {
         const check = serverResults.get(item.hash);
         if (item.status !== "checking") return item;
-        if (!check) return { ...item, status: "queued" };
-        if (check.isDuplicate && check.reason !== "previously_failed") {
+        if (check?.isDuplicate && check.reason !== "previously_failed") {
           return { ...item, status: "duplicate", error: "Already uploaded — skipped to save AI costs" };
         }
-        return { ...item, status: "queued" };
-      }),
-    );
+        if (slotsLeft > 0) {
+          slotsLeft--;
+          return { ...item, status: "queued" };
+        }
+        return { ...item, status: "deferred", error: null };
+      });
+    });
   }, [queue]);
 
   const removeFile = useCallback((id: string) => {
@@ -453,6 +520,8 @@ export function StatementUpload() {
   const submittedCount = queue.filter((f) => f.status === "submitted").length;
   const duplicateCount = queue.filter((f) => f.status === "duplicate").length;
   const errorCount = queue.filter((f) => f.status === "error" || f.status === "failed").length;
+  const deferredCount = queue.filter((f) => f.status === "deferred").length;
+  const queuedCount = queue.filter((f) => f.status === "queued").length;
 
   return (
     <div className="w-full max-w-3xl mx-auto space-y-4">
@@ -524,10 +593,11 @@ export function StatementUpload() {
             exit={{ opacity: 0 }}
             className="rounded-2xl border border-white/15 bg-white/[0.04] overflow-hidden"
           >
-            <div className="px-5 py-3 border-b border-white/15 flex items-center justify-between">
+            <div className="shrink-0 px-5 py-3 border-b border-white/15 flex items-center justify-between">
               <p className="text-xs font-medium text-white/70">
                 {queue.length} file{queue.length !== 1 ? "s" : ""}
                 {submittedCount > 0 && <span className="text-[#0BC18D] ml-2">{submittedCount} queued for processing</span>}
+                {deferredCount > 0 && <span className="text-[#2CA2FF] ml-2">{deferredCount} queued next</span>}
                 {duplicateCount > 0 && <span className="text-[#ECAA0B] ml-2">{duplicateCount} duplicate{duplicateCount !== 1 ? "s" : ""} skipped</span>}
                 {errorCount > 0 && <span className="text-[#FF6F69] ml-2">{errorCount} failed</span>}
               </p>
@@ -538,7 +608,8 @@ export function StatementUpload() {
               )}
             </div>
 
-            <div className="divide-y divide-white/10">
+            <div className="max-h-[min(52vh,28rem)] min-h-0 overflow-y-auto overscroll-y-contain [scrollbar-gutter:stable]">
+              <div className="divide-y divide-white/10">
               {queue.map((item) => (
                 <motion.div
                   key={item.id}
@@ -573,6 +644,10 @@ export function StatementUpload() {
                       <div className="w-8 h-8 rounded-lg bg-[#AD74FF]/10 flex items-center justify-center">
                         <Loader2 className="w-4 h-4 text-[#AD74FF] animate-spin" />
                       </div>
+                    ) : item.status === "deferred" ? (
+                      <div className="w-8 h-8 rounded-lg bg-[#2CA2FF]/10 flex items-center justify-center">
+                        {fileIcon(item.fileName)}
+                      </div>
                     ) : (
                       <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center">
                         {fileIcon(item.fileName)}
@@ -583,7 +658,8 @@ export function StatementUpload() {
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-medium text-white/90 truncate">{item.fileName}</p>
                     <p className="text-[10px] text-white/50">
-                      {item.status === "queued" && formatSize(item.fileSize)}
+                      {item.status === "queued" && <>{formatSize(item.fileSize)}</>}
+                      {item.status === "deferred" && <span className="text-[#2CA2FF]">Waiting — next batch</span>}
                       {item.status === "checking" && "Checking for duplicates…"}
                       {item.status === "parsing" && "Parsing file…"}
                       {item.status === "submitting" && "Submitting to server…"}
@@ -606,7 +682,7 @@ export function StatementUpload() {
                   </div>
 
                   <div className="shrink-0">
-                    {(item.status === "queued" || item.status === "duplicate" || item.status === "error" || item.status === "completed" || item.status === "failed") && (
+                    {(item.status === "queued" || item.status === "deferred" || item.status === "duplicate" || item.status === "error" || item.status === "completed" || item.status === "failed") && (
                       <button type="button" onClick={(e) => { e.stopPropagation(); removeFile(item.id); }} className="p-1 text-white/40 hover:text-white/70 transition-colors">
                         <X className="w-3.5 h-3.5" />
                       </button>
@@ -614,9 +690,10 @@ export function StatementUpload() {
                   </div>
                 </motion.div>
               ))}
+              </div>
             </div>
 
-            <div className="px-5 py-3 border-t border-white/15 flex items-center justify-between">
+            <div className="shrink-0 px-5 py-3 border-t border-white/15 flex items-center justify-between">
               {allDone ? (
                 <div className="flex items-center gap-2 w-full">
                   {duplicateCount > 0 && completedCount === 0 && errorCount === 0 ? (
@@ -648,7 +725,8 @@ export function StatementUpload() {
               ) : hasQueued && !isSubmitting && !hasChecking ? (
                 <div className="flex items-center justify-between w-full">
                   <p className="text-[10px] text-white/50">
-                    {queue.filter((f) => f.status === "queued").length} file{queue.filter((f) => f.status === "queued").length !== 1 ? "s" : ""} ready
+                    {queuedCount} file{queuedCount !== 1 ? "s" : ""} ready
+                    {deferredCount > 0 && ` · ${deferredCount} more in next batch`}
                   </p>
                   <Button
                     onClick={submitAll}
@@ -656,7 +734,7 @@ export function StatementUpload() {
                     size="sm"
                   >
                     <Sparkles className="w-3.5 h-3.5 mr-1.5" />
-                    Process {queue.filter((f) => f.status === "queued").length > 1 ? "All" : ""} with AI
+                    Process {queuedCount} with AI
                   </Button>
                 </div>
               ) : (isSubmitting || hasChecking) ? (

@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
-import { transactions, accounts, statements, categories } from "@/lib/db/schema";
+import { transactions, accounts, statements, userCategories } from "@/lib/db/schema";
 import { eq, and, gte, lte, ilike, or, desc, asc, sql, count, isNull, isNotNull, ne, inArray } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import { transactionFiltersSchema, updateCategorySchema, deleteTransactionsSchema } from "@/lib/validations/transaction";
+import { transactionFiltersSchema, updateCategorySchema, deleteTransactionsSchema, patchTransactionSchema } from "@/lib/validations/transaction";
 import { logServerError } from "@/lib/safe-error";
 
 export const dynamic = "force-dynamic";
@@ -70,6 +70,8 @@ export async function GET(request: NextRequest) {
           ilike(transactions.rawDescription, `%${f.search}%`),
           ilike(transactions.merchantName, `%${f.search}%`),
           ilike(transactions.referenceId, `%${f.search}%`),
+          ilike(transactions.note, `%${f.search}%`),
+          ilike(transactions.label, `%${f.search}%`),
         )!,
       );
     }
@@ -87,8 +89,8 @@ export async function GET(request: NextRequest) {
     const orderFn = f.sortDir === "asc" ? asc : desc;
     const offset = (f.page - 1) * f.limit;
 
-    const txnCategory = alias(categories, "txn_category");
-    const parentCategory = alias(categories, "parent_category");
+    const txnCategory = alias(userCategories, "txn_category");
+    const parentCategory = alias(userCategories, "parent_category");
 
     const amountAggQuery = () =>
       (needsAccountJoin
@@ -112,7 +114,23 @@ export async function GET(request: NextRequest) {
           .where(where)
           .groupBy(transactions.baseCurrency));
 
-    const [data, totalResult, amountTotals] = await Promise.all([
+    const statementCountQuery = () =>
+      needsAccountJoin
+        ? db
+            .select({
+              statementCount: sql<number>`coalesce(count(distinct ${transactions.statementId}), 0)::int`,
+            })
+            .from(transactions)
+            .leftJoin(accounts, eq(transactions.accountId, accounts.id))
+            .where(where)
+        : db
+            .select({
+              statementCount: sql<number>`coalesce(count(distinct ${transactions.statementId}), 0)::int`,
+            })
+            .from(transactions)
+            .where(where);
+
+    const [data, totalResult, amountTotals, statementCountResult] = await Promise.all([
       resilientQuery(() =>
         db
           .select({
@@ -146,6 +164,8 @@ export async function GET(request: NextRequest) {
             isRecurring: transactions.isRecurring,
             aiConfidence: transactions.aiConfidence,
             balanceAfter: transactions.balanceAfter,
+            note: transactions.note,
+            label: transactions.label,
             accountId: transactions.accountId,
             statementId: transactions.statementId,
             accountType: accounts.accountType,
@@ -177,14 +197,17 @@ export async function GET(request: NextRequest) {
           : db.select({ total: count() }).from(transactions).where(where),
       ),
       resilientQuery(amountAggQuery),
+      resilientQuery(statementCountQuery),
     ]);
 
     const total = totalResult[0]?.total ?? 0;
+    const statementCount = Number(statementCountResult[0]?.statementCount ?? 0);
 
     return NextResponse.json(
       {
         data,
         total,
+        statementCount,
         page: f.page,
         pages: Math.ceil(total / f.limit),
         amountTotals: amountTotals.map((row) => ({
@@ -198,6 +221,52 @@ export async function GET(request: NextRequest) {
   } catch (err) {
     logServerError("api/transactions/GET", err);
     return NextResponse.json({ error: "Failed to load transactions" }, { status: 500, headers: NO_STORE });
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const { userId } = await resilientAuth();
+    if (!userId) return unauthorizedResponse();
+
+    const body = await request.json();
+    const parsed = patchTransactionSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Invalid input" }, { status: 400, headers: NO_STORE });
+    }
+
+    const setPayload: { updatedAt: Date; note?: string | null; label?: string | null } = { updatedAt: new Date() };
+    if (parsed.data.note !== undefined) {
+      const t = parsed.data.note.trim();
+      setPayload.note = t === "" ? null : t;
+    }
+    if (parsed.data.label !== undefined) {
+      const t = parsed.data.label.trim().slice(0, 20);
+      setPayload.label = t === "" ? null : t;
+    }
+
+    const updated = await resilientQuery(() =>
+      db.update(transactions)
+        .set(setPayload)
+        .where(and(eq(transactions.id, parsed.data.transactionId), eq(transactions.userId, userId)))
+        .returning({ id: transactions.id }),
+    );
+
+    if (updated.length === 0) {
+      return NextResponse.json({ error: "Transaction not found" }, { status: 404, headers: NO_STORE });
+    }
+
+    return NextResponse.json(
+      {
+        success: true,
+        ...(parsed.data.note !== undefined ? { note: setPayload.note ?? null } : {}),
+        ...(parsed.data.label !== undefined ? { label: setPayload.label ?? null } : {}),
+      },
+      { headers: NO_STORE },
+    );
+  } catch (err) {
+    logServerError("api/transactions/PATCH", err);
+    return NextResponse.json({ error: "Failed to update transaction" }, { status: 500, headers: NO_STORE });
   }
 }
 

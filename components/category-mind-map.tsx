@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import type { FlowData, FlowType } from "@/lib/default-categories";
 import { getDefaultCategories, FLOW_COLORS } from "@/lib/default-categories";
+import { cn } from "@/lib/utils";
 import { FINTRK_TRANSACTIONS_CHANGED } from "@/lib/notify-transactions-changed";
 
 /* ═══════════════════════════════════ TYPES ═══════════════════════════════════ */
@@ -383,6 +384,31 @@ function calcLayout(
   return { nodes, conns, adds };
 }
 
+/** Flow id that owns a level-1 category node. */
+function flowIdForCategory(flows: FlowData[], categoryId: string): string | undefined {
+  return flows.find((f) => f.categories.some((c) => c.id === categoryId))?.id;
+}
+
+/** Root + one expanded category + its subcategories (and that category's add-sub button). */
+function isNodeInCategoryFocusCluster(
+  n: LNode,
+  focusCatId: string,
+  parentFlowId: string,
+): boolean {
+  if (n.level === 0) return n.id === parentFlowId;
+  if (n.level === 1) return n.id === focusCatId;
+  if (n.level === 2) return n.categoryId === focusCatId;
+  return false;
+}
+
+function isAddInCategoryFocusCluster(b: AddBtn, focusCatId: string): boolean {
+  return b.addLevel === 2 && b.targetId === focusCatId;
+}
+
+function isConnInFocusCluster(c: LConn, focusNodeIds: Set<string>): boolean {
+  return focusNodeIds.has(c.fromId) && focusNodeIds.has(c.toId);
+}
+
 /* ═══════════════════════════ BACKGROUND PARTICLES ════════════════════════════ */
 
 function seeded(i: number, offset: number) {
@@ -452,7 +478,7 @@ function ConnLine({ c }: { c: LConn }) {
   const gid = `g${c.id.replace(/[^a-z0-9]/gi, "")}`;
 
   return (
-    <g>
+    <g style={{ pointerEvents: "none" }}>
       <defs>
         <linearGradient
           id={gid}
@@ -463,8 +489,22 @@ function ConnLine({ c }: { c: LConn }) {
           <stop offset="100%" stopColor={c.color} stopOpacity={0.15} />
         </linearGradient>
       </defs>
-      <path d={d} stroke={c.color} strokeWidth={5} fill="none" opacity={0.06} />
-      <path d={d} stroke={`url(#${gid})`} strokeWidth={1.5} fill="none" className="mm-conn" />
+      <path
+        d={d}
+        stroke={c.color}
+        strokeWidth={5}
+        fill="none"
+        opacity={0.06}
+        style={{ pointerEvents: "none" }}
+      />
+      <path
+        d={d}
+        stroke={`url(#${gid})`}
+        strokeWidth={1.5}
+        fill="none"
+        className="mm-conn"
+        style={{ pointerEvents: "none" }}
+      />
     </g>
   );
 }
@@ -481,14 +521,23 @@ function MNode({
   n,
   sel,
   onTap,
+  interactive = true,
+  clusterLit = false,
+  stackZ = 10,
+  dimmed = false,
 }: {
   n: LNode;
   sel: boolean;
   onTap: (id: string, level: number) => void;
+  interactive?: boolean;
+  clusterLit?: boolean;
+  stackZ?: number;
+  dimmed?: boolean;
 }) {
   const size = nodeVisualSize(n);
+  const emphasized = sel || clusterLit;
 
-  const glow = sel
+  const glow = emphasized
     ? `0 0 28px ${n.color}70, 0 0 60px ${n.color}30, inset 0 0 18px ${n.color}18`
     : n.level === 0
       ? `0 0 22px ${n.color}35, 0 0 50px ${n.color}14, inset 0 0 14px ${n.color}10`
@@ -496,24 +545,37 @@ function MNode({
         ? `0 0 16px ${n.color}28, 0 0 38px ${n.color}0c`
         : `0 0 10px ${n.color}20`;
 
-  const border = sel
+  const border = emphasized
     ? `2px solid ${n.color}`
     : `${n.level === 0 ? 2 : n.level === 1 ? 1.5 : 1}px solid ${n.color}${n.level === 0 ? "55" : n.level === 1 ? "38" : "28"}`;
 
   return (
     <motion.div
-      className="absolute left-0 top-0 z-10"
+      className={cn(
+        "absolute left-0 top-0",
+        !interactive && "pointer-events-none",
+      )}
+      style={{ zIndex: stackZ, filter: dimmed ? "saturate(0.7)" : undefined }}
       initial={{ x: n.px, y: n.py, scale: 0, opacity: 0 }}
-      animate={{ x: n.x, y: n.y, scale: 1, opacity: 1 }}
+      animate={{ x: n.x, y: n.y, scale: 1, opacity: dimmed ? 0.38 : 1 }}
       exit={{ x: n.px, y: n.py, scale: 0, opacity: 0 }}
-      transition={{ ...SPRING, delay: n.stagger * 0.032, opacity: { duration: 0.25 } }}
+      transition={{ ...SPRING, delay: n.stagger * 0.032, opacity: { duration: 0.35 } }}
     >
       <motion.div
-        className="flex flex-col items-center cursor-pointer select-none"
+        className={cn(
+          "flex flex-col items-center select-none",
+          interactive ? "cursor-pointer" : "cursor-default",
+        )}
         style={{ marginLeft: -size / 2, marginTop: -size / 2 }}
         whileHover={{ scale: 1.1 }}
         whileTap={{ scale: 0.92 }}
-        onClick={(e) => { e.stopPropagation(); onTap(n.id, n.level); }}
+        onPointerDown={(e) => {
+          e.stopPropagation();
+        }}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (interactive) onTap(n.id, n.level);
+        }}
         data-mm-node
       >
         <div
@@ -521,7 +583,9 @@ function MNode({
           style={{
             width: size,
             height: size,
-            background: `radial-gradient(circle at 32% 28%, rgba(255,255,255,0.1), transparent 55%), radial-gradient(circle, ${n.color}${n.level === 0 ? "22" : "14"}, ${n.color}06)`,
+            background: `radial-gradient(circle at 32% 28%, rgba(255,255,255,0.1), transparent 55%), radial-gradient(circle, ${n.color}${
+              n.level === 0 ? "22" : emphasized && n.level === 2 ? "20" : "14"
+            }, ${n.color}06)`,
             border,
             boxShadow: glow,
             backdropFilter: "blur(10px)",
@@ -544,8 +608,11 @@ function MNode({
           )}
           {n.level === 2 && (
             <div
-              className="w-2.5 h-2.5 rounded-full"
-              style={{ backgroundColor: `${n.color}70` }}
+              className={emphasized ? "w-3.5 h-3.5 rounded-full" : "w-2.5 h-2.5 rounded-full"}
+              style={{
+                backgroundColor: emphasized ? `${n.color}` : `${n.color}70`,
+                boxShadow: emphasized ? `0 0 12px ${n.color}90` : undefined,
+              }}
             />
           )}
         </div>
@@ -553,8 +620,15 @@ function MNode({
           className="mt-1.5 text-center leading-tight max-w-[105px]"
           style={{
             fontSize: n.level === 0 ? 13 : n.level === 1 ? 11 : 10,
-            fontWeight: n.level < 2 ? 600 : 400,
-            color: n.level === 0 ? n.color : n.level === 1 ? "#cbd5e1" : "#94a3b8",
+            fontWeight: n.level < 2 || (n.level === 2 && emphasized) ? 600 : 400,
+            color:
+              n.level === 0
+                ? n.color
+                : n.level === 1
+                  ? "#cbd5e1"
+                  : emphasized
+                    ? "#cbd5e1"
+                    : "#94a3b8",
             textShadow: "0 1px 6px rgba(0,0,0,0.7)",
           }}
         >
@@ -603,6 +677,8 @@ function Actions({
       className="absolute z-[60] flex gap-2"
       style={{ left: sx, top: sy - ns / 2 - 48, transform: "translateX(-50%)" }}
       data-mm-actions
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
     >
       <button
         type="button"
@@ -639,39 +715,58 @@ function Actions({
 function AddCircle({
   b,
   onClick,
+  interactive = true,
+  lit = false,
+  stackZ = 10,
+  dimmed = false,
 }: {
   b: AddBtn;
   onClick: (targetId: string, level: 1 | 2) => void;
+  interactive?: boolean;
+  dimmed?: boolean;
+  lit?: boolean;
+  stackZ?: number;
 }) {
   return (
     <motion.div
-      className="absolute left-0 top-0 z-10"
+      className={cn(
+        "absolute left-0 top-0",
+        !interactive && "pointer-events-none",
+      )}
+      style={{ zIndex: stackZ, filter: dimmed ? "saturate(0.7)" : undefined }}
       initial={{ x: b.px, y: b.py, scale: 0, opacity: 0 }}
-      animate={{ x: b.x, y: b.y, scale: 1, opacity: 1 }}
+      animate={{ x: b.x, y: b.y, scale: 1, opacity: dimmed ? 0.38 : 1 }}
       exit={{ x: b.px, y: b.py, scale: 0, opacity: 0 }}
-      transition={{ ...SPRING, delay: b.stagger * 0.032, opacity: { duration: 0.2 } }}
+      transition={{ ...SPRING, delay: b.stagger * 0.032, opacity: { duration: 0.35 } }}
     >
       <motion.div
-        className="flex flex-col items-center cursor-pointer select-none"
+        className={cn(
+          "flex flex-col items-center select-none",
+          interactive ? "cursor-pointer" : "cursor-default",
+        )}
         style={{ marginLeft: -22, marginTop: -22 }}
-        whileHover={{ scale: 1.18 }}
-        whileTap={{ scale: 0.88 }}
-        onClick={(e) => { e.stopPropagation(); onClick(b.targetId, b.addLevel); }}
+        whileHover={interactive ? { scale: 1.18 } : undefined}
+        whileTap={interactive ? { scale: 0.88 } : undefined}
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (interactive) onClick(b.targetId, b.addLevel);
+        }}
         data-mm-node
       >
         <div
           className="flex items-center justify-center w-11 h-11 rounded-full"
           style={{
-            border: `1.5px dashed ${b.color}45`,
-            background: `${b.color}08`,
-            boxShadow: `0 0 14px ${b.color}12`,
+            border: lit ? `2px dashed ${b.color}72` : `1.5px dashed ${b.color}45`,
+            background: lit ? `${b.color}16` : `${b.color}08`,
+            boxShadow: lit ? `0 0 24px ${b.color}40` : `0 0 14px ${b.color}12`,
           }}
         >
-          <Plus className="w-4 h-4" style={{ color: `${b.color}80` }} />
+          <Plus className="w-4 h-4" style={{ color: lit ? `${b.color}` : `${b.color}80` }} />
         </div>
         <span
           className="mt-1 text-[9px]"
-          style={{ color: `${b.color}60` }}
+          style={{ color: lit ? `${b.color}95` : `${b.color}60` }}
         >
           Add
         </span>
@@ -734,7 +829,7 @@ function Modal({
           }}
           className="w-full rounded-lg px-3 py-2.5 text-sm bg-white/[0.04] text-white/90 outline-none transition-colors focus:bg-white/[0.07]"
           style={{ border: `1px solid ${color}28` }}
-          placeholder="Enter name…"
+          placeholder="Enter name\u2026"
         />
         <div className="flex justify-end gap-2 mt-5">
           <button
@@ -826,7 +921,7 @@ function ConfirmDelete({
 export function CategoryMindMap() {
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // ── Data ──
+  // -- Data --
   const [flows, setFlows] = useState<FlowData[]>(getDefaultCategories);
   const hydratedLS = useRef(false);
 
@@ -845,14 +940,14 @@ export function CategoryMindMap() {
     } catch { /* ignore */ }
   }, [flows]);
 
-  // ── Expand / select ──
+  // -- Expand / select --
   const [expF, setExpF] = useState<Set<string>>(
     () => new Set(flows.map((f) => f.id)),
   );
   const [expC, setExpC] = useState<Set<string>>(new Set());
   const [selId, setSelId] = useState<string | null>(null);
 
-  // ── Viewport ──
+  // -- Viewport --
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(0.75);
@@ -861,7 +956,7 @@ export function CategoryMindMap() {
   const panO = useRef({ x: 0, y: 0, px: 0, py: 0 });
   const lastPinch = useRef<number | null>(null);
 
-  // ── Modals ──
+  // -- Modals --
   const [editM, setEditM] = useState<{
     id: string; level: 1 | 2; flowId: string; catId?: string;
     name: string; color: string;
@@ -909,7 +1004,7 @@ export function CategoryMindMap() {
     };
   }, []);
 
-  // ── Resize (also sets initial zoom) ──
+  // -- Resize (also sets initial zoom) --
   const didInit = useRef(false);
   useEffect(() => {
     const el = containerRef.current;
@@ -927,7 +1022,7 @@ export function CategoryMindMap() {
     return () => ro.disconnect();
   }, []);
 
-  // ── Wheel zoom (non-passive) ──
+  // -- Wheel zoom (non-passive) --
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -939,7 +1034,7 @@ export function CategoryMindMap() {
     return () => el.removeEventListener("wheel", onWheel);
   }, []);
 
-  // ── Pinch zoom ──
+  // -- Pinch zoom --
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -965,7 +1060,7 @@ export function CategoryMindMap() {
     };
   }, []);
 
-  // ── Layout ──
+  // -- Layout --
   const { nodes, conns, adds } = useMemo(
     () => calcLayout(flows, expF, expC, categoryAmounts),
     [flows, expF, expC, categoryAmounts],
@@ -976,11 +1071,30 @@ export function CategoryMindMap() {
   const ready = size.w > 0;
   const selNode = nodes.find((n) => n.id === selId) ?? null;
 
-  // ── Handlers ──
+  const focusCatId = expC.size === 1 ? [...expC][0]! : null;
+  const parentFlowId = focusCatId ? flowIdForCategory(flows, focusCatId) : undefined;
+  const focusMode = Boolean(focusCatId && parentFlowId);
+
+  const focusNodeIds = useMemo(() => {
+    if (!focusMode || !focusCatId || !parentFlowId) return new Set<string>();
+    return new Set(
+      nodes
+        .filter((n) => isNodeInCategoryFocusCluster(n, focusCatId, parentFlowId))
+        .map((n) => n.id),
+    );
+  }, [focusMode, focusCatId, parentFlowId, nodes]);
+
+  const dismissCategoryFocus = useCallback(() => {
+    setExpC(new Set());
+    setSelId(null);
+  }, []);
+
+  // -- Handlers --
   const onTap = useCallback(
     (id: string, level: number) => {
       setSelId((prev) => (prev === id ? null : id));
       if (level === 0) {
+        if (expC.size > 0) return;
         setExpF((p) => {
           const n = new Set(p);
           n.has(id) ? n.delete(id) : n.add(id);
@@ -988,13 +1102,12 @@ export function CategoryMindMap() {
         });
       } else if (level === 1) {
         setExpC((p) => {
-          const n = new Set(p);
-          n.has(id) ? n.delete(id) : n.add(id);
-          return n;
+          if (p.has(id)) return p;
+          return new Set([id]);
         });
       }
     },
-    [],
+    [expC],
   );
 
   const onAddClick = useCallback(
@@ -1012,7 +1125,7 @@ export function CategoryMindMap() {
     [flows],
   );
 
-  // ── CRUD ──
+  // -- CRUD --
   const doRename = useCallback(
     (newName: string) => {
       if (!editM) return;
@@ -1102,14 +1215,15 @@ export function CategoryMindMap() {
     setDelM(null);
   }, [delM]);
 
-  // ── Pan handlers ──
+  // -- Pan handlers --
   const onPtrDown = useCallback(
     (e: React.PointerEvent) => {
       const t = e.target as HTMLElement;
       if (
         t.closest("[data-mm-node]") ||
         t.closest("[data-mm-modal]") ||
-        t.closest("[data-mm-actions]")
+        t.closest("[data-mm-actions]") ||
+        t.closest("[data-mm-focus-backdrop]")
       )
         return;
       panning.current = true;
@@ -1135,12 +1249,17 @@ export function CategoryMindMap() {
       onPointerDown={onPtrDown}
       onPointerMove={onPtrMove}
       onPointerUp={onPtrUp}
-      onClick={() => setSelId(null)}
+      onClick={() => {
+        if (!focusMode) setSelId(null);
+      }}
     >
       <BackgroundParticles />
 
-      {/* ── Zoom controls ── */}
-      <div className="absolute top-3 right-3 z-50 flex flex-col gap-1.5">
+      {/* Zoom controls */}
+      <div
+        className="absolute top-3 right-3 z-50 flex flex-col gap-1.5"
+        onClick={(e) => e.stopPropagation()}
+      >
         {[
           { icon: <ZoomIn className="w-4 h-4" />, fn: () => setZoom((z) => Math.min(2.8, z + 0.18)) },
           { icon: <ZoomOut className="w-4 h-4" />, fn: () => setZoom((z) => Math.max(0.2, z - 0.18)) },
@@ -1148,7 +1267,10 @@ export function CategoryMindMap() {
         ].map((b, i) => (
           <button
             key={i}
-            onClick={b.fn}
+            onClick={(e) => {
+              e.stopPropagation();
+              b.fn();
+            }}
             className="w-9 h-9 rounded-xl bg-white/[0.04] backdrop-blur-md border border-white/[0.08] flex items-center justify-center text-white/50 hover:text-white hover:bg-white/[0.08] transition-all cursor-pointer"
           >
             {b.icon}
@@ -1156,47 +1278,118 @@ export function CategoryMindMap() {
         ))}
       </div>
 
-      {/* ── World ── */}
-      {ready && <div
-        className="absolute inset-0"
-        style={{
-          transform: `translate(${pan.x + cX}px, ${pan.y + cY}px) scale(${zoom})`,
-          transformOrigin: "0 0",
-          willChange: "transform",
-        }}
-      >
-        {/* SVG connections */}
-        <svg
-          className="absolute overflow-visible pointer-events-none"
-          style={{ width: 1, height: 1 }}
+      {/* World */}
+      {ready && (
+        <div
+          className="absolute inset-0"
+          style={{
+            transform: `translate(${pan.x + cX}px, ${pan.y + cY}px) scale(${zoom})`,
+            transformOrigin: "0 0",
+            willChange: "transform",
+          }}
         >
+          {/* Connections -- single SVG, per-conn opacity */}
+          <svg
+            className="absolute overflow-visible pointer-events-none"
+            style={{ width: 1, height: 1 }}
+          >
+            <AnimatePresence>
+              {conns.map((c) => {
+                const inFocus = focusMode && isConnInFocusCluster(c, focusNodeIds);
+                const dim = focusMode && !inFocus;
+                return (
+                  <motion.g
+                    key={c.id}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: dim ? 0.25 : 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.4 }}
+                    style={{ pointerEvents: "none" }}
+                  >
+                    <ConnLine c={c} />
+                  </motion.g>
+                );
+              })}
+            </AnimatePresence>
+          </svg>
+
+          {/* Glass overlay -- animated */}
           <AnimatePresence>
-            {conns.map((c) => (
-              <motion.g
-                key={c.id}
+            {focusMode && (
+              <motion.div
+                key="focus-glass"
+                className="absolute inset-0 z-[38] bg-[#06061a]/65 backdrop-blur-md pointer-events-none"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.35 }}
-              >
-                <ConnLine c={c} />
-              </motion.g>
-            ))}
+                aria-hidden
+              />
+            )}
           </AnimatePresence>
-        </svg>
 
-        {/* Nodes */}
-        <AnimatePresence>
-          {nodes.map((n) => (
-            <MNode key={n.id} n={n} sel={selId === n.id} onTap={onTap} />
-          ))}
-          {adds.map((b) => (
-            <AddCircle key={b.key} b={b} onClick={onAddClick} />
-          ))}
-        </AnimatePresence>
-      </div>}
+          {/* All nodes + add buttons -- single AnimatePresence, no duplication */}
+          <AnimatePresence>
+            {nodes.map((n) => {
+              const inFocus = focusMode && focusNodeIds.has(n.id);
+              const dim = focusMode && !inFocus;
+              return (
+                <MNode
+                  key={n.id}
+                  n={n}
+                  sel={selId === n.id}
+                  onTap={onTap}
+                  interactive={!dim}
+                  clusterLit={inFocus}
+                  stackZ={inFocus ? 50 : 10}
+                  dimmed={dim}
+                />
+              );
+            })}
+            {adds.map((b) => {
+              const inFocus =
+                focusMode && focusCatId != null && isAddInCategoryFocusCluster(b, focusCatId);
+              const dim = focusMode && !inFocus;
+              return (
+                <AddCircle
+                  key={b.key}
+                  b={b}
+                  onClick={onAddClick}
+                  interactive={!dim}
+                  lit={inFocus}
+                  stackZ={inFocus ? 50 : 10}
+                  dimmed={dim}
+                />
+              );
+            })}
+          </AnimatePresence>
+        </div>
+      )}
 
-      {/* ── Action bar (screen space) ── */}
+      {/* Full-screen hit-catcher for dismiss (screen space, covers entire viewport) */}
+      <AnimatePresence>
+        {focusMode && (
+          <motion.div
+            key="focus-hit"
+            data-mm-focus-backdrop
+            role="button"
+            tabIndex={-1}
+            aria-label="Exit category focus"
+            className="absolute inset-0 z-[45] cursor-pointer touch-manipulation"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.25 }}
+            style={{ pointerEvents: "auto", background: "transparent" }}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              dismissCategoryFocus();
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Action bar (screen space) */}
       <AnimatePresence>
         {selNode && selNode.level > 0 && (
           <Actions
@@ -1243,7 +1436,7 @@ export function CategoryMindMap() {
         )}
       </AnimatePresence>
 
-      {/* ── Modals ── */}
+      {/* Modals */}
       <AnimatePresence>
         {editM && (
           <Modal
@@ -1277,8 +1470,11 @@ export function CategoryMindMap() {
         )}
       </AnimatePresence>
 
-      {/* ── Legend ── */}
-      <div className="absolute bottom-3 left-3 z-50 flex flex-wrap items-center gap-x-4 gap-y-1">
+      {/* Legend */}
+      <div
+        className="absolute bottom-3 left-3 z-50 flex flex-wrap items-center gap-x-4 gap-y-1"
+        onClick={(e) => e.stopPropagation()}
+      >
         {flows.map((f) => (
           <div key={f.id} className="flex items-center gap-1.5">
             <div
@@ -1295,14 +1491,15 @@ export function CategoryMindMap() {
         ))}
       </div>
 
-      {/* ── Hint ── */}
+      {/* Hint */}
       <motion.p
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 1.8 }}
         className="absolute bottom-3 right-3 z-50 text-[10px] text-white/20 text-right"
+        onClick={(e) => e.stopPropagation()}
       >
-        Scroll to zoom · Drag to pan · Tap to explore
+        Scroll to zoom &middot; Drag to pan &middot; Tap category &middot; Tap outside to close
       </motion.p>
     </div>
   );

@@ -3,7 +3,7 @@ config({ path: ".env.local" });
 
 import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
-import { categories } from "../lib/db/schema";
+import { systemCategories } from "../lib/db/schema";
 
 const sql = neon(process.env.DATABASE_URL!);
 const db = drizzle({ client: sql });
@@ -184,43 +184,41 @@ const CATEGORY_TREE: CategorySeed[] = [
 ];
 
 async function seed() {
-  console.log("Seeding categories...");
+  console.log("Seeding system_categories...");
 
-  const existing = await db.select({ id: categories.id }).from(categories);
+  const existing = await db.select({ id: systemCategories.id }).from(systemCategories);
   if (existing.length > 0) {
-    console.log(`Already ${existing.length} categories in DB — skipping seed.`);
+    console.log(`Already ${existing.length} system categories in DB — skipping seed.`);
     return;
   }
 
   let order = 0;
   for (const parent of CATEGORY_TREE) {
     const [inserted] = await db
-      .insert(categories)
+      .insert(systemCategories)
       .values({
         name: parent.name,
         slug: parent.slug,
         icon: parent.icon,
         color: parent.color,
-        isSystem: true,
         sortOrder: order++,
       })
-      .returning({ id: categories.id });
+      .returning({ id: systemCategories.id });
 
     for (const child of parent.children) {
-      await db.insert(categories).values({
+      await db.insert(systemCategories).values({
         name: child.name,
         slug: child.slug,
         parentId: inserted.id,
         icon: child.icon,
         color: parent.color,
-        isSystem: true,
         sortOrder: order++,
       });
     }
   }
 
-  const total = await db.select({ id: categories.id }).from(categories);
-  console.log(`Seeded ${total.length} categories.`);
+  const total = await db.select({ id: systemCategories.id }).from(systemCategories);
+  console.log(`Seeded ${total.length} system categories.`);
 }
 
 seed()

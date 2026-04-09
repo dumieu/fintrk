@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
-import { transactions, accounts, recurringPatterns, categories } from "@/lib/db/schema";
+import { transactions, accounts, recurringPatterns } from "@/lib/db/schema";
 import { eq, and, gte, lte, sql, desc, ne } from "drizzle-orm";
 import { logServerError } from "@/lib/safe-error";
 

@@ -1,7 +1,7 @@
 "use client";
 
-import { CategoryMindMap } from "@/components/category-mind-map";
+import { CategoryTableManager } from "@/components/category-table-manager";
 
 export default function CategoriesPage() {
-  return <CategoryMindMap />;
+  return <CategoryTableManager />;
 }

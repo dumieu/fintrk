@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { eq, or, isNull, isNotNull, asc, and, sql } from "drizzle-orm";
+import { eq, isNotNull, and, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
-import { categories, transactions } from "@/lib/db/schema";
+import { userCategories, transactions } from "@/lib/db/schema";
 import { logServerError } from "@/lib/safe-error";
 import { flowThemeForCategoryNames, type CategoryFlowTheme } from "@/lib/category-flow-theme";
 
@@ -31,19 +31,19 @@ export async function GET() {
     const { userId } = await resilientAuth();
     if (!userId) return unauthorizedResponse();
 
-    const parent = alias(categories, "cat_parent");
+    const parent = alias(userCategories, "cat_parent");
 
     const [categoryRows, volumeRows] = await Promise.all([
       resilientQuery(() =>
         db
           .select({
-            id: categories.id,
-            name: categories.name,
+            id: userCategories.id,
+            name: userCategories.name,
             parentName: parent.name,
           })
-          .from(categories)
-          .leftJoin(parent, eq(categories.parentId, parent.id))
-          .where(or(isNull(categories.userId), eq(categories.userId, userId))),
+          .from(userCategories)
+          .leftJoin(parent, eq(userCategories.parentId, parent.id))
+          .where(eq(userCategories.userId, userId)),
       ),
       resilientQuery(() =>
         db

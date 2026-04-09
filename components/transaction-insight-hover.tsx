@@ -8,10 +8,7 @@ import {
   Receipt,
   Building2,
   CreditCard,
-  Tag,
-  Coins,
   Globe2,
-  Sparkles,
   FileStack,
   Hash,
   Scale,
@@ -26,7 +23,6 @@ import {
 } from "@/lib/format";
 import { countryDisplayName, flagEmoji, transactionTypeLabel } from "@/lib/transaction-flags";
 import { CardNetworkLogo } from "@/components/card-network-logo";
-import { TransactionCategoryIcon } from "@/components/transaction-category-icon";
 import { cn } from "@/lib/utils";
 
 export interface TransactionInsightData {
@@ -76,9 +72,6 @@ function Row({ label, children, icon: Icon }: { label: string; children: ReactNo
 }
 
 function TransactionInsightPanel({ txn }: { txn: TransactionInsightData }) {
-  const amt = parseFloat(txn.baseAmount);
-  const isPositive = amt > 0;
-  const isNegative = amt < 0;
   const hasFx = Boolean(txn.foreignCurrency && txn.foreignAmount);
   const spreadBps = txn.implicitFxSpreadBps ? parseFloat(txn.implicitFxSpreadBps) : null;
   const rate = txn.implicitFxRate ? parseFloat(txn.implicitFxRate) : null;
@@ -103,20 +96,7 @@ function TransactionInsightPanel({ txn }: { txn: TransactionInsightData }) {
       )}
     >
       <div className="rounded-[0.9rem] bg-[#120a28] px-3.5 py-3 backdrop-blur-xl overflow-hidden">
-        <div className="mb-2 flex items-center gap-2 border-b border-white/10 pb-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-[#0BC18D]/30 to-[#2CA2FF]/20 ring-1 ring-white/10">
-            <Sparkles className="h-4 w-4 text-[#0BC18D]" aria-hidden />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/45">Transaction insight</p>
-            <p className="break-words text-xs font-semibold text-white">{txn.merchantName ?? txn.rawDescription}</p>
-          </div>
-        </div>
-
         <section className="mb-1">
-          <Row label="Posted date" icon={Calendar}>
-            {formatDate(txn.postedDate, "long")}
-          </Row>
           {txn.valueDate && txn.valueDate !== txn.postedDate ? (
             <Row label="Value date" icon={Calendar}>
               {formatDate(txn.valueDate, "long")}
@@ -139,27 +119,8 @@ function TransactionInsightPanel({ txn }: { txn: TransactionInsightData }) {
           ) : null}
         </section>
 
-        <section className="mb-1">
-          <Row label="Amount" icon={Coins}>
-            <span
-              className={cn(
-                "text-sm font-bold tabular-nums",
-                isPositive && "text-[#A7F3D0]",
-                isNegative && "text-[#FCA5A5]",
-                !isPositive && !isNegative && "text-white/80",
-              )}
-            >
-              {isPositive ? "+" : isNegative ? "−" : ""}
-              {formatCurrency(Math.abs(amt), txn.baseCurrency)}
-            </span>
-            {txn.balanceAfter ? (
-              <p className="mt-1 text-[10px] text-white/45">
-                Balance after (if provided):{" "}
-                <span className="tabular-nums text-white/65">{formatCurrency(parseFloat(txn.balanceAfter), txn.baseCurrency)}</span>
-              </p>
-            ) : null}
-          </Row>
-          {hasFx ? (
+        {hasFx ? (
+          <section className="mb-1">
             <Row label="Foreign exchange" icon={Globe2}>
               <p className="tabular-nums">
                 {formatCurrency(Math.abs(parseFloat(txn.foreignAmount!)), txn.foreignCurrency!)}
@@ -176,28 +137,10 @@ function TransactionInsightPanel({ txn }: { txn: TransactionInsightData }) {
                 </p>
               ) : null}
             </Row>
-          ) : null}
-        </section>
+          </section>
+        ) : null}
 
         <section className="mb-1">
-          <Row label="Category" icon={Tag}>
-            <div className="flex flex-row items-center justify-start gap-2.5">
-              <TransactionCategoryIcon
-                categoryName={txn.categoryName ?? null}
-                subcategoryName={txn.subcategoryName ?? null}
-                categorySuggestion={txn.categorySuggestion}
-                size="sm"
-              />
-              <span className="flex min-w-0 flex-col items-start gap-0.5 text-left">
-                <span className="text-[12px] font-medium text-white/85">
-                  {txn.categoryName ?? txn.categorySuggestion ?? "Uncategorized"}
-                </span>
-                {txn.subcategoryName ? (
-                  <span className="text-[11px] text-white/50">{txn.subcategoryName}</span>
-                ) : null}
-              </span>
-            </div>
-          </Row>
           {(countryName || txn.countryIso) ? (
             <Row label="Country" icon={Globe2}>
               <span className="inline-flex items-center gap-1.5">

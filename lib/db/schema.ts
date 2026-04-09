@@ -88,19 +88,42 @@ export const statements = pgTable(
   ],
 );
 
-// ─── Categories (hierarchical spending taxonomy) ─────────────────────────────
+// ─── System Categories (admin-only template — the "original" hierarchy) ──────
 
-export const categories = pgTable("categories", {
+export const systemCategories = pgTable("system_categories", {
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 128 }).notNull(),
   slug: varchar("slug", { length: 128 }).notNull().unique(),
   parentId: integer("parent_id"),
   icon: varchar("icon", { length: 64 }),
   color: varchar("color", { length: 7 }),
-  isSystem: boolean("is_system").default(true).notNull(),
-  userId: varchar("user_id", { length: 255 }),
   sortOrder: integer("sort_order").default(0).notNull(),
 });
+
+// ─── User Categories (per-user clone that can evolve independently) ──────────
+
+export const userCategories = pgTable(
+  "user_categories",
+  {
+    id: serial("id").primaryKey(),
+    userId: varchar("user_id", { length: 255 }).notNull(),
+    name: varchar("name", { length: 128 }).notNull(),
+    slug: varchar("slug", { length: 128 }).notNull(),
+    parentId: integer("parent_id"),
+    icon: varchar("icon", { length: 64 }),
+    color: varchar("color", { length: 7 }),
+    sortOrder: integer("sort_order").default(0).notNull(),
+    systemCategoryId: integer("system_category_id").references(() => systemCategories.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("user_categories_user_idx").on(t.userId),
+    uniqueIndex("user_categories_user_slug_idx").on(t.userId, t.slug),
+  ],
+);
+
+/** @deprecated alias kept temporarily — all new code should use userCategories */
+export const categories = userCategories;
 
 // ─── Merchants (deduplicated registry) ───────────────────────────────────────
 
@@ -150,6 +173,8 @@ export const transactions = pgTable(
     isRecurring: boolean("is_recurring").default(false).notNull(),
     aiConfidence: numeric("ai_confidence", { precision: 3, scale: 2 }),
     balanceAfter: numeric("balance_after", { precision: 15, scale: 4 }),
+    note: text("note"),
+    label: text("label"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -371,20 +396,33 @@ export const statementsRelations = relations(statements, ({ one, many }) => ({
   transactions: many(transactions),
 }));
 
-export const categoriesRelations = relations(categories, ({ one, many }) => ({
-  parent: one(categories, {
-    fields: [categories.parentId],
-    references: [categories.id],
-    relationName: "categoryHierarchy",
+export const systemCategoriesRelations = relations(systemCategories, ({ one, many }) => ({
+  parent: one(systemCategories, {
+    fields: [systemCategories.parentId],
+    references: [systemCategories.id],
+    relationName: "sysCatHierarchy",
   }),
-  children: many(categories, { relationName: "categoryHierarchy" }),
+  children: many(systemCategories, { relationName: "sysCatHierarchy" }),
+}));
+
+export const userCategoriesRelations = relations(userCategories, ({ one, many }) => ({
+  parent: one(userCategories, {
+    fields: [userCategories.parentId],
+    references: [userCategories.id],
+    relationName: "userCatHierarchy",
+  }),
+  children: many(userCategories, { relationName: "userCatHierarchy" }),
+  systemCategory: one(systemCategories, {
+    fields: [userCategories.systemCategoryId],
+    references: [systemCategories.id],
+  }),
   transactions: many(transactions),
 }));
 
 export const merchantsRelations = relations(merchants, ({ one, many }) => ({
-  category: one(categories, {
+  category: one(userCategories, {
     fields: [merchants.categoryId],
-    references: [categories.id],
+    references: [userCategories.id],
   }),
   transactions: many(transactions),
 }));
@@ -394,9 +432,9 @@ export const transactionsRelations = relations(transactions, ({ one }) => ({
     fields: [transactions.accountId],
     references: [accounts.id],
   }),
-  category: one(categories, {
+  category: one(userCategories, {
     fields: [transactions.categoryId],
-    references: [categories.id],
+    references: [userCategories.id],
   }),
   merchant: one(merchants, {
     fields: [transactions.merchantId],
@@ -409,9 +447,9 @@ export const transactionsRelations = relations(transactions, ({ one }) => ({
 }));
 
 export const budgetsRelations = relations(budgets, ({ one }) => ({
-  category: one(categories, {
+  category: one(userCategories, {
     fields: [budgets.categoryId],
-    references: [categories.id],
+    references: [userCategories.id],
   }),
   account: one(accounts, {
     fields: [budgets.accountId],
@@ -424,9 +462,9 @@ export const recurringPatternsRelations = relations(recurringPatterns, ({ one })
     fields: [recurringPatterns.merchantId],
     references: [merchants.id],
   }),
-  category: one(categories, {
+  category: one(userCategories, {
     fields: [recurringPatterns.categoryId],
-    references: [categories.id],
+    references: [userCategories.id],
   }),
 }));
 

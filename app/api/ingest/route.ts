@@ -1,16 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { after } from "next/server";
 import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
 import { statements, fileUploadLog } from "@/lib/db/schema";
 import { logServerError } from "@/lib/safe-error";
-import { processStatement } from "@/lib/process-statement";
 import { eq, and, or } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 120;
 
 const NO_STORE = { "Cache-Control": "no-store" } as const;
+const SERVER_BATCH_LIMIT = 50;
 
 async function isDuplicate(
   userId: string,
@@ -78,6 +76,7 @@ export async function POST(request: NextRequest) {
       }
 
       for (const file of files) {
+        if (submitted.length >= SERVER_BATCH_LIMIT) break;
         if (file.size > 1 * 1024 * 1024) continue;
 
         const hash = hashMap[file.name] ?? null;
@@ -107,6 +106,7 @@ export async function POST(request: NextRequest) {
       const items = Array.isArray(body) ? body : [body];
 
       for (const item of items) {
+        if (submitted.length >= SERVER_BATCH_LIMIT) break;
         const { data, headers: hdrs, fileName, fileHash } = item;
         if (!Array.isArray(data) || data.length === 0 || !Array.isArray(hdrs)) continue;
 
@@ -148,24 +148,12 @@ export async function POST(request: NextRequest) {
       }, { headers: NO_STORE });
     }
 
-    // Mark processing + log uploads
+    // Log uploads (processing is triggered per-statement by the client)
     await Promise.all(
       submitted.map((s) =>
-        Promise.all([
-          logUpload(userId, s.fileName, s.fileSize, s.fileHash, "processed"),
-          db.update(statements).set({ status: "processing" }).where(eq(statements.id, s.id)).catch(() => {}),
-        ]),
+        logUpload(userId, s.fileName, s.fileSize, s.fileHash, "processed"),
       ),
     );
-
-    // Schedule AI processing to run after the response is sent.
-    // Process sequentially to avoid race conditions when multiple files
-    // from the same bank create accounts concurrently.
-    after(async () => {
-      for (const s of submitted) {
-        await processStatement(s.id).catch((err) => logServerError(`process/${s.id}`, err));
-      }
-    });
 
     return NextResponse.json({
       success: true,

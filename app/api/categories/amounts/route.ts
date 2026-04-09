@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { sql, eq } from "drizzle-orm";
 import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
-import { transactions, categories } from "@/lib/db/schema";
+import { transactions, userCategories } from "@/lib/db/schema";
 import { logServerError } from "@/lib/safe-error";
 import {
   rollupInflowLabel,
@@ -25,7 +25,7 @@ export async function GET() {
     if (!userId) return unauthorizedResponse();
 
     const labelExpr =
-      sql<string>`COALESCE(${categories.name}, NULLIF(TRIM(${transactions.categorySuggestion}), ''))`;
+      sql<string>`COALESCE(${userCategories.name}, NULLIF(TRIM(${transactions.categorySuggestion}), ''))`;
 
     const rows = await resilientQuery(() =>
       db
@@ -35,7 +35,7 @@ export async function GET() {
           incomeVol: sql<string>`COALESCE(SUM(CASE WHEN CAST(${transactions.baseAmount} AS numeric) > 0 THEN CAST(${transactions.baseAmount} AS numeric) ELSE 0 END), 0)::text`,
         })
         .from(transactions)
-        .leftJoin(categories, eq(transactions.categoryId, categories.id))
+        .leftJoin(userCategories, eq(transactions.categoryId, userCategories.id))
         .where(eq(transactions.userId, userId))
         .groupBy(labelExpr),
     );

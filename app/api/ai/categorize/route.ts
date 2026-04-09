@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
-import { transactions, categories } from "@/lib/db/schema";
+import { transactions, userCategories } from "@/lib/db/schema";
 import { eq, and, inArray } from "drizzle-orm";
 import { ai, GEMINI_MODEL } from "@/lib/gemini";
 import { logAiCost } from "@/lib/ai-cost";
@@ -42,7 +42,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No transactions found" }, { status: 404, headers: NO_STORE });
     }
 
-    const allCategories = await resilientQuery(() => db.select({ id: categories.id, name: categories.name, slug: categories.slug }).from(categories));
+    const allCategories = await resilientQuery(() =>
+      db
+        .select({ id: userCategories.id, name: userCategories.name, slug: userCategories.slug })
+        .from(userCategories)
+        .where(eq(userCategories.userId, userId)),
+    );
     const categoryList = allCategories.map((c) => c.name).join(", ");
 
     const txnList = txns.map((t) => `ID: ${t.id} | Description: ${t.rawDescription} | Merchant: ${t.merchantName ?? "unknown"}`).join("\n");

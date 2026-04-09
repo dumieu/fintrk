@@ -11,7 +11,9 @@ export default function DashboardLayout({
     <DashboardShell>
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <DashboardHeader />
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</div>
+        <div className="flex min-h-0 flex-1 flex-col overflow-x-clip overflow-y-auto overscroll-y-contain [scrollbar-gutter:stable]">
+          {children}
+        </div>
       </div>
       <ProcessingBanner />
     </DashboardShell>

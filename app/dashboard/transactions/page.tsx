@@ -71,6 +71,8 @@ interface Transaction {
   statementFileName: string | null;
   statementPeriodStart: string | null;
   statementPeriodEnd: string | null;
+  note: string | null;
+  label: string | null;
 }
 
 interface Filters {
@@ -223,7 +225,7 @@ function FlagsCell({
   const tooltip = [countryLine, `Transaction: ${typeLine}`].filter(Boolean).join(" · ");
 
   return (
-    <div className="hidden sm:flex items-center justify-center">
+    <div className="hidden h-full w-full sm:flex items-center justify-center">
       <div
         className="group relative flex cursor-default items-center justify-center gap-1.5 px-1 py-0.5"
         aria-label={tooltip}
@@ -250,6 +252,170 @@ function FlagsCell({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+const LABEL_MAX_LEN = 20;
+
+function TransactionLabelCell({
+  transactionId,
+  value,
+  onSaved,
+}: {
+  transactionId: string;
+  value: string | null;
+  onSaved: (id: string, label: string | null) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value ?? "");
+
+  useEffect(() => {
+    if (!editing) setDraft(value ?? "");
+  }, [value, editing]);
+
+  const persist = async () => {
+    const trimmed = draft.trim().slice(0, LABEL_MAX_LEN);
+    const next = trimmed === "" ? null : trimmed;
+    const prev = (value ?? "").trim().slice(0, LABEL_MAX_LEN) || null;
+    if (next === prev) {
+      setEditing(false);
+      return;
+    }
+    try {
+      const res = await fetch("/api/transactions", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transactionId, label: trimmed }),
+      });
+      if (res.ok) {
+        const json = (await res.json()) as { label?: string | null };
+        onSaved(transactionId, json.label ?? next);
+        dispatchTransactionsChanged();
+      }
+    } finally {
+      setEditing(false);
+    }
+  };
+
+  return (
+    <div
+      className="min-w-0 w-full max-w-full"
+      onClick={(e) => e.stopPropagation()}
+    >
+      {editing ? (
+        <input
+          type="text"
+          autoFocus
+          maxLength={LABEL_MAX_LEN}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value.slice(0, LABEL_MAX_LEN))}
+          onBlur={() => void persist()}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              setDraft(value ?? "");
+              setEditing(false);
+            }
+          }}
+          className="w-full min-w-0 rounded-md border border-white/20 bg-white/[0.06] px-1.5 py-1 font-mono text-[11px] tabular-nums text-white/90 outline-none focus:border-[#0BC18D]/60 focus:ring-1 focus:ring-[#0BC18D]/30"
+          aria-label="Transaction label"
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          aria-label="Add or edit label"
+          className={cn(
+            "w-full max-w-full truncate text-left font-mono text-[11px] tabular-nums transition-[background-color]",
+            value?.trim()
+              ? "rounded-md px-1.5 py-1 text-white/75 hover:bg-white/[0.06]"
+              : "min-h-[1.75rem] rounded-full bg-white/[0.015] px-2 py-1.5 hover:bg-white/[0.04]",
+          )}
+        >
+          {value?.trim() ? value : null}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function TransactionNoteCell({
+  transactionId,
+  value,
+  onSaved,
+}: {
+  transactionId: string;
+  value: string | null;
+  onSaved: (id: string, note: string | null) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value ?? "");
+
+  useEffect(() => {
+    if (!editing) setDraft(value ?? "");
+  }, [value, editing]);
+
+  const persist = async () => {
+    const trimmed = draft.trim();
+    const next = trimmed === "" ? null : trimmed;
+    const prev = (value ?? "").trim() || null;
+    if (next === prev) {
+      setEditing(false);
+      return;
+    }
+    try {
+      const res = await fetch("/api/transactions", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transactionId, note: trimmed }),
+      });
+      if (res.ok) {
+        const json = (await res.json()) as { note?: string | null };
+        onSaved(transactionId, json.note ?? next);
+        dispatchTransactionsChanged();
+      }
+    } finally {
+      setEditing(false);
+    }
+  };
+
+  return (
+    <div
+      className="min-w-0 w-full"
+      onClick={(e) => e.stopPropagation()}
+    >
+      {editing ? (
+        <textarea
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={() => void persist()}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              setDraft(value ?? "");
+              setEditing(false);
+            }
+          }}
+          rows={2}
+          className="w-full min-h-[2.25rem] resize-y rounded-md border border-white/20 bg-white/[0.06] px-1.5 py-1 text-[11px] leading-snug text-white/90 placeholder:text-white/35 outline-none focus:border-[#0BC18D]/60 focus:ring-1 focus:ring-[#0BC18D]/30"
+          placeholder="Note…"
+          aria-label="Transaction note"
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          aria-label="Add or edit note"
+          className={cn(
+            "w-full max-w-full text-left text-[11px] leading-snug transition-[background-color,border-color,box-shadow]",
+            value?.trim()
+              ? "rounded-md px-1.5 py-1 text-white/75 hover:bg-white/[0.06]"
+              : "min-h-[1.75rem] rounded-full bg-white/[0.015] px-3 py-1.5 hover:bg-white/[0.04]",
+          )}
+        >
+          {value?.trim() ? <span className="line-clamp-3 break-words">{value}</span> : null}
+        </button>
+      )}
     </div>
   );
 }
@@ -371,6 +537,7 @@ function AmountRangeSlider({
 export default function TransactionsPage() {
   const [txns, setTxns] = useState<Transaction[]>([]);
   const [total, setTotal] = useState(0);
+  const [statementCount, setStatementCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
@@ -458,6 +625,14 @@ export default function TransactionsPage() {
     });
   }, []);
 
+  const saveTransactionNote = useCallback((id: string, note: string | null) => {
+    setTxns((prev) => prev.map((t) => (t.id === id ? { ...t, note } : t)));
+  }, []);
+
+  const saveTransactionLabel = useCallback((id: string, label: string | null) => {
+    setTxns((prev) => prev.map((t) => (t.id === id ? { ...t, label } : t)));
+  }, []);
+
   const handleTimePreset = useCallback((preset: TimePresetId) => {
     setFilters((f) => {
       if (preset === "all") {
@@ -483,16 +658,19 @@ export default function TransactionsPage() {
         if (data.data) {
           setTxns(dedupeTransactionsById(data.data));
           setTotal(typeof data.total === "number" ? data.total : 0);
+          setStatementCount(typeof data.statementCount === "number" ? data.statementCount : 0);
           setAmountTotals(Array.isArray(data.amountTotals) ? data.amountTotals : []);
         } else {
           setTxns([]);
           setTotal(0);
+          setStatementCount(0);
           setAmountTotals([]);
         }
       } catch {
         if (!cancelled) {
           setTxns([]);
           setTotal(0);
+          setStatementCount(0);
           setAmountTotals([]);
         }
       } finally {
@@ -530,6 +708,7 @@ export default function TransactionsPage() {
         });
       }
       if (typeof data.total === "number") setTotal(data.total);
+      if (typeof data.statementCount === "number") setStatementCount(data.statementCount);
     } catch {
       /* keep existing rows */
     } finally {
@@ -584,6 +763,7 @@ export default function TransactionsPage() {
       if (listJson.data) {
         setTxns(dedupeTransactionsById(listJson.data));
         setTotal(typeof listJson.total === "number" ? listJson.total : 0);
+        setStatementCount(typeof listJson.statementCount === "number" ? listJson.statementCount : 0);
         setAmountTotals(Array.isArray(listJson.amountTotals) ? listJson.amountTotals : []);
       }
       dispatchTransactionsChanged();
@@ -607,7 +787,23 @@ export default function TransactionsPage() {
           <div className="min-w-0">
             <h1 className="text-xl font-bold leading-tight text-white sm:text-2xl md:text-3xl">Transactions</h1>
             <p className="mt-1 flex flex-wrap items-center gap-x-1 text-xs leading-snug text-white/70 sm:text-sm">
-              <span>{total > 0 ? `${total.toLocaleString()} transactions` : "No transactions yet"}</span>
+              <span>
+                {total > 0 ? (
+                  <>
+                    {total.toLocaleString()} transactions
+                    {statementCount > 0 && (
+                      <>
+                        <span className="text-white/35 select-none" aria-hidden>
+                          {"\u00A0\u00A0·\u00A0\u00A0"}
+                        </span>
+                        {statementCount.toLocaleString()} {statementCount === 1 ? "statement" : "statements"}
+                      </>
+                    )}
+                  </>
+                ) : (
+                  "No transactions yet"
+                )}
+              </span>
               {total > 0 && amountTotals.length > 0 && (
                 <>
                   <span className="text-white/35 select-none" aria-hidden>
@@ -804,19 +1000,28 @@ export default function TransactionsPage() {
                 className="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-auto overscroll-y-contain [scrollbar-gutter:stable]"
               >
                 {/* Desktop header — sticky within scroll area */}
-                <div className="sticky top-0 z-10 hidden sm:grid sm:grid-cols-[auto_minmax(0,2fr)_minmax(0,7.5rem)_minmax(0,14rem)_1fr_80px_36px] gap-2 border-b border-white/10 bg-[#10082a]/95 px-3 py-2.5 text-[10px] font-medium uppercase tracking-wider text-white/50 backdrop-blur-md sm:px-4 sm:py-3">
-                  <button type="button" onClick={() => toggleSort("posted_date")} className="flex w-max max-w-full items-center gap-1 whitespace-nowrap text-left hover:text-white/70">
-                    Date <ArrowUpDown className="w-3 h-3" />
+                <div className="sticky top-0 z-10 hidden sm:grid sm:grid-cols-[auto_minmax(0,1.65fr)_minmax(4.5rem,6.5rem)_minmax(0,12rem)_max-content_80px_minmax(7rem,1.25fr)_36px] sm:items-center gap-2 border-b border-white/10 bg-[#10082a]/95 px-3 py-2.5 backdrop-blur-md sm:px-4 sm:py-3">
+                  <button
+                    type="button"
+                    onClick={() => toggleSort("posted_date")}
+                    className="flex w-full min-w-0 items-center justify-center gap-1 whitespace-nowrap text-center text-[10px] font-medium tracking-wide text-white/50 hover:text-white/70"
+                  >
+                    Date <ArrowUpDown className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
                   </button>
-                  <span>Description</span>
-                  <span className="min-w-0 truncate">Reference ID</span>
-                  <div className="min-w-0 w-full text-left text-[12px]">
-                    <span className="truncate">Category / Subcategory</span>
+                  <span className="block w-full min-w-0 text-center text-[10px] font-medium tracking-wide text-white/50">Description</span>
+                  <span className="block w-full min-w-0 truncate text-center text-[10px] font-medium tracking-wide text-white/50">Label</span>
+                  <div className="flex min-w-0 w-full justify-center px-0.5 text-center">
+                    <span className="line-clamp-2 max-w-full text-[10px] font-medium leading-tight tracking-wide text-white/50">Category / Subcategory</span>
                   </div>
-                  <button type="button" onClick={() => toggleSort("base_amount")} className="flex items-center gap-1 text-right justify-end hover:text-white/70">
-                    Amount <ArrowUpDown className="w-3 h-3" />
+                  <button
+                    type="button"
+                    onClick={() => toggleSort("base_amount")}
+                    className="flex w-full min-w-0 items-center justify-center gap-1 text-center text-[10px] font-medium tracking-wide text-white/50 hover:text-white/70"
+                  >
+                    Amount <ArrowUpDown className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
                   </button>
-                  <span className="text-center">Flags</span>
+                  <span className="block w-full text-center text-[10px] font-medium tracking-wide text-white/50">Flags</span>
+                  <span className="block w-full min-w-0 text-center text-[10px] font-medium tracking-wide text-white/50">Note</span>
                   <span className="sr-only">Select</span>
                 </div>
 
@@ -833,55 +1038,54 @@ export default function TransactionsPage() {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         transition={{ delay: Math.min(i, 24) * 0.015 }}
-                        className="relative grid grid-cols-[auto_1fr] gap-1.5 px-2.5 py-2.5 pr-10 transition-colors hover:bg-white/[0.06] sm:grid-cols-[auto_minmax(0,2fr)_minmax(0,7.5rem)_minmax(0,14rem)_1fr_80px_36px] sm:gap-2 sm:px-4 sm:py-3 sm:pr-4"
+                        className="relative grid grid-cols-[auto_1fr] gap-1.5 px-2.5 py-2.5 pr-10 transition-colors hover:bg-white/[0.06] sm:grid-cols-[auto_minmax(0,1.65fr)_minmax(4.5rem,6.5rem)_minmax(0,12rem)_max-content_80px_minmax(7rem,1.25fr)_36px] sm:gap-2 sm:px-4 sm:py-3 sm:pr-4"
                       >
                         <TransactionInsightHover txn={txn}>
                           <div className="text-xs text-white/65 tabular-nums whitespace-nowrap pr-1 py-0.5 -my-0.5 rounded-md ring-0 group-hover/txninsight:ring-1 group-hover/txninsight:ring-white/15 group-hover/txninsight:bg-white/[0.04] transition-[box-shadow,background]">
                             {formatDate(txn.postedDate, "ddMmmYy")}
                           </div>
                         </TransactionInsightHover>
-                        <TransactionInsightHover txn={txn}>
-                          <div className="min-w-0 rounded-md py-0.5 -my-0.5 pr-1 ring-0 group-hover/txninsight:ring-1 group-hover/txninsight:ring-white/15 group-hover/txninsight:bg-white/[0.04] transition-[box-shadow,background]">
-                            <p className="text-xs font-medium text-white/90 truncate">
-                              {txn.merchantName ?? txn.rawDescription}
-                            </p>
-                            <TransactionSourceSubtitle txn={txn} />
-                            {transactionReferenceDisplay(txn) != null && (
-                              <p
-                                className="mt-0.5 font-mono text-[10px] leading-tight text-white/45 tabular-nums sm:hidden"
-                                title={transactionReferenceTitle(txn)}
-                              >
-                                {transactionReferenceDisplay(txn)}
+                        <div className="min-w-0">
+                          <TransactionInsightHover txn={txn}>
+                            <div className="min-w-0 rounded-md py-0.5 -my-0.5 pr-1 ring-0 group-hover/txninsight:ring-1 group-hover/txninsight:ring-white/15 group-hover/txninsight:bg-white/[0.04] transition-[box-shadow,background]">
+                              <p className="text-xs font-medium text-white/90 truncate">
+                                {txn.merchantName ?? txn.rawDescription}
                               </p>
-                            )}
-                            <div className="flex items-start gap-2 text-[12px] text-white/50 sm:hidden">
-                              <TransactionCategoryIcon
-                                categoryName={txn.categoryName}
-                                subcategoryName={txn.subcategoryName}
-                                categorySuggestion={txn.categorySuggestion}
-                                size="sm"
-                                className="mt-0.5"
-                              />
-                              <span className="min-w-0 flex-1 truncate">
-                                {txn.subcategoryName
-                                  ? `${txn.categoryName ?? txn.categorySuggestion ?? "—"} · ${txn.subcategoryName}`
-                                  : (txn.categoryName ?? txn.categorySuggestion ?? "Uncategorized")}
-                              </span>
-                            </div>
-                          </div>
-                        </TransactionInsightHover>
-                        <TransactionInsightHover txn={txn}>
-                          <div className="hidden min-w-0 sm:flex sm:h-full sm:w-full sm:items-center sm:justify-start">
-                            <p
-                              className="w-full truncate font-mono text-[10px] leading-tight tabular-nums"
-                              title={transactionReferenceTitle(txn)}
-                            >
-                              {transactionReferenceDisplay(txn) ?? (
-                                <span className="text-white/20">—</span>
+                              <TransactionSourceSubtitle txn={txn} />
+                              {transactionReferenceDisplay(txn) != null && (
+                                <p
+                                  className="mt-0.5 min-w-0 max-w-full text-[9px] leading-snug"
+                                  title={transactionReferenceTitle(txn)}
+                                >
+                                  <span className="block min-w-0 truncate text-white/45">
+                                    {transactionReferenceDisplay(txn)}
+                                  </span>
+                                </p>
                               )}
-                            </p>
+                            </div>
+                          </TransactionInsightHover>
+                          <div className="mt-0.5 flex items-start gap-2 text-[12px] text-white/50 sm:hidden">
+                            <TransactionCategoryIcon
+                              categoryName={txn.categoryName}
+                              subcategoryName={txn.subcategoryName}
+                              categorySuggestion={txn.categorySuggestion}
+                              size="sm"
+                              className="mt-0.5"
+                            />
+                            <span className="min-w-0 flex-1 truncate">
+                              {txn.subcategoryName
+                                ? `${txn.categoryName ?? txn.categorySuggestion ?? "—"} · ${txn.subcategoryName}`
+                                : (txn.categoryName ?? txn.categorySuggestion ?? "Uncategorized")}
+                            </span>
                           </div>
-                        </TransactionInsightHover>
+                        </div>
+                        <div className="col-span-2 flex min-h-0 items-center sm:col-span-1 sm:h-full sm:min-w-0">
+                          <TransactionLabelCell
+                            transactionId={txn.id}
+                            value={txn.label ?? null}
+                            onSaved={saveTransactionLabel}
+                          />
+                        </div>
                         <div className="hidden min-w-0 sm:flex sm:h-full sm:w-full sm:items-center sm:justify-start sm:gap-2.5">
                           <TransactionCategoryIcon
                             categoryName={txn.categoryName}
@@ -910,9 +1114,9 @@ export default function TransactionsPage() {
                             ) : null}
                           </div>
                         </div>
-                        <div className="text-right">
+                        <div className="flex min-h-0 w-max max-w-full flex-col items-start justify-center text-left sm:h-full sm:min-h-[2.5rem]">
                           <span className={cn(
-                            "text-xs font-bold tabular-nums",
+                            "whitespace-nowrap text-xs font-bold tabular-nums",
                             isPositive && "text-[#A7F3D0]",
                             isNegative && "text-[#FCA5A5]",
                             !isPositive && !isNegative && "text-white/70",
@@ -920,7 +1124,7 @@ export default function TransactionsPage() {
                             {isPositive ? "+" : isNegative ? "−" : ""}{formatCurrency(Math.abs(amt), txn.baseCurrency)}
                           </span>
                           {hasFx && txn.foreignAmount && (
-                            <p className="text-[9px] text-[#AD74FF]/70 tabular-nums">
+                            <p className="whitespace-nowrap text-[9px] text-[#AD74FF]/70 tabular-nums">
                               {formatCurrency(Math.abs(parseFloat(txn.foreignAmount)), txn.foreignCurrency!)}
                               {spreadBps > 50 && (
                                 <span className="ml-1 text-[#FF6F69]">+{(spreadBps / 100).toFixed(1)}%</span>
@@ -933,7 +1137,14 @@ export default function TransactionsPage() {
                           isRecurring={txn.isRecurring}
                           hasFx={hasFx}
                         />
-                        <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center justify-center sm:static sm:right-auto sm:top-auto sm:translate-y-0 sm:pr-0">
+                        <div className="col-span-2 flex min-h-0 items-center sm:col-span-1 sm:h-full">
+                          <TransactionNoteCell
+                            transactionId={txn.id}
+                            value={txn.note ?? null}
+                            onSaved={saveTransactionNote}
+                          />
+                        </div>
+                        <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center justify-center sm:static sm:right-auto sm:top-auto sm:flex sm:h-full sm:translate-y-0 sm:items-center sm:justify-center sm:pr-0">
                           <input
                             type="checkbox"
                             checked={selectedIds.has(txn.id)}

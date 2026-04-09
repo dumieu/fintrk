@@ -34,3 +34,18 @@ export const deleteTransactionsSchema = z.object({
 });
 
 export type DeleteTransactionsInput = z.infer<typeof deleteTransactionsSchema>;
+
+/** PATCH body: update `note` and/or `label` (omit fields you are not changing). */
+export const patchTransactionSchema = z
+  .object({
+    transactionId: z.string().uuid(),
+    /** Empty string clears the note (stored as null). */
+    note: z.string().max(20000).optional(),
+    /** Max 20 characters; empty string clears (stored as null). */
+    label: z.string().max(20).optional(),
+  })
+  .refine((d) => d.note !== undefined || d.label !== undefined, {
+    message: "Provide note and/or label",
+  });
+
+export type PatchTransactionInput = z.infer<typeof patchTransactionSchema>;
