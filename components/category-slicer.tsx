@@ -260,7 +260,6 @@ const FLOW_THEME_OPTIONS: { value: CategoryFlowTheme; label: string }[] = [
   { value: "inflow", label: "Inflow" },
   { value: "savings", label: "Savings & investments" },
   { value: "outflow", label: "Outflow" },
-  { value: "unknown", label: "Other" },
 ];
 
 /** Parent flow (inflow / savings / outflow / other) — sits above category chips on Transactions. */

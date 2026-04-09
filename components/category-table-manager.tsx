@@ -48,7 +48,7 @@ function cnPill(active: boolean) {
   ].join(" ");
 }
 
-const META_FLOW_ORDER: CategoryFlowTheme[] = ["inflow", "savings", "outflow", "unknown"];
+const META_FLOW_ORDER: CategoryFlowTheme[] = ["inflow", "savings", "outflow"];
 const META_FLOW_LABEL: Record<CategoryFlowTheme, string> = {
   inflow: "Inflow",
   savings: "Savings & investments",
@@ -434,7 +434,7 @@ export function CategoryTableManager() {
   return (
     <div className="min-h-[80vh] bg-gradient-to-b from-[#08051a] via-[#10082a] to-[#160e35]">
       <div className="mx-auto max-w-4xl px-4 py-8">
-        {/* Parent flow (Inflow / Savings / Outflow / Other) */}
+        {/* Parent flow (Inflow / Savings / Outflow) */}
         <div className="flex justify-center mb-4">
           <div
             role="tablist"
