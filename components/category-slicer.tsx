@@ -492,14 +492,18 @@ export function FlowThemeSlicer({
   selectedFlowTheme,
   onSelect,
   showLabel = true,
+  /** No title/chevrons; outer width fits chips only (pair with Category slicer flex-1). */
+  compact = false,
 }: {
   /** `""` = no parent-flow filter (all). */
   selectedFlowTheme: string;
   onSelect: (flowTheme: string) => void;
-  /** When false, hides the left "Flow" title (e.g. Category Mapping page). */
+  /** When false, hides the left "Flow" title (e.g. Category Mapping page). Ignored when `compact`. */
   showLabel?: boolean;
+  compact?: boolean;
 }) {
   const allSelected = selectedFlowTheme === "";
+  const showFlowLabel = showLabel && !compact;
   const { scrollRef, canLeft, canRight, scrollByDir } = useSlicerScrollState([]);
   const onSelectRef = useRef(onSelect);
   useEffect(() => {
@@ -565,77 +569,97 @@ export function FlowThemeSlicer({
     unknown: "rgba(255,255,255,0.35)",
   };
 
+  const stripClass = compact
+    ? cn(
+        "flex min-h-6 w-max max-w-full shrink-0 touch-pan-x flex-nowrap gap-1.5 overflow-x-auto overscroll-x-contain px-0.5 py-0 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.14)_transparent]",
+        "cursor-grab active:cursor-grabbing select-none",
+      )
+    : cn(
+        "flex min-h-6 min-w-0 flex-1 touch-pan-x gap-1.5 overflow-x-auto overscroll-x-contain px-0.5 py-0 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.14)_transparent]",
+        "cursor-grab active:cursor-grabbing select-none",
+      );
+
+  const flowChipStrip = (
+    <div
+      ref={scrollRef}
+      role="presentation"
+      onPointerDown={onPointerDownStrip}
+      onPointerMove={onPointerMoveStrip}
+      onPointerUp={onPointerUpStrip}
+      onPointerCancel={onPointerUpStrip}
+      className={stripClass}
+    >
+      <button
+        type="button"
+        data-flow-slicer-chip
+        data-flow-slicer-value=""
+        onKeyDown={(e) => chipKeyDown(e, onSelect, "")}
+        className={cn(
+          "flex h-6 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border px-2 py-0 transition-all duration-200",
+          allSelected
+            ? "border-[#0BC18D]/55 bg-[#0BC18D]/18 text-white shadow-[0_0_26px_-10px_rgba(11,193,141,0.6)] ring-1 ring-[#0BC18D]/30"
+            : "border-white/12 bg-black/25 text-white/85 hover:border-white/22 hover:bg-white/[0.07]",
+        )}
+        aria-pressed={allSelected}
+      >
+        <span className="text-[10px] font-semibold leading-none">All</span>
+      </button>
+
+      {FLOW_THEME_OPTIONS.map((opt) => {
+        const selected = selectedFlowTheme === opt.value;
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            data-flow-slicer-chip
+            data-flow-slicer-value={opt.value}
+            onKeyDown={(e) => chipKeyDown(e, onSelect, opt.value)}
+            className={cn(
+              "flex h-6 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border px-2 py-0",
+              chipClass(opt.value, selected),
+            )}
+            aria-pressed={selected}
+          >
+            <span
+              className="size-1.5 shrink-0 rounded-full"
+              style={{ backgroundColor: dotColor[opt.value] }}
+              aria-hidden
+            />
+            <span className="max-w-[8rem] truncate text-left text-[10px] font-semibold leading-none sm:max-w-[11rem]">
+              {opt.label}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+
   return (
-    <div className="rounded-xl border border-white/[0.09] bg-gradient-to-b from-white/[0.07] to-white/[0.02] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] sm:rounded-2xl sm:p-2">
-      <div className={cn("flex min-w-0 items-center", showLabel ? "gap-1.5 sm:gap-3" : "gap-0")}>
-        {showLabel ? (
+    <div
+      className={cn(
+        "rounded-xl border border-white/[0.09] bg-gradient-to-b from-white/[0.07] to-white/[0.02] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] sm:rounded-2xl sm:p-2",
+        compact && "w-fit max-w-full shrink-0",
+      )}
+    >
+      <div className={cn("flex min-w-0 items-center", showFlowLabel ? "gap-1.5 sm:gap-3" : "gap-0")}>
+        {showFlowLabel ? (
           <p className="shrink-0 whitespace-nowrap px-0.5 text-[9px] font-medium uppercase tracking-wider text-white/40 sm:px-1 sm:text-[10px]">
             Flow
           </p>
         ) : null}
-        <SlicerChevronRow
-          canLeft={canLeft}
-          canRight={canRight}
-          scrollByDir={scrollByDir}
-          leftAria="Scroll flow options left"
-          rightAria="Scroll flow options right"
-        >
-          <div
-            ref={scrollRef}
-            role="presentation"
-            onPointerDown={onPointerDownStrip}
-            onPointerMove={onPointerMoveStrip}
-            onPointerUp={onPointerUpStrip}
-            onPointerCancel={onPointerUpStrip}
-            className={cn(
-              "flex min-h-6 min-w-0 flex-1 touch-pan-x gap-1.5 overflow-x-auto overscroll-x-contain px-0.5 py-0 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.14)_transparent]",
-              "cursor-grab active:cursor-grabbing select-none",
-            )}
+        {compact ? (
+          flowChipStrip
+        ) : (
+          <SlicerChevronRow
+            canLeft={canLeft}
+            canRight={canRight}
+            scrollByDir={scrollByDir}
+            leftAria="Scroll flow options left"
+            rightAria="Scroll flow options right"
           >
-            <button
-              type="button"
-              data-flow-slicer-chip
-              data-flow-slicer-value=""
-              onKeyDown={(e) => chipKeyDown(e, onSelect, "")}
-              className={cn(
-                "flex h-6 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border px-2 py-0 transition-all duration-200",
-                allSelected
-                  ? "border-[#0BC18D]/55 bg-[#0BC18D]/18 text-white shadow-[0_0_26px_-10px_rgba(11,193,141,0.6)] ring-1 ring-[#0BC18D]/30"
-                  : "border-white/12 bg-black/25 text-white/85 hover:border-white/22 hover:bg-white/[0.07]",
-              )}
-              aria-pressed={allSelected}
-            >
-              <span className="text-[10px] font-semibold leading-none">All</span>
-            </button>
-
-            {FLOW_THEME_OPTIONS.map((opt) => {
-              const selected = selectedFlowTheme === opt.value;
-              return (
-                <button
-                  key={opt.value}
-                  type="button"
-                  data-flow-slicer-chip
-                  data-flow-slicer-value={opt.value}
-                  onKeyDown={(e) => chipKeyDown(e, onSelect, opt.value)}
-                  className={cn(
-                    "flex h-6 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border px-2 py-0",
-                    chipClass(opt.value, selected),
-                  )}
-                  aria-pressed={selected}
-                >
-                  <span
-                    className="size-1.5 shrink-0 rounded-full"
-                    style={{ backgroundColor: dotColor[opt.value] }}
-                    aria-hidden
-                  />
-                  <span className="max-w-[8rem] truncate text-left text-[10px] font-semibold leading-none sm:max-w-[11rem]">
-                    {opt.label}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </SlicerChevronRow>
+            {flowChipStrip}
+          </SlicerChevronRow>
+        )}
       </div>
     </div>
   );

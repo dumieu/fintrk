@@ -1546,8 +1546,9 @@ export default function TransactionsPage() {
           transition={{ delay: 0.1, duration: 0.25 }}
           className="mb-3 flex w-full min-w-0 shrink-0 flex-row flex-nowrap items-stretch gap-3 sm:mb-4"
         >
-          <div className="min-w-0 flex-1">
+          <div className="shrink-0">
             <FlowThemeSlicer
+              compact
               selectedFlowTheme={filters.flowTheme}
               onSelect={onFlowThemeSelect}
             />
