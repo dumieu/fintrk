@@ -18,6 +18,7 @@ import {
 import {
   CategorySlicer,
   FlowThemeSlicer,
+  SubcategoryTypeSlicer,
   type CategorySlicerOption,
 } from "@/components/category-slicer";
 
@@ -52,6 +53,12 @@ const META_FLOW_LABEL: Record<CategoryFlowTheme, string> = {
   savings: "Savings & investments",
   outflow: "Outflow",
   unknown: "Other",
+};
+
+const SUBCAT_FILTER_LABEL: Record<SubcategoryType, string> = {
+  "non-discretionary": "Non-discretionary",
+  "semi-discretionary": "Semi-discretionary",
+  discretionary: "Discretionary",
 };
 
 const SUBCAT_TYPE_META: Record<SubcategoryType, { label: string; tip: string; bg: string; text: string; border: string }> = {
@@ -282,6 +289,9 @@ export function CategoryTableManager() {
   /** `null` = all top-level categories within meta flow; otherwise one parent category. */
   const [flowFilterId, setFlowFilterId] = useState<number | null>(null);
 
+  /** `""` = all subcategory types; otherwise filter outflow subs by type. */
+  const [subcategoryTypeFilter, setSubcategoryTypeFilter] = useState<"" | SubcategoryType>("");
+
   // Expand state
   const [expandedCats, setExpandedCats] = useState<Set<number>>(new Set());
 
@@ -346,20 +356,52 @@ export function CategoryTableManager() {
     }
   }, [metaFilteredParents, flowFilterId]);
 
+  /** Inflow / savings subs have no expense type — clear type filter when leaving outflow-only context. */
+  useEffect(() => {
+    if (metaFlowFilter === "inflow" || metaFlowFilter === "savings") {
+      setSubcategoryTypeFilter("");
+    }
+  }, [metaFlowFilter]);
+
   const filteredCategories = useMemo(() => {
     if (flowFilterId === null) return metaFilteredParents;
     return metaFilteredParents.filter((c) => c.id === flowFilterId);
   }, [metaFilteredParents, flowFilterId]);
 
   const mappingCategorySlicerOptions = useMemo((): CategorySlicerOption[] => {
-    return metaFilteredParents.map((c) => ({
+    let parents = metaFilteredParents;
+    if (subcategoryTypeFilter) {
+      parents = parents.filter((c) =>
+        c.subcategories.some((s) => s.subcategoryType === subcategoryTypeFilter),
+      );
+    }
+    return parents.map((c) => ({
       value: String(c.id),
       label: c.name,
       categoryName: c.name,
       subcategoryName: null,
       flowTheme: flowThemeForCategoryNames(null, c.name),
     }));
-  }, [metaFilteredParents]);
+  }, [metaFilteredParents, subcategoryTypeFilter]);
+
+  useEffect(() => {
+    if (!subcategoryTypeFilter || flowFilterId === null) return;
+    const cat = metaFilteredParents.find((c) => c.id === flowFilterId);
+    if (!cat || !cat.subcategories.some((s) => s.subcategoryType === subcategoryTypeFilter)) {
+      setFlowFilterId(null);
+    }
+  }, [subcategoryTypeFilter, flowFilterId, metaFilteredParents]);
+
+  /** Parents and subcategories after flow + category + expense-type filters. */
+  const displayCategories = useMemo(() => {
+    if (!subcategoryTypeFilter) return filteredCategories;
+    return filteredCategories
+      .map((cat) => ({
+        ...cat,
+        subcategories: cat.subcategories.filter((s) => s.subcategoryType === subcategoryTypeFilter),
+      }))
+      .filter((cat) => cat.subcategories.length > 0);
+  }, [filteredCategories, subcategoryTypeFilter]);
 
   const onMappingFlowSelect = useCallback((ft: string) => {
     setMetaFlowFilter(ft === "" ? null : (ft as CategoryFlowTheme));
@@ -377,6 +419,10 @@ export function CategoryTableManager() {
     }
   }, []);
 
+  const onMappingSubcategoryTypeSelect = useCallback((t: string) => {
+    setSubcategoryTypeFilter(t === "" ? "" : (t as SubcategoryType));
+  }, []);
+
   // Toggle helpers
   const toggleCat = useCallback((id: number) => {
     setExpandedCats((p) => {
@@ -387,8 +433,8 @@ export function CategoryTableManager() {
   }, []);
 
   const expandAll = useCallback(() => {
-    setExpandedCats(new Set(filteredCategories.map((c) => c.id)));
-  }, [filteredCategories]);
+    setExpandedCats(new Set(displayCategories.map((c) => c.id)));
+  }, [displayCategories]);
 
   const collapseAll = useCallback(() => {
     setExpandedCats(new Set());
@@ -450,7 +496,7 @@ export function CategoryTableManager() {
   // Stats
   const totalCats = categories.length;
   const totalSubs = categories.reduce((s, c) => s + c.subcategories.length, 0);
-  const visibleSubs = filteredCategories.reduce((s, c) => s + c.subcategories.length, 0);
+  const visibleSubs = displayCategories.reduce((s, c) => s + c.subcategories.length, 0);
 
   if (loading) {
     return (
@@ -472,6 +518,16 @@ export function CategoryTableManager() {
           />
         </div>
 
+        {metaFlowFilter !== "inflow" && metaFlowFilter !== "savings" ? (
+          <div className="mb-4 w-full min-w-0">
+            <SubcategoryTypeSlicer
+              showLabel={false}
+              selectedType={subcategoryTypeFilter}
+              onSelect={onMappingSubcategoryTypeSelect}
+            />
+          </div>
+        ) : null}
+
         {/* Top-level categories — same slicer as Transactions, no title */}
         <div className="mb-6 w-full min-w-0">
           <CategorySlicer
@@ -487,7 +543,7 @@ export function CategoryTableManager() {
           <div>
             <h1 className="text-2xl font-bold text-white sm:text-3xl">Category Mapping</h1>
             <p className="text-sm text-white/50 mt-1">
-              {metaFlowFilter === null && flowFilterId === null ? (
+              {metaFlowFilter === null && flowFilterId === null && !subcategoryTypeFilter ? (
                 <>
                   {totalCats} categories · {totalSubs} subcategories
                 </>
@@ -497,21 +553,27 @@ export function CategoryTableManager() {
                   {metaFlowFilter !== null && (
                     <span className="text-white/70">{META_FLOW_LABEL[metaFlowFilter]}</span>
                   )}
-                  {flowFilterId !== null ? (
+                  {subcategoryTypeFilter ? (
                     <>
                       {metaFlowFilter !== null ? " · " : null}
+                      <span className="text-white/70">{SUBCAT_FILTER_LABEL[subcategoryTypeFilter]}</span>
+                    </>
+                  ) : null}
+                  {flowFilterId !== null ? (
+                    <>
+                      {(metaFlowFilter !== null || subcategoryTypeFilter) ? " · " : null}
                       <span className="text-white/70">
                         {categories.find((c) => c.id === flowFilterId)?.name ?? "—"}
                       </span>
                       {" · "}
-                      {categories.find((c) => c.id === flowFilterId)?.subcategories.length ?? 0}{" "}
+                      {displayCategories.find((c) => c.id === flowFilterId)?.subcategories.length ?? 0}{" "}
                       subcategories
                     </>
                   ) : (
                     <>
-                      {metaFlowFilter !== null ? " — " : null}
+                      {(metaFlowFilter !== null || subcategoryTypeFilter) ? " — " : null}
                       <span className="text-white/70 tabular-nums">
-                        {filteredCategories.length} categories · {visibleSubs} subcategories
+                        {displayCategories.length} categories · {visibleSubs} subcategories
                       </span>
                     </>
                   )}
@@ -539,7 +601,7 @@ export function CategoryTableManager() {
 
         {/* Category sections */}
         <div className="space-y-1">
-          {filteredCategories.map((cat) => {
+          {displayCategories.map((cat) => {
             const catExpanded = expandedCats.has(cat.id);
             const catColor = cat.color ?? "#808080";
             const isOutflow = flowThemeForCategoryNames(null, cat.name) === "outflow";
