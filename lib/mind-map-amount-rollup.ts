@@ -96,9 +96,8 @@ const OUTFLOW_LABEL_ROLLUP: Record<string, string> = {
   activities: "Travel",
   "travel insurance": "Travel",
   "car rental": "Travel",
-  // Debt
-  "loan payment": "Debt Repayment",
-  "credit card payment": "Debt Repayment",
+  // Debt (standalone — under Transfers parent these resolve via parent as savings)
+  "debt repayment": "Debt Repayment",
   // Insurance (general — not health/car/travel)
   insurance: "Insurance",
   // Giving
@@ -159,6 +158,7 @@ const EXCLUDE_POSITIVE_ROLLUP = new Set([
 ]);
 
 const SAVINGS_LABEL_ROLLUP: Record<string, string> = {
+  transfers: "Cash Savings",
   "savings transfer": "Cash Savings",
   "emergency fund": "Cash Savings",
   "sinking funds": "Cash Savings",
