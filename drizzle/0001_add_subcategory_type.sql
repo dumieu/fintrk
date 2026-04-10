@@ -8,19 +8,19 @@ ALTER TABLE user_categories   ADD COLUMN subcategory_type subcategory_type;
 -- Backfill system_categories subcategory_type for expense subcategories (parentId IS NOT NULL)
 -- Income subcategories are left NULL (not expense)
 
--- Non-discretionary: essential, unavoidable
+-- Only outflow subcategories get a type. Income, Transfers, Other remain NULL.
+
+-- Non-discretionary: essential expense you can't avoid
 UPDATE system_categories SET subcategory_type = 'non-discretionary' WHERE slug IN (
   'rent-mortgage', 'utilities', 'insurance-housing', 'property-tax',
   'fuel', 'car-payment', 'car-insurance',
   'groceries',
   'medical', 'pharmacy', 'health-insurance',
   'bank-fees', 'interest-charges', 'fx-fees', 'atm-fees',
-  'tuition',
-  'loan-payment', 'credit-card-payment',
-  'internal-transfer', 'savings-transfer'
+  'tuition'
 );
 
--- Semi-discretionary: needed but amount/frequency is flexible
+-- Semi-discretionary: needed but the amount or frequency is flexible
 UPDATE system_categories SET subcategory_type = 'semi-discretionary' WHERE slug IN (
   'maintenance',
   'public-transit', 'ride-share', 'parking',
@@ -33,14 +33,13 @@ UPDATE system_categories SET subcategory_type = 'semi-discretionary' WHERE slug 
   'charity', 'religious'
 );
 
--- Discretionary: fully optional
+-- Discretionary: fully optional, nice-to-have spending
 UPDATE system_categories SET subcategory_type = 'discretionary' WHERE slug IN (
   'restaurants', 'coffee', 'bars-nightlife',
   'clothing', 'electronics', 'home-garden', 'online-shopping',
   'streaming', 'gaming', 'events-concerts', 'hobbies', 'books-media',
   'flights', 'hotels', 'travel-activities', 'car-rental',
-  'gifts',
-  'uncategorized', 'atm-withdrawal', 'cash', 'miscellaneous'
+  'gifts'
 );
 
 -- Backfill existing user_categories from their linked system_categories

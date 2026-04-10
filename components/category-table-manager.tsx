@@ -54,27 +54,27 @@ const META_FLOW_LABEL: Record<CategoryFlowTheme, string> = {
   unknown: "Other",
 };
 
-const SUBCAT_TYPE_STYLE: Record<SubcategoryType, { label: string; bg: string; text: string; border: string }> = {
-  "non-discretionary": { label: "Non-disc.", bg: "bg-[#EF4444]/10", text: "text-[#FCA5A5]", border: "border-[#EF4444]/25" },
-  "semi-discretionary": { label: "Semi-disc.", bg: "bg-[#ECAA0B]/10", text: "text-[#FDE68A]", border: "border-[#ECAA0B]/25" },
-  discretionary: { label: "Disc.", bg: "bg-[#22C55E]/10", text: "text-[#86EFAC]", border: "border-[#22C55E]/25" },
+const SUBCAT_TYPE_META: Record<SubcategoryType, { label: string; tip: string; bg: string; text: string; border: string }> = {
+  "non-discretionary":  { label: "Non-disc.",  tip: "Non-discretionary — essential expense you can't avoid (e.g. rent, insurance, utilities)", bg: "bg-[#EF4444]/10", text: "text-[#FCA5A5]", border: "border-[#EF4444]/25" },
+  "semi-discretionary": { label: "Semi-disc.", tip: "Semi-discretionary — needed but the amount or frequency is flexible (e.g. groceries, transit)", bg: "bg-[#ECAA0B]/10", text: "text-[#FDE68A]", border: "border-[#ECAA0B]/25" },
+  discretionary:        { label: "Disc.",      tip: "Discretionary — fully optional, nice-to-have spending (e.g. dining out, streaming, travel)", bg: "bg-[#22C55E]/10", text: "text-[#86EFAC]", border: "border-[#22C55E]/25" },
 };
 
 function SubcategoryTypePill({ value, onClick }: { value: SubcategoryType | null; onClick: () => void }) {
-  const style = value ? SUBCAT_TYPE_STYLE[value] : null;
+  const meta = value ? SUBCAT_TYPE_META[value] : null;
   return (
     <button
       type="button"
       onClick={(e) => { e.stopPropagation(); onClick(); }}
-      title={value ? `${value} — click to change` : "Click to set discretionary type"}
+      title={meta ? `${meta.tip} — click to change` : "Click to classify this expense"}
       className={[
         "shrink-0 rounded-full px-2 py-0.5 text-[9px] font-medium border cursor-pointer transition-colors mr-1",
-        style
-          ? `${style.bg} ${style.text} ${style.border} hover:brightness-125`
+        meta
+          ? `${meta.bg} ${meta.text} ${meta.border} hover:brightness-125`
           : "bg-white/[0.04] text-white/25 border-white/[0.08] hover:text-white/45",
       ].join(" ")}
     >
-      {style?.label ?? "—"}
+      {meta?.label ?? "—"}
     </button>
   );
 }
@@ -542,6 +542,7 @@ export function CategoryTableManager() {
           {filteredCategories.map((cat) => {
             const catExpanded = expandedCats.has(cat.id);
             const catColor = cat.color ?? "#808080";
+            const isOutflow = flowThemeForCategoryNames(null, cat.name) === "outflow";
 
             return (
               <div
@@ -649,10 +650,12 @@ export function CategoryTableManager() {
                                     <span className="text-[13px] text-white/55 flex-1 truncate">
                                       {sub.name}
                                     </span>
-                                    <SubcategoryTypePill
-                                      value={sub.subcategoryType}
-                                      onClick={() => cycleSubcategoryType(sub.id, sub.subcategoryType)}
-                                    />
+                                    {isOutflow && (
+                                      <SubcategoryTypePill
+                                        value={sub.subcategoryType}
+                                        onClick={() => cycleSubcategoryType(sub.id, sub.subcategoryType)}
+                                      />
+                                    )}
                                     <div className="flex items-center gap-0.5 opacity-0 group-hover/sub:opacity-100 transition-opacity shrink-0">
                                       <button
                                         type="button"

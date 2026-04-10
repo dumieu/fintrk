@@ -165,10 +165,10 @@ const CATEGORY_TREE: CategorySeed[] = [
     icon: "ArrowLeftRight",
     color: "#808080",
     children: [
-      { name: "Internal Transfer", slug: "internal-transfer", icon: "Repeat", subcategoryType: "non-discretionary" },
-      { name: "Loan Payment", slug: "loan-payment", icon: "FileText", subcategoryType: "non-discretionary" },
-      { name: "Credit Card Payment", slug: "credit-card-payment", icon: "CreditCard", subcategoryType: "non-discretionary" },
-      { name: "Savings Transfer", slug: "savings-transfer", icon: "PiggyBank", subcategoryType: "non-discretionary" },
+      { name: "Internal Transfer", slug: "internal-transfer", icon: "Repeat" },
+      { name: "Loan Payment", slug: "loan-payment", icon: "FileText" },
+      { name: "Credit Card Payment", slug: "credit-card-payment", icon: "CreditCard" },
+      { name: "Savings Transfer", slug: "savings-transfer", icon: "PiggyBank" },
     ],
   },
   {
@@ -177,10 +177,10 @@ const CATEGORY_TREE: CategorySeed[] = [
     icon: "MoreHorizontal",
     color: "#808080",
     children: [
-      { name: "Uncategorized", slug: "uncategorized", icon: "HelpCircle", subcategoryType: "discretionary" },
-      { name: "ATM Withdrawal", slug: "atm-withdrawal", icon: "Banknote", subcategoryType: "discretionary" },
-      { name: "Cash", slug: "cash", icon: "Coins", subcategoryType: "discretionary" },
-      { name: "Miscellaneous", slug: "miscellaneous", icon: "Package", subcategoryType: "discretionary" },
+      { name: "Uncategorized", slug: "uncategorized", icon: "HelpCircle" },
+      { name: "ATM Withdrawal", slug: "atm-withdrawal", icon: "Banknote" },
+      { name: "Cash", slug: "cash", icon: "Coins" },
+      { name: "Miscellaneous", slug: "miscellaneous", icon: "Package" },
     ],
   },
 ];
