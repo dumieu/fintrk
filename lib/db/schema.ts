@@ -34,6 +34,12 @@ export const statementStatusEnum = pgEnum("statement_status", [
   "failed",
 ]);
 
+export const subcategoryTypeEnum = pgEnum("subcategory_type", [
+  "discretionary",
+  "semi-discretionary",
+  "non-discretionary",
+]);
+
 // ─── Accounts ────────────────────────────────────────────────────────────────
 
 export const accounts = pgTable(
@@ -98,6 +104,7 @@ export const systemCategories = pgTable("system_categories", {
   icon: varchar("icon", { length: 64 }),
   color: varchar("color", { length: 7 }),
   sortOrder: integer("sort_order").default(0).notNull(),
+  subcategoryType: subcategoryTypeEnum("subcategory_type"),
 });
 
 // ─── User Categories (per-user clone that can evolve independently) ──────────
@@ -113,6 +120,7 @@ export const userCategories = pgTable(
     icon: varchar("icon", { length: 64 }),
     color: varchar("color", { length: 7 }),
     sortOrder: integer("sort_order").default(0).notNull(),
+    subcategoryType: subcategoryTypeEnum("subcategory_type"),
     systemCategoryId: integer("system_category_id").references(() => systemCategories.id),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },

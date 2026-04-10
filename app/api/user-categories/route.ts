@@ -35,6 +35,7 @@ export async function GET() {
           icon: userCategories.icon,
           color: userCategories.color,
           sortOrder: userCategories.sortOrder,
+          subcategoryType: userCategories.subcategoryType,
           parentName: parent.name,
           parentColor: parent.color,
         })
@@ -62,6 +63,7 @@ export async function GET() {
           icon: sub.icon,
           color: sub.color,
           sortOrder: sub.sortOrder,
+          subcategoryType: sub.subcategoryType,
         })),
     }));
 
@@ -151,27 +153,34 @@ export async function POST(request: NextRequest) {
   }
 }
 
-const renameSchema = z.object({
+const updateSchema = z.object({
   id: z.number().int(),
-  name: z.string().min(1).max(128),
+  name: z.string().min(1).max(128).optional(),
+  subcategoryType: z.enum(["discretionary", "semi-discretionary", "non-discretionary"]).nullable().optional(),
+}).refine((d) => d.name !== undefined || d.subcategoryType !== undefined, {
+  message: "Provide name and/or subcategoryType",
 });
 
-/** PUT — rename a category or subcategory. */
+/** PUT — update a category or subcategory (rename and/or change subcategoryType). */
 export async function PUT(request: NextRequest) {
   try {
     const { userId } = await resilientAuth();
     if (!userId) return unauthorizedResponse();
 
     const body = await request.json();
-    const parsed = renameSchema.safeParse(body);
+    const parsed = updateSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json({ error: "Invalid input" }, { status: 400, headers: NO_STORE });
     }
 
+    const setPayload: Record<string, unknown> = {};
+    if (parsed.data.name !== undefined) setPayload.name = parsed.data.name;
+    if (parsed.data.subcategoryType !== undefined) setPayload.subcategoryType = parsed.data.subcategoryType;
+
     const result = await resilientQuery(() =>
       db
         .update(userCategories)
-        .set({ name: parsed.data.name })
+        .set(setPayload)
         .where(and(eq(userCategories.id, parsed.data.id), eq(userCategories.userId, userId)))
         .returning({ id: userCategories.id }),
     );

@@ -23,6 +23,8 @@ import {
 
 /* ════════════════════════════════ TYPES ══════════════════════════════════ */
 
+type SubcategoryType = "discretionary" | "semi-discretionary" | "non-discretionary";
+
 interface SubcategoryItem {
   id: number;
   name: string;
@@ -30,6 +32,7 @@ interface SubcategoryItem {
   icon: string | null;
   color: string | null;
   sortOrder: number;
+  subcategoryType: SubcategoryType | null;
 }
 
 interface CategoryItem {
@@ -50,6 +53,31 @@ const META_FLOW_LABEL: Record<CategoryFlowTheme, string> = {
   outflow: "Outflow",
   unknown: "Other",
 };
+
+const SUBCAT_TYPE_STYLE: Record<SubcategoryType, { label: string; bg: string; text: string; border: string }> = {
+  "non-discretionary": { label: "Non-disc.", bg: "bg-[#EF4444]/10", text: "text-[#FCA5A5]", border: "border-[#EF4444]/25" },
+  "semi-discretionary": { label: "Semi-disc.", bg: "bg-[#ECAA0B]/10", text: "text-[#FDE68A]", border: "border-[#ECAA0B]/25" },
+  discretionary: { label: "Disc.", bg: "bg-[#22C55E]/10", text: "text-[#86EFAC]", border: "border-[#22C55E]/25" },
+};
+
+function SubcategoryTypePill({ value, onClick }: { value: SubcategoryType | null; onClick: () => void }) {
+  const style = value ? SUBCAT_TYPE_STYLE[value] : null;
+  return (
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); onClick(); }}
+      title={value ? `${value} — click to change` : "Click to set discretionary type"}
+      className={[
+        "shrink-0 rounded-full px-2 py-0.5 text-[9px] font-medium border cursor-pointer transition-colors mr-1",
+        style
+          ? `${style.bg} ${style.text} ${style.border} hover:brightness-125`
+          : "bg-white/[0.04] text-white/25 border-white/[0.08] hover:text-white/45",
+      ].join(" ")}
+    >
+      {style?.label ?? "—"}
+    </button>
+  );
+}
 
 function InlineInput({
   value,
@@ -366,6 +394,25 @@ export function CategoryTableManager() {
     setExpandedCats(new Set());
   }, []);
 
+  const cycleSubcategoryType = useCallback(async (id: number, current: SubcategoryType | null) => {
+    const cycle: SubcategoryType[] = ["non-discretionary", "semi-discretionary", "discretionary"];
+    const idx = current ? cycle.indexOf(current) : -1;
+    const next = cycle[(idx + 1) % cycle.length];
+    setCategories((prev) =>
+      prev.map((cat) => ({
+        ...cat,
+        subcategories: cat.subcategories.map((s) =>
+          s.id === id ? { ...s, subcategoryType: next } : s,
+        ),
+      })),
+    );
+    await fetch("/api/user-categories", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, subcategoryType: next }),
+    });
+  }, []);
+
   // CRUD via API
   const renameCat = useCallback(async (id: number, name: string) => {
     setEditId(null);
@@ -602,6 +649,10 @@ export function CategoryTableManager() {
                                     <span className="text-[13px] text-white/55 flex-1 truncate">
                                       {sub.name}
                                     </span>
+                                    <SubcategoryTypePill
+                                      value={sub.subcategoryType}
+                                      onClick={() => cycleSubcategoryType(sub.id, sub.subcategoryType)}
+                                    />
                                     <div className="flex items-center gap-0.5 opacity-0 group-hover/sub:opacity-100 transition-opacity shrink-0">
                                       <button
                                         type="button"
