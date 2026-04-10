@@ -1544,25 +1544,21 @@ export default function TransactionsPage() {
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1, duration: 0.25 }}
-          className="mb-2 shrink-0 sm:mb-3"
+          className="mb-3 flex w-full min-w-0 shrink-0 flex-row flex-nowrap items-stretch gap-3 sm:mb-4"
         >
-          <FlowThemeSlicer
-            selectedFlowTheme={filters.flowTheme}
-            onSelect={onFlowThemeSelect}
-          />
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.12, duration: 0.25 }}
-          className="mb-3 shrink-0 sm:mb-4"
-        >
-          <CategorySlicer
-            options={categoryOptionsForSlicer}
-            selectedId={filters.categoryId}
-            onSelect={(categoryId) => setFilters((f) => ({ ...f, categoryId }))}
-          />
+          <div className="min-w-0 flex-1">
+            <FlowThemeSlicer
+              selectedFlowTheme={filters.flowTheme}
+              onSelect={onFlowThemeSelect}
+            />
+          </div>
+          <div className="min-w-0 flex-1">
+            <CategorySlicer
+              options={categoryOptionsForSlicer}
+              selectedId={filters.categoryId}
+              onSelect={(categoryId) => setFilters((f) => ({ ...f, categoryId }))}
+            />
+          </div>
         </motion.div>
 
         {/* Transaction Table — fills remaining viewport; list scrolls inside */}
