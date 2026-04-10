@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef, useState, type DependencyList, type ReactNode } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { TransactionCategoryIcon } from "@/components/transaction-category-icon";
 import { cn } from "@/lib/utils";
 import type { CategoryFlowTheme } from "@/lib/category-flow-theme";
@@ -38,6 +39,87 @@ const THEME_CHIP: Record<CategoryFlowTheme, { idle: string; active: string }> = 
 };
 
 const DRAG_THRESHOLD_PX = 8;
+const SCROLL_STEP_RATIO = 0.82;
+
+const SLICER_CHEVRON_BTN =
+  "flex h-6 w-7 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-white/12 bg-black/30 px-1 text-white/70 transition-colors hover:border-white/25 hover:bg-white/[0.06] hover:text-white disabled:cursor-not-allowed disabled:pointer-events-none disabled:opacity-25";
+
+function useSlicerScrollState(deps: DependencyList) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [canLeft, setCanLeft] = useState(false);
+  const [canRight, setCanRight] = useState(false);
+
+  const updateScrollEdges = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const { scrollLeft, scrollWidth, clientWidth } = el;
+    setCanLeft(scrollLeft > 2);
+    setCanRight(scrollLeft < scrollWidth - clientWidth - 2);
+  }, []);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    updateScrollEdges();
+    el.addEventListener("scroll", updateScrollEdges, { passive: true });
+    const ro = new ResizeObserver(updateScrollEdges);
+    ro.observe(el);
+    return () => {
+      el.removeEventListener("scroll", updateScrollEdges);
+      ro.disconnect();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- deps drive re-measure when content changes
+  }, [updateScrollEdges, ...deps]);
+
+  const scrollByDir = useCallback((dir: -1 | 1) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const delta = Math.max(200, el.clientWidth * SCROLL_STEP_RATIO) * dir;
+    el.scrollBy({ left: delta, behavior: "smooth" });
+  }, []);
+
+  return { scrollRef, canLeft, canRight, scrollByDir };
+}
+
+function SlicerChevronRow({
+  children,
+  canLeft,
+  canRight,
+  scrollByDir,
+  leftAria,
+  rightAria,
+}: {
+  children: ReactNode;
+  canLeft: boolean;
+  canRight: boolean;
+  scrollByDir: (dir: -1 | 1) => void;
+  leftAria: string;
+  rightAria: string;
+}) {
+  return (
+    <div className="flex min-w-0 flex-1 items-center gap-0.5 sm:gap-1.5">
+      <button
+        type="button"
+        aria-label={leftAria}
+        disabled={!canLeft}
+        onClick={() => scrollByDir(-1)}
+        className={cn(SLICER_CHEVRON_BTN)}
+      >
+        <ChevronLeft className="h-4 w-4" strokeWidth={2} />
+      </button>
+      {children}
+      <button
+        type="button"
+        aria-label={rightAria}
+        disabled={!canRight}
+        onClick={() => scrollByDir(1)}
+        className={cn(SLICER_CHEVRON_BTN)}
+      >
+        <ChevronRight className="h-4 w-4" strokeWidth={2} />
+      </button>
+    </div>
+  );
+}
 
 function chipClass(theme: CategoryFlowTheme, selected: boolean): string {
   const t = THEME_CHIP[theme];
@@ -68,9 +150,11 @@ export function CategorySlicer({
   showLabel?: boolean;
 }) {
   const allSelected = selectedId === "";
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const { scrollRef, canLeft, canRight, scrollByDir } = useSlicerScrollState([options.length]);
   const onSelectRef = useRef(onSelect);
-  onSelectRef.current = onSelect;
+  useEffect(() => {
+    onSelectRef.current = onSelect;
+  }, [onSelect]);
 
   const dragRef = useRef<{
     pointerId: number;
@@ -97,7 +181,7 @@ export function CategorySlicer({
       pendingSelect,
     };
     el.setPointerCapture(e.pointerId);
-  }, []);
+  }, [scrollRef]);
 
   const onPointerMoveStrip = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     const d = dragRef.current;
@@ -106,7 +190,7 @@ export function CategorySlicer({
     const dx = e.clientX - d.startX;
     el.scrollLeft = d.startScroll - dx;
     if (Math.abs(dx) > DRAG_THRESHOLD_PX) d.moved = true;
-  }, []);
+  }, [scrollRef]);
 
   const onPointerUpStrip = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     const d = dragRef.current;
@@ -128,7 +212,7 @@ export function CategorySlicer({
     if (!moved && pending !== undefined) {
       onSelectRef.current(pending);
     }
-  }, []);
+  }, [scrollRef]);
 
   return (
     <div className="rounded-xl border border-white/[0.09] bg-gradient-to-b from-white/[0.07] to-white/[0.02] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] sm:rounded-2xl sm:p-2">
@@ -138,66 +222,74 @@ export function CategorySlicer({
             Category
           </p>
         ) : null}
-        <div
-          ref={scrollRef}
-          role="presentation"
-          onPointerDown={onPointerDownStrip}
-          onPointerMove={onPointerMoveStrip}
-          onPointerUp={onPointerUpStrip}
-          onPointerCancel={onPointerUpStrip}
-          className={cn(
-            "flex min-h-6 min-w-0 flex-1 touch-pan-x gap-1.5 overflow-x-auto overscroll-x-contain px-1 py-0 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.14)_transparent]",
-            "cursor-grab active:cursor-grabbing select-none",
-          )}
+        <SlicerChevronRow
+          canLeft={canLeft}
+          canRight={canRight}
+          scrollByDir={scrollByDir}
+          leftAria="Scroll categories left"
+          rightAria="Scroll categories right"
         >
-          <button
-            type="button"
-            data-slicer-chip
-            data-slicer-value=""
-            onKeyDown={(e) => chipKeyDown(e, onSelect, "")}
+          <div
+            ref={scrollRef}
+            role="presentation"
+            onPointerDown={onPointerDownStrip}
+            onPointerMove={onPointerMoveStrip}
+            onPointerUp={onPointerUpStrip}
+            onPointerCancel={onPointerUpStrip}
             className={cn(
-              "flex h-6 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border px-2 py-0 transition-all duration-200",
-              allSelected
-                ? "border-[#0BC18D]/55 bg-[#0BC18D]/18 text-white shadow-[0_0_26px_-10px_rgba(11,193,141,0.6)] ring-1 ring-[#0BC18D]/30"
-                : "border-white/12 bg-black/25 text-white/85 hover:border-white/22 hover:bg-white/[0.07]",
+              "flex min-h-6 min-w-0 flex-1 touch-pan-x gap-1.5 overflow-x-auto overscroll-x-contain px-0.5 py-0 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.14)_transparent]",
+              "cursor-grab active:cursor-grabbing select-none",
             )}
-            aria-pressed={allSelected}
           >
-            <TransactionCategoryIcon preset="all" size="xs" />
-            <span className="max-w-[5.5rem] truncate text-left text-[10px] font-semibold leading-none sm:max-w-[9rem]">
-              All categories
-            </span>
-          </button>
+            <button
+              type="button"
+              data-slicer-chip
+              data-slicer-value=""
+              onKeyDown={(e) => chipKeyDown(e, onSelect, "")}
+              className={cn(
+                "flex h-6 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border px-2 py-0 transition-all duration-200",
+                allSelected
+                  ? "border-[#0BC18D]/55 bg-[#0BC18D]/18 text-white shadow-[0_0_26px_-10px_rgba(11,193,141,0.6)] ring-1 ring-[#0BC18D]/30"
+                  : "border-white/12 bg-black/25 text-white/85 hover:border-white/22 hover:bg-white/[0.07]",
+              )}
+              aria-pressed={allSelected}
+            >
+              <TransactionCategoryIcon preset="all" size="xs" />
+              <span className="max-w-[5.5rem] truncate text-left text-[10px] font-semibold leading-none sm:max-w-[9rem]">
+                All categories
+              </span>
+            </button>
 
-          {options.map((opt) => {
-            const selected = selectedId === opt.value;
-            return (
-              <button
-                key={opt.value}
-                type="button"
-                data-slicer-chip
-                data-slicer-value={opt.value}
-                onKeyDown={(e) => chipKeyDown(e, onSelect, opt.value)}
-                className={cn(
-                  "flex h-6 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border px-2 py-0",
-                  chipClass(opt.flowTheme, selected),
-                )}
-                aria-pressed={selected}
-                title={opt.label}
-              >
-                <TransactionCategoryIcon
-                  categoryName={opt.categoryName}
-                  subcategoryName={opt.subcategoryName}
-                  categorySuggestion={null}
-                  size="xs"
-                />
-                <span className="max-w-[5.5rem] truncate text-left text-[10px] font-semibold leading-none sm:max-w-[9rem]">
-                  {opt.label}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+            {options.map((opt) => {
+              const selected = selectedId === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  data-slicer-chip
+                  data-slicer-value={opt.value}
+                  onKeyDown={(e) => chipKeyDown(e, onSelect, opt.value)}
+                  className={cn(
+                    "flex h-6 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border px-2 py-0",
+                    chipClass(opt.flowTheme, selected),
+                  )}
+                  aria-pressed={selected}
+                  title={opt.label}
+                >
+                  <TransactionCategoryIcon
+                    categoryName={opt.categoryName}
+                    subcategoryName={opt.subcategoryName}
+                    categorySuggestion={null}
+                    size="xs"
+                  />
+                  <span className="max-w-[5.5rem] truncate text-left text-[10px] font-semibold leading-none sm:max-w-[9rem]">
+                    {opt.label}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </SlicerChevronRow>
       </div>
     </div>
   );
@@ -255,9 +347,11 @@ export function SubcategoryTypeSlicer({
   showLabel?: boolean;
 }) {
   const allSelected = selectedType === "";
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const { scrollRef, canLeft, canRight, scrollByDir } = useSlicerScrollState([]);
   const onSelectRef = useRef(onSelect);
-  onSelectRef.current = onSelect;
+  useEffect(() => {
+    onSelectRef.current = onSelect;
+  }, [onSelect]);
 
   const dragRef = useRef<{
     pointerId: number;
@@ -281,7 +375,7 @@ export function SubcategoryTypeSlicer({
       pendingSelect,
     };
     el.setPointerCapture(e.pointerId);
-  }, []);
+  }, [scrollRef]);
 
   const onPointerMoveStrip = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     const d = dragRef.current;
@@ -290,7 +384,7 @@ export function SubcategoryTypeSlicer({
     const dx = e.clientX - d.startX;
     el.scrollLeft = d.startScroll - dx;
     if (Math.abs(dx) > DRAG_THRESHOLD_PX) d.moved = true;
-  }, []);
+  }, [scrollRef]);
 
   const onPointerUpStrip = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     const d = dragRef.current;
@@ -309,7 +403,7 @@ export function SubcategoryTypeSlicer({
     if (!moved && pending !== undefined) {
       onSelectRef.current(pending);
     }
-  }, []);
+  }, [scrollRef]);
 
   return (
     <div className="rounded-xl border border-white/[0.09] bg-gradient-to-b from-white/[0.07] to-white/[0.02] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] sm:rounded-2xl sm:p-2">
@@ -319,18 +413,25 @@ export function SubcategoryTypeSlicer({
             Expense type
           </p>
         ) : null}
-        <div
-          ref={scrollRef}
-          role="presentation"
-          onPointerDown={onPointerDownStrip}
-          onPointerMove={onPointerMoveStrip}
-          onPointerUp={onPointerUpStrip}
-          onPointerCancel={onPointerUpStrip}
-          className={cn(
-            "flex min-h-6 min-w-0 flex-1 touch-pan-x gap-1.5 overflow-x-auto overscroll-x-contain px-1 py-0 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.14)_transparent]",
-            "cursor-grab active:cursor-grabbing select-none",
-          )}
+        <SlicerChevronRow
+          canLeft={canLeft}
+          canRight={canRight}
+          scrollByDir={scrollByDir}
+          leftAria="Scroll expense type options left"
+          rightAria="Scroll expense type options right"
         >
+          <div
+            ref={scrollRef}
+            role="presentation"
+            onPointerDown={onPointerDownStrip}
+            onPointerMove={onPointerMoveStrip}
+            onPointerUp={onPointerUpStrip}
+            onPointerCancel={onPointerUpStrip}
+            className={cn(
+              "flex min-h-6 min-w-0 flex-1 touch-pan-x gap-1.5 overflow-x-auto overscroll-x-contain px-0.5 py-0 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.14)_transparent]",
+              "cursor-grab active:cursor-grabbing select-none",
+            )}
+          >
             <button
               type="button"
               data-subcat-type-slicer-chip
@@ -373,7 +474,8 @@ export function SubcategoryTypeSlicer({
                 </button>
               );
             })}
-        </div>
+          </div>
+        </SlicerChevronRow>
       </div>
     </div>
   );
@@ -398,9 +500,11 @@ export function FlowThemeSlicer({
   showLabel?: boolean;
 }) {
   const allSelected = selectedFlowTheme === "";
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const { scrollRef, canLeft, canRight, scrollByDir } = useSlicerScrollState([]);
   const onSelectRef = useRef(onSelect);
-  onSelectRef.current = onSelect;
+  useEffect(() => {
+    onSelectRef.current = onSelect;
+  }, [onSelect]);
 
   const dragRef = useRef<{
     pointerId: number;
@@ -424,7 +528,7 @@ export function FlowThemeSlicer({
       pendingSelect,
     };
     el.setPointerCapture(e.pointerId);
-  }, []);
+  }, [scrollRef]);
 
   const onPointerMoveStrip = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     const d = dragRef.current;
@@ -433,7 +537,7 @@ export function FlowThemeSlicer({
     const dx = e.clientX - d.startX;
     el.scrollLeft = d.startScroll - dx;
     if (Math.abs(dx) > DRAG_THRESHOLD_PX) d.moved = true;
-  }, []);
+  }, [scrollRef]);
 
   const onPointerUpStrip = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     const d = dragRef.current;
@@ -452,7 +556,7 @@ export function FlowThemeSlicer({
     if (!moved && pending !== undefined) {
       onSelectRef.current(pending);
     }
-  }, []);
+  }, [scrollRef]);
 
   const dotColor: Record<CategoryFlowTheme, string> = {
     inflow: "#22C55E",
@@ -469,18 +573,25 @@ export function FlowThemeSlicer({
             Flow
           </p>
         ) : null}
-        <div
-          ref={scrollRef}
-          role="presentation"
-          onPointerDown={onPointerDownStrip}
-          onPointerMove={onPointerMoveStrip}
-          onPointerUp={onPointerUpStrip}
-          onPointerCancel={onPointerUpStrip}
-          className={cn(
-            "flex min-h-6 min-w-0 flex-1 touch-pan-x gap-1.5 overflow-x-auto overscroll-x-contain px-1 py-0 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.14)_transparent]",
-            "cursor-grab active:cursor-grabbing select-none",
-          )}
+        <SlicerChevronRow
+          canLeft={canLeft}
+          canRight={canRight}
+          scrollByDir={scrollByDir}
+          leftAria="Scroll flow options left"
+          rightAria="Scroll flow options right"
         >
+          <div
+            ref={scrollRef}
+            role="presentation"
+            onPointerDown={onPointerDownStrip}
+            onPointerMove={onPointerMoveStrip}
+            onPointerUp={onPointerUpStrip}
+            onPointerCancel={onPointerUpStrip}
+            className={cn(
+              "flex min-h-6 min-w-0 flex-1 touch-pan-x gap-1.5 overflow-x-auto overscroll-x-contain px-0.5 py-0 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.14)_transparent]",
+              "cursor-grab active:cursor-grabbing select-none",
+            )}
+          >
             <button
               type="button"
               data-flow-slicer-chip
@@ -523,7 +634,8 @@ export function FlowThemeSlicer({
                 </button>
               );
             })}
-        </div>
+          </div>
+        </SlicerChevronRow>
       </div>
     </div>
   );
