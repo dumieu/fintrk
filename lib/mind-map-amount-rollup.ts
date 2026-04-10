@@ -58,12 +58,15 @@ const OUTFLOW_LABEL_ROLLUP: Record<string, string> = {
   "courses & certifications": "Education",
   "books & media": "Education",
   // Health & Fitness
+  health: "Health & Fitness",
   medical: "Health & Fitness",
   pharmacy: "Health & Fitness",
   fitness: "Health & Fitness",
   "health insurance": "Health & Fitness",
   "mental health": "Health & Fitness",
   // Restaurant & Entertainment
+  "food & drink": "Restaurant & Entertainment",
+  entertainment: "Restaurant & Entertainment",
   restaurants: "Restaurant & Entertainment",
   coffee: "Restaurant & Entertainment",
   delivery: "Restaurant & Entertainment",
@@ -80,6 +83,7 @@ const OUTFLOW_LABEL_ROLLUP: Record<string, string> = {
   // Tax
   "income tax": "Tax",
   // Transport
+  transportation: "Transport",
   fuel: "Transport",
   "public transit": "Transport",
   "ride share": "Transport",
@@ -98,12 +102,14 @@ const OUTFLOW_LABEL_ROLLUP: Record<string, string> = {
   // Insurance (general — not health/car/travel)
   insurance: "Insurance",
   // Giving
+  "gifts & donations": "Giving",
   charity: "Giving",
   gifts: "Giving",
   religious: "Giving",
   // Personal care
   "personal care": "Personal Care",
   // Fees
+  financial: "Financial Fees",
   "bank fees": "Financial Fees",
   "interest charges": "Financial Fees",
   "fx fees": "Financial Fees",
