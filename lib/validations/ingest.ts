@@ -2,7 +2,6 @@ import { z } from "zod";
 
 export const aiTransactionSchema = z.object({
   posted_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  value_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   raw_description: z.string().min(1),
   reference_id: z.string().nullable().optional(),
   merchant_name: z.string().nullable().optional(),
@@ -13,7 +12,7 @@ export const aiTransactionSchema = z.object({
   implicit_fx_rate: z.number().nullable().optional(),
   mcc_code: z.number().int().nullable().optional(),
   country_iso: z.string().length(2).nullable().optional(),
-  category_suggestion: z.string().nullable().optional(),
+  category_suggestion: z.string().nullable().optional(), // kept for AI response parsing; not stored in DB
   is_recurring: z.boolean().default(false),
   confidence: z.number().min(0).max(1).default(0.5),
 });

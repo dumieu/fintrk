@@ -91,7 +91,6 @@ export type TransactionCategoryIconProps =
   | (TransactionCategoryIconBase & {
       categoryName: string | null;
       subcategoryName: string | null;
-      categorySuggestion: string | null;
     });
 
 function iconBoxClasses(size: "md" | "sm" | "xs" | undefined) {
@@ -151,12 +150,10 @@ export function TransactionCategoryIcon(props: TransactionCategoryIconProps) {
   const {
     categoryName,
     subcategoryName,
-    categorySuggestion,
   } = props as Extract<TransactionCategoryIconProps, { categoryName: string | null }>;
   const { Icon, variant } = getTransactionCategoryVisual(
     categoryName,
     subcategoryName,
-    categorySuggestion,
   );
   const v = VARIANT[variant];
 

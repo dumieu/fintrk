@@ -1,5 +1,5 @@
 /**
- * Maps raw transaction labels (DB category names + AI category_suggestion strings)
+ * Maps raw transaction labels (DB category names)
  * to FinTRK mind-map parent category names (exact strings used in default-categories).
  *
  * Keys MUST be lowercase trimmed. Values are exact mind-map category `name` fields.

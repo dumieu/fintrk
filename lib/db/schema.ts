@@ -130,8 +130,6 @@ export const userCategories = pgTable(
   ],
 );
 
-/** @deprecated alias kept temporarily — all new code should use userCategories */
-export const categories = userCategories;
 
 // ─── Merchants (deduplicated registry) ───────────────────────────────────────
 
@@ -140,7 +138,7 @@ export const merchants = pgTable(
   {
     id: serial("id").primaryKey(),
     canonicalName: varchar("canonical_name", { length: 255 }).notNull(),
-    categoryId: integer("category_id").references(() => categories.id),
+    categoryId: integer("category_id").references(() => userCategories.id),
     mccCode: integer("mcc_code"),
     countryIso: varchar("country_iso", { length: 2 }),
     logoUrl: text("logo_url"),
@@ -162,14 +160,11 @@ export const transactions = pgTable(
       .references(() => accounts.id),
     statementId: integer("statement_id").references(() => statements.id),
     postedDate: date("posted_date").notNull(),
-    valueDate: date("value_date"),
     rawDescription: text("raw_description").notNull(),
     referenceId: varchar("reference_id", { length: 128 }),
     merchantId: integer("merchant_id").references(() => merchants.id),
     merchantName: varchar("merchant_name", { length: 255 }),
-    mccCode: integer("mcc_code"),
-    categoryId: integer("category_id").references(() => categories.id),
-    categorySuggestion: varchar("category_suggestion", { length: 128 }),
+    categoryId: integer("category_id").references(() => userCategories.id),
     categoryConfidence: numeric("category_confidence", { precision: 3, scale: 2 }),
     baseAmount: numeric("base_amount", { precision: 15, scale: 4 }).notNull(),
     baseCurrency: varchar("base_currency", { length: 3 }).notNull(),
@@ -210,7 +205,7 @@ export const categoryRules = pgTable(
     merchantPattern: varchar("merchant_pattern", { length: 255 }).notNull(),
     categoryId: integer("category_id")
       .notNull()
-      .references(() => categories.id),
+      .references(() => userCategories.id),
     confidence: numeric("confidence", { precision: 3, scale: 2 }).default("1.00"),
     source: varchar("source", { length: 16 }).notNull().default("ai"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -227,7 +222,7 @@ export const recurringPatterns = pgTable(
     userId: varchar("user_id", { length: 255 }).notNull(),
     merchantName: varchar("merchant_name", { length: 255 }).notNull(),
     merchantId: integer("merchant_id").references(() => merchants.id),
-    categoryId: integer("category_id").references(() => categories.id),
+    categoryId: integer("category_id").references(() => userCategories.id),
     intervalDays: integer("interval_days").notNull(),
     intervalLabel: varchar("interval_label", { length: 32 }).notNull(),
     expectedAmount: numeric("expected_amount", { precision: 15, scale: 4 }).notNull(),
@@ -279,7 +274,7 @@ export const budgets = pgTable(
   {
     id: serial("id").primaryKey(),
     userId: varchar("user_id", { length: 255 }).notNull(),
-    categoryId: integer("category_id").references(() => categories.id),
+    categoryId: integer("category_id").references(() => userCategories.id),
     accountId: uuid("account_id").references(() => accounts.id),
     name: varchar("name", { length: 128 }).notNull(),
     amount: numeric("amount", { precision: 15, scale: 2 }).notNull(),

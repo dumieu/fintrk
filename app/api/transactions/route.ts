@@ -106,18 +106,18 @@ export async function GET(request: NextRequest) {
     const where = and(...conditions);
     const needsAccountJoin = Boolean(f.accountKind || acctDigits.length > 0);
 
+    const txnCategory = alias(userCategories, "txn_category");
+    const parentCategory = alias(userCategories, "parent_category");
+
     const sortCol = {
       posted_date: transactions.postedDate,
       base_amount: transactions.baseAmount,
       merchant_name: transactions.merchantName,
-      category: transactions.categorySuggestion,
+      category: txnCategory.name,
     }[f.sortBy] ?? transactions.postedDate;
 
     const orderFn = f.sortDir === "asc" ? asc : desc;
     const offset = (f.page - 1) * f.limit;
-
-    const txnCategory = alias(userCategories, "txn_category");
-    const parentCategory = alias(userCategories, "parent_category");
 
     const amountAggQuery = () =>
       (needsAccountJoin
@@ -163,11 +163,9 @@ export async function GET(request: NextRequest) {
           .select({
             id: transactions.id,
             postedDate: transactions.postedDate,
-            valueDate: transactions.valueDate,
             rawDescription: transactions.rawDescription,
             referenceId: transactions.referenceId,
             merchantName: transactions.merchantName,
-            mccCode: transactions.mccCode,
             baseAmount: transactions.baseAmount,
             baseCurrency: transactions.baseCurrency,
             foreignAmount: transactions.foreignAmount,
@@ -175,13 +173,11 @@ export async function GET(request: NextRequest) {
             implicitFxRate: transactions.implicitFxRate,
             implicitFxSpreadBps: transactions.implicitFxSpreadBps,
             categoryId: transactions.categoryId,
-            categorySuggestion: transactions.categorySuggestion,
             categoryConfidence: transactions.categoryConfidence,
             categoryName: sql<string | null>`
               COALESCE(
                 CASE WHEN ${parentCategory.id} IS NOT NULL THEN ${parentCategory.name} END,
-                ${txnCategory.name},
-                NULLIF(TRIM(${transactions.categorySuggestion}), '')
+                ${txnCategory.name}
               )
             `.as("categoryName"),
             subcategoryName: sql<string | null>`
@@ -264,6 +260,7 @@ export async function PATCH(request: NextRequest) {
 
     const setPayload: { updatedAt: Date; note?: string | null; label?: string | null; merchantName?: string | null } = { updatedAt: new Date() };
     let bulkNoteCount = 0;
+    let bulkLabelCount = 0;
 
     if (parsed.data.note !== undefined) {
       const t = parsed.data.note.trim();
@@ -288,6 +285,22 @@ export async function PATCH(request: NextRequest) {
     if (parsed.data.label !== undefined) {
       const t = parsed.data.label.trim().slice(0, 20);
       setPayload.label = t === "" ? null : t;
+
+      if (parsed.data.labelApplyScope === "merchant" && parsed.data.labelMerchantName) {
+        const mName = parsed.data.labelMerchantName.trim().toLowerCase();
+        if (mName) {
+          const bulkResult = await resilientQuery(() =>
+            db.update(transactions)
+              .set({ label: setPayload.label, updatedAt: new Date() })
+              .where(and(
+                eq(transactions.userId, userId),
+                sql`LOWER(TRIM(${transactions.merchantName})) = ${mName}`,
+              ))
+              .returning({ id: transactions.id }),
+          );
+          bulkLabelCount = bulkResult.length;
+        }
+      }
     }
 
     let bulkMerchantCount = 0;
@@ -365,7 +378,7 @@ export async function PATCH(request: NextRequest) {
       {
         success: true,
         ...(parsed.data.note !== undefined ? { note: setPayload.note ?? null, bulkNoteCount } : {}),
-        ...(parsed.data.label !== undefined ? { label: setPayload.label ?? null } : {}),
+        ...(parsed.data.label !== undefined ? { label: setPayload.label ?? null, bulkLabelCount } : {}),
         ...(parsed.data.merchantName !== undefined ? { merchantName: setPayload.merchantName ?? null, bulkMerchantCount } : {}),
         ...(parsed.data.categoryId !== undefined ? { categoryId: parsed.data.categoryId, bulkCategoryCount } : {}),
       },

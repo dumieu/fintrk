@@ -53,13 +53,12 @@ function norm(s: string | null | undefined): string {
   return (s ?? "").toLowerCase().trim();
 }
 
-/** Resolve icon + color variant from hierarchy labels or AI suggestion text. */
+/** Resolve icon + color variant from hierarchy labels. */
 export function getTransactionCategoryVisual(
   categoryName: string | null,
   subcategoryName: string | null,
-  categorySuggestion: string | null,
 ): TransactionCategoryVisual {
-  const cat = norm(categoryName) || norm(categorySuggestion);
+  const cat = norm(categoryName);
   const sub = norm(subcategoryName);
   const h = `${cat} ${sub}`;
 

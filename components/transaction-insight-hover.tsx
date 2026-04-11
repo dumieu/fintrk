@@ -1,10 +1,10 @@
 "use client";
 
 import type { ReactNode } from "react";
+import type { LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  Calendar,
   Receipt,
   Building2,
   CreditCard,
@@ -28,18 +28,15 @@ import { cn } from "@/lib/utils";
 export interface TransactionInsightData {
   id: string;
   postedDate: string;
-  valueDate: string | null;
   rawDescription: string;
   referenceId: string | null;
   merchantName: string | null;
-  mccCode: number | null;
   baseAmount: string;
   baseCurrency: string;
   foreignAmount: string | null;
   foreignCurrency: string | null;
   implicitFxRate: string | null;
   implicitFxSpreadBps: string | null;
-  categorySuggestion: string | null;
   categoryConfidence: string | null;
   categoryName?: string | null;
   subcategoryName?: string | null;
@@ -57,7 +54,7 @@ export interface TransactionInsightData {
   statementPeriodEnd: string | null;
 }
 
-function Row({ label, children, icon: Icon }: { label: string; children: ReactNode; icon?: typeof Calendar }) {
+function Row({ label, children, icon: Icon }: { label: string; children: ReactNode; icon?: LucideIcon }) {
   return (
     <div className="flex gap-2.5 py-1.5 border-b border-white/[0.06] last:border-0">
       {Icon ? (
@@ -97,11 +94,6 @@ function TransactionInsightPanel({ txn }: { txn: TransactionInsightData }) {
     >
       <div className="rounded-[0.9rem] bg-[#120a28] px-3.5 py-3 backdrop-blur-xl overflow-hidden">
         <section className="mb-1">
-          {txn.valueDate && txn.valueDate !== txn.postedDate ? (
-            <Row label="Value date" icon={Calendar}>
-              {formatDate(txn.valueDate, "long")}
-            </Row>
-          ) : null}
           <Row label="As on statement" icon={Receipt}>
             <span className="whitespace-pre-wrap break-words font-mono text-[10px] text-white/70">
               {txn.rawDescription?.trim() || "—"}
@@ -152,11 +144,6 @@ function TransactionInsightPanel({ txn }: { txn: TransactionInsightData }) {
                   ) : null}
                 </span>
               </span>
-            </Row>
-          ) : null}
-          {txn.mccCode != null ? (
-            <Row label="MCC code" icon={Hash}>
-              {String(txn.mccCode).padStart(4, "0")}
             </Row>
           ) : null}
           <Row label="Pattern" icon={Scale}>
@@ -281,7 +268,7 @@ export function TransactionInsightHover({ txn, children }: { txn: TransactionIns
     <>
       <div
         ref={wrapRef}
-        className="group/txninsight relative min-w-0 cursor-default"
+        className="group/txninsight relative flex min-h-0 min-w-0 cursor-default items-center self-stretch"
         onMouseEnter={() => setOpen(true)}
         onMouseLeave={() => setOpen(false)}
         onFocus={() => setOpen(true)}

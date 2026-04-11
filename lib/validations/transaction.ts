@@ -49,6 +49,10 @@ export const patchTransactionSchema = z
     noteMerchantName: z.string().max(255).optional(),
     /** Max 20 characters; empty string clears (stored as null). */
     label: z.string().max(20).optional(),
+    /** Scope for label update: "this" (single) or "merchant" (all with same merchant). */
+    labelApplyScope: z.enum(["this", "merchant"]).optional(),
+    /** Merchant name for bulk label update when labelApplyScope is "merchant". */
+    labelMerchantName: z.string().max(255).optional(),
     /** Merchant name update; max 255 chars. */
     merchantName: z.string().max(255).optional(),
     /** When true, update merchantName for ALL transactions matching the old name for this user. */

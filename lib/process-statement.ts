@@ -117,7 +117,7 @@ function buildSystemInstruction(subcategoryList: string): string {
 
 For EACH transaction, you MUST:
 
-1. DATES: Extract posted_date (YYYY-MM-DD). If a separate "value date" exists, extract value_date. If only one date column exists, use it for both.
+1. DATES: Extract posted_date (YYYY-MM-DD).
 
 2. DESCRIPTIONS:
    - raw_description: exact text from the statement, unmodified
@@ -137,7 +137,6 @@ For EACH transaction, you MUST:
      - implicit_fx_rate: the implied exchange rate (base_amount / foreign_amount)
 
 4. CLASSIFICATION:
-   - mcc_code: Merchant Category Code (4-digit integer) if determinable from merchant name, null otherwise
    - country_iso: ISO 3166-1 alpha-2 country code, inferred from explicit country indicators, currency, or merchant name recognition. Default to the account's country if ambiguous.
    - category_suggestion: your best category from this exact list: ${subcategoryList}
      IMPORTANT: To determine the correct category, you MUST analyze the ENTIRE raw_description — not only the merchant name. Transaction descriptions often contain keywords like "rental", "groceries", "salary", "insurance", "transfer", "loan", "utilities", "dining", "fuel", etc. that are strong category signals. Always use every available clue from the full description text, any embedded notes, and the merchant name together to pick the most accurate category.
@@ -578,12 +577,11 @@ export async function processStatement(statementId: number) {
     const merchantId = txn.merchant_name ? merchantIdCache.get(canonicalizeMerchant(txn.merchant_name).toLowerCase()) : undefined;
     return {
       userId, accountId, statementId,
-      postedDate: txn.posted_date, valueDate: txn.value_date ?? undefined,
+      postedDate: txn.posted_date,
       rawDescription: txn.raw_description,
       referenceId: sanitizeAiReferenceId(txn.reference_id, txn.merchant_name ?? null, txn.raw_description),
       merchantName: txn.merchant_name?.toLowerCase() ?? undefined, merchantId: merchantId ?? undefined,
-      mccCode: txn.mcc_code ?? undefined, categoryId: catId,
-      categorySuggestion: txn.category_suggestion ?? undefined,
+      categoryId: catId,
       categoryConfidence: txn.confidence?.toString(),
       baseAmount: txn.base_amount.toString(), baseCurrency: txn.base_currency,
       foreignAmount: txn.foreign_amount?.toString() ?? undefined,

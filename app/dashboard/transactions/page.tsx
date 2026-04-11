@@ -1,6 +1,7 @@
 "use client";
 
-import { Fragment, useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { Fragment, useEffect, useLayoutEffect, useState, useCallback, useRef, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,7 @@ import { countryDisplayName, flagEmoji, transactionTypeLabel } from "@/lib/trans
 import { cn } from "@/lib/utils";
 import { CardNetworkLogo } from "@/components/card-network-logo";
 import { TransactionInsightHover } from "@/components/transaction-insight-hover";
+import { TransactionGeminiHintButton } from "@/components/transaction-gemini-hint";
 import { TransactionCategoryIcon } from "@/components/transaction-category-icon";
 import {
   CategorySlicer,
@@ -44,11 +46,9 @@ import {
 interface Transaction {
   id: string;
   postedDate: string;
-  valueDate: string | null;
   rawDescription: string;
   referenceId: string | null;
   merchantName: string | null;
-  mccCode: number | null;
   baseAmount: string;
   baseCurrency: string;
   foreignAmount: string | null;
@@ -56,9 +56,7 @@ interface Transaction {
   implicitFxRate: string | null;
   implicitFxSpreadBps: string | null;
   categoryId: number | null;
-  categorySuggestion: string | null;
   categoryConfidence: string | null;
-  /** Resolved parent category (DB hierarchy) or suggestion fallback. */
   categoryName: string | null;
   /** Leaf category when assigned to a subcategory row; null if top-level only. */
   subcategoryName: string | null;
@@ -265,68 +263,257 @@ function FlagsCell({
 }
 
 const LABEL_MAX_LEN = 20;
+const LABEL_SUGGEST_MAX = 100;
 
 function TransactionLabelCell({
   transactionId,
+  merchantName,
   value,
   onSaved,
+  allLabels,
 }: {
   transactionId: string;
+  merchantName: string | null;
   value: string | null;
-  onSaved: (id: string, label: string | null) => void;
+  onSaved: (id: string, label: string | null, scope: "this" | "merchant", merchantName: string | null) => void;
+  allLabels: string[];
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value ?? "");
+  const [scope, setScope] = useState<"this" | "merchant">("this");
+  const inputRef = useRef<HTMLInputElement>(null);
+  /** Stays in the table cell; used to position the portaled editor above all columns. */
+  const anchorRef = useRef<HTMLDivElement>(null);
+  const skipBlurPersistRef = useRef(false);
+  const [panelRect, setPanelRect] = useState<{
+    top: number;
+    left: number;
+    width: number;
+    maxHeight: number;
+  } | null>(null);
+
+  const LABEL_EDITOR_Z = 2147483646;
 
   useEffect(() => {
-    if (!editing) setDraft(value ?? "");
+    if (!editing) {
+      setDraft(value ?? "");
+      setScope("this");
+      setPanelRect(null);
+    }
   }, [value, editing]);
 
-  const persist = async () => {
-    const trimmed = draft.trim().slice(0, LABEL_MAX_LEN);
+  const filteredSuggestions = useMemo(() => {
+    const selfNorm = (value ?? "").trim().toLowerCase();
+    const q = draft.trim().toLowerCase();
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const raw of allLabels) {
+      const l = raw.trim();
+      if (!l) continue;
+      if (l.toLowerCase() === selfNorm) continue;
+      if (q && !l.toLowerCase().includes(q)) continue;
+      const key = l.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(l);
+    }
+    out.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+    return out.slice(0, LABEL_SUGGEST_MAX);
+  }, [allLabels, value, draft]);
+
+  const updatePanelPosition = useCallback(() => {
+    const el = anchorRef.current;
+    if (!el || !editing) {
+      setPanelRect(null);
+      return;
+    }
+    const rect = el.getBoundingClientRect();
+    const MARGIN = 8;
+    const width = Math.max(240, Math.min(Math.max(rect.width, 240), window.innerWidth - 2 * MARGIN));
+    const left = Math.max(MARGIN, Math.min(rect.left, window.innerWidth - width - MARGIN));
+    const top = Math.max(MARGIN, rect.top);
+    const maxHeight = Math.min(420, Math.max(140, window.innerHeight - top - MARGIN));
+    const next = { top, left, width, maxHeight };
+    setPanelRect((prev) => {
+      if (
+        prev &&
+        prev.top === next.top &&
+        prev.left === next.left &&
+        prev.width === next.width &&
+        prev.maxHeight === next.maxHeight
+      ) {
+        return prev;
+      }
+      return next;
+    });
+  }, [editing]);
+
+  useLayoutEffect(() => {
+    updatePanelPosition();
+  }, [updatePanelPosition, draft, filteredSuggestions.length, scope]);
+
+  useEffect(() => {
+    if (!editing) return;
+    const onWin = () => updatePanelPosition();
+    window.addEventListener("resize", onWin);
+    window.addEventListener("scroll", onWin, true);
+    return () => {
+      window.removeEventListener("resize", onWin);
+      window.removeEventListener("scroll", onWin, true);
+    };
+  }, [editing, updatePanelPosition]);
+
+  const persistWith = async (labelRaw: string, closeEditor = true) => {
+    const trimmed = labelRaw.trim().slice(0, LABEL_MAX_LEN);
     const next = trimmed === "" ? null : trimmed;
     const prev = (value ?? "").trim().slice(0, LABEL_MAX_LEN) || null;
     if (next === prev) {
-      setEditing(false);
+      if (closeEditor) setEditing(false);
       return;
     }
     try {
       const res = await fetch("/api/transactions", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transactionId, label: trimmed }),
+        body: JSON.stringify({
+          transactionId,
+          label: trimmed,
+          labelApplyScope: scope,
+          labelMerchantName: scope === "merchant" ? merchantName : undefined,
+        }),
       });
       if (res.ok) {
         const json = (await res.json()) as { label?: string | null };
-        onSaved(transactionId, json.label ?? next);
+        onSaved(transactionId, json.label ?? next, scope, merchantName);
         dispatchTransactionsChanged();
       }
     } finally {
-      setEditing(false);
+      if (closeEditor) setEditing(false);
     }
   };
 
+  const persistDraft = () => void persistWith(draft, true);
+
+  const editorPortal =
+    editing && panelRect && typeof document !== "undefined"
+      ? createPortal(
+          <div
+            data-label-editor-floating
+            className="flex flex-col gap-1.5 overflow-y-auto rounded-lg border border-white/20 bg-[#120a28] p-2 shadow-2xl shadow-black/70 ring-1 ring-black/50"
+            style={{
+              position: "fixed",
+              top: panelRect.top,
+              left: panelRect.left,
+              width: panelRect.width,
+              maxHeight: panelRect.maxHeight,
+              zIndex: LABEL_EDITOR_Z,
+              backgroundColor: "#120a28",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <input
+              ref={inputRef}
+              type="text"
+              autoFocus
+              maxLength={LABEL_MAX_LEN}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value.slice(0, LABEL_MAX_LEN))}
+              onBlur={(e) => {
+                if (skipBlurPersistRef.current) return;
+                if (e.relatedTarget?.closest("[data-label-editor-floating]")) return;
+                persistDraft();
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  setDraft(value ?? "");
+                  setEditing(false);
+                }
+              }}
+              className="w-full min-w-0 rounded-md border border-white/20 bg-white/[0.06] px-1.5 py-1 font-mono text-[11px] tabular-nums text-white/90 outline-none focus:border-[#0BC18D]/60 focus:ring-1 focus:ring-[#0BC18D]/30"
+              placeholder="Label…"
+              aria-label="Transaction label"
+              aria-expanded={filteredSuggestions.length > 0}
+            />
+            <div
+              className="flex flex-nowrap items-center gap-1.5 whitespace-nowrap"
+              data-label-toggle
+            >
+              <span className="shrink-0 text-[9px] text-white/35">Update for:</span>
+              <div className="inline-flex h-[20px] shrink-0 rounded-full border border-white/10 bg-white/[0.04] p-px text-[9px] font-medium">
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => setScope("this")}
+                  className={cn(
+                    "rounded-full px-2 transition-colors whitespace-nowrap cursor-pointer",
+                    scope === "this"
+                      ? "bg-[#0BC18D]/20 text-[#0BC18D]"
+                      : "text-white/40 hover:text-white/60",
+                  )}
+                >
+                  This item
+                </button>
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => setScope("merchant")}
+                  className={cn(
+                    "rounded-full px-2 transition-colors whitespace-nowrap cursor-pointer",
+                    scope === "merchant"
+                      ? "bg-[#0BC18D]/20 text-[#0BC18D]"
+                      : "text-white/40 hover:text-white/60",
+                  )}
+                >
+                  All with this name
+                </button>
+              </div>
+            </div>
+            {filteredSuggestions.length > 0 ? (
+              <div
+                data-label-suggest
+                role="listbox"
+                aria-label="Existing labels"
+                className="min-h-0 border-t border-white/10 pt-1.5"
+              >
+                <ul className="max-h-[min(200px,35vh)] overflow-y-auto overscroll-contain px-0.5">
+                  {filteredSuggestions.map((lbl) => (
+                    <li key={lbl}>
+                      <button
+                        type="button"
+                        role="option"
+                        className="w-full cursor-pointer rounded-md px-2 py-1.5 text-left font-mono text-[11px] text-white/85 outline-none hover:bg-white/[0.08] focus-visible:bg-white/[0.1] focus-visible:ring-1 focus-visible:ring-[#0BC18D]/40"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          skipBlurPersistRef.current = true;
+                          setDraft(lbl);
+                          void persistWith(lbl, true).finally(() => {
+                            skipBlurPersistRef.current = false;
+                          });
+                        }}
+                      >
+                        {lbl}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </div>,
+          document.body,
+        )
+      : null;
+
   return (
     <div
+      ref={anchorRef}
       className="min-w-0 w-full max-w-full"
       onClick={(e) => e.stopPropagation()}
     >
+      {editorPortal}
       {editing ? (
-        <input
-          type="text"
-          autoFocus
-          maxLength={LABEL_MAX_LEN}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value.slice(0, LABEL_MAX_LEN))}
-          onBlur={() => void persist()}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") {
-              setDraft(value ?? "");
-              setEditing(false);
-            }
-          }}
-          className="w-full min-w-0 rounded-md border border-white/20 bg-white/[0.06] px-1.5 py-1 font-mono text-[11px] tabular-nums text-white/90 outline-none focus:border-[#0BC18D]/60 focus:ring-1 focus:ring-[#0BC18D]/30"
-          aria-label="Transaction label"
+        <div
+          className="min-h-[4.5rem] w-full rounded-md border border-dashed border-white/10 bg-white/[0.02]"
+          aria-hidden
         />
       ) : (
         <button
@@ -334,10 +521,10 @@ function TransactionLabelCell({
           onClick={() => setEditing(true)}
           aria-label="Add or edit label"
           className={cn(
-            "w-full max-w-full truncate text-left font-mono text-[11px] tabular-nums transition-[background-color]",
+            "w-full max-w-full truncate text-left font-mono text-[11px] tabular-nums transition-[background-color,border-color,box-shadow]",
             value?.trim()
               ? "rounded-md px-1.5 py-1 text-white/75 hover:bg-white/[0.06]"
-              : "min-h-[1.75rem] rounded-full bg-white/[0.015] px-2 py-1.5 hover:bg-white/[0.04]",
+              : "min-h-[1.75rem] rounded-full bg-white/[0.015] px-3 py-1.5 hover:bg-white/[0.04]",
           )}
         >
           {value?.trim() ? value : null}
@@ -687,12 +874,11 @@ function CategoryCellEditor({
         <TransactionCategoryIcon
           categoryName={txn.categoryName}
           subcategoryName={txn.subcategoryName}
-          categorySuggestion={txn.categorySuggestion}
           size="md"
         />
         <div className="flex min-w-0 flex-1 flex-col items-start justify-center gap-0.5 text-left">
           <span className="block w-full max-w-full truncate text-[12px] text-white/75">
-            {txn.categoryName ?? txn.categorySuggestion ?? "Uncategorized"}
+            {txn.categoryName ?? "Uncategorized"}
           </span>
           {txn.subcategoryName ? (
             <span className="block w-full max-w-full truncate text-[11px] text-white/45">
@@ -720,12 +906,11 @@ function CategoryCellEditor({
         <TransactionCategoryIcon
           categoryName={txn.categoryName}
           subcategoryName={txn.subcategoryName}
-          categorySuggestion={txn.categorySuggestion}
           size="md"
         />
         <div className="flex min-w-0 flex-1 flex-col items-start justify-center gap-0.5 text-left">
           <span className="block w-full max-w-full truncate text-[12px] text-white/75">
-            {txn.categoryName ?? txn.categorySuggestion ?? "Uncategorized"}
+            {txn.categoryName ?? "Uncategorized"}
           </span>
           {txn.subcategoryName ? (
             <span className="block w-full max-w-full truncate text-[11px] text-white/45">
@@ -1018,6 +1203,25 @@ export default function TransactionsPage() {
   const [categoryOptions, setCategoryOptions] = useState<CategorySlicerOption[]>([]);
   const [amountTotals, setAmountTotals] = useState<AmountTotalRow[]>([]);
   const [userCats, setUserCats] = useState<UserCategory[]>([]);
+  const [distinctLabels, setDistinctLabels] = useState<string[]>([]);
+
+  const loadDistinctLabels = useCallback(() => {
+    fetch("/api/transactions/labels")
+      .then((r) => r.json())
+      .then((d) => {
+        if (Array.isArray(d.labels)) setDistinctLabels(d.labels);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    loadDistinctLabels();
+  }, [loadDistinctLabels]);
+
+  useEffect(() => {
+    window.addEventListener(FINTRK_TRANSACTIONS_CHANGED, loadDistinctLabels);
+    return () => window.removeEventListener(FINTRK_TRANSACTIONS_CHANGED, loadDistinctLabels);
+  }, [loadDistinctLabels]);
 
   const categoryOptionsForSlicer = useMemo(() => {
     if (!filters.flowTheme) return categoryOptions;
@@ -1118,8 +1322,15 @@ export default function TransactionsPage() {
     }
   }, []);
 
-  const saveTransactionLabel = useCallback((id: string, label: string | null) => {
-    setTxns((prev) => prev.map((t) => (t.id === id ? { ...t, label } : t)));
+  const saveTransactionLabel = useCallback((id: string, label: string | null, scope: "this" | "merchant", mName: string | null) => {
+    if (scope === "merchant" && mName) {
+      const mLower = mName.trim().toLowerCase();
+      setTxns((prev) => prev.map((t) =>
+        t.merchantName?.trim().toLowerCase() === mLower ? { ...t, label } : t,
+      ));
+    } else {
+      setTxns((prev) => prev.map((t) => (t.id === id ? { ...t, label } : t)));
+    }
   }, []);
 
   const saveMerchantName = useCallback(async (
@@ -1577,13 +1788,16 @@ export default function TransactionsPage() {
               >
                 {/* Desktop header — sticky within scroll area */}
                 <div className="sticky top-0 z-10 hidden sm:grid sm:grid-cols-[auto_minmax(0,1.65fr)_minmax(4.5rem,6.5rem)_minmax(0,12rem)_max-content_80px_minmax(7rem,1.25fr)_36px] sm:items-center gap-2 border-b border-white/10 bg-[#10082a]/95 px-3 py-2.5 backdrop-blur-md sm:px-4 sm:py-3">
-                  <button
-                    type="button"
-                    onClick={() => toggleSort("posted_date")}
-                    className="flex w-full min-w-0 items-center justify-center gap-1 whitespace-nowrap text-center text-[10px] font-medium tracking-wide text-white/50 hover:text-white/70"
-                  >
-                    Date <ArrowUpDown className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
-                  </button>
+                  <div className="flex min-w-0 items-center justify-center gap-1">
+                    <span className="inline-flex h-7 w-7 shrink-0" aria-hidden />
+                    <button
+                      type="button"
+                      onClick={() => toggleSort("posted_date")}
+                      className="flex min-w-0 flex-1 items-center justify-center gap-1 whitespace-nowrap text-center text-[10px] font-medium tracking-wide text-white/50 hover:text-white/70"
+                    >
+                      Date <ArrowUpDown className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
+                    </button>
+                  </div>
                   <span className="block w-full min-w-0 text-center text-[10px] font-medium tracking-wide text-white/50">Description</span>
                   <span className="block w-full min-w-0 truncate text-center text-[10px] font-medium tracking-wide text-white/50">Label</span>
                   <div className="flex min-w-0 w-full justify-center px-0.5 text-center">
@@ -1617,8 +1831,11 @@ export default function TransactionsPage() {
                         className="relative grid grid-cols-[auto_1fr] gap-1.5 px-2.5 py-2.5 pr-10 transition-colors hover:bg-white/[0.06] sm:grid-cols-[auto_minmax(0,1.65fr)_minmax(4.5rem,6.5rem)_minmax(0,12rem)_max-content_80px_minmax(7rem,1.25fr)_36px] sm:gap-2 sm:px-4 sm:py-3 sm:pr-4"
                       >
                         <TransactionInsightHover txn={txn}>
-                          <div className="text-xs text-white/65 tabular-nums whitespace-nowrap pr-1 py-0.5 -my-0.5 rounded-md ring-0 group-hover/txninsight:ring-1 group-hover/txninsight:ring-white/15 group-hover/txninsight:bg-white/[0.04] transition-[box-shadow,background]">
-                            {formatDate(txn.postedDate, "ddMmmYy")}
+                          <div className="flex min-w-0 items-center gap-0.5 sm:gap-1">
+                            <TransactionGeminiHintButton txn={txn} />
+                            <div className="min-w-0 text-xs text-white/65 tabular-nums whitespace-nowrap py-0.5 -my-0.5 rounded-md pr-1 ring-0 group-hover/txninsight:ring-1 group-hover/txninsight:ring-white/15 group-hover/txninsight:bg-white/[0.04] transition-[box-shadow,background]">
+                              {formatDate(txn.postedDate, "ddMmmYy")}
+                            </div>
                           </div>
                         </TransactionInsightHover>
                         <div className="min-w-0">
@@ -1632,22 +1849,23 @@ export default function TransactionsPage() {
                             <TransactionCategoryIcon
                               categoryName={txn.categoryName}
                               subcategoryName={txn.subcategoryName}
-                              categorySuggestion={txn.categorySuggestion}
                               size="sm"
                               className="mt-0.5"
                             />
                             <span className="min-w-0 flex-1 truncate">
                               {txn.subcategoryName
-                                ? `${txn.categoryName ?? txn.categorySuggestion ?? "—"} · ${txn.subcategoryName}`
-                                : (txn.categoryName ?? txn.categorySuggestion ?? "Uncategorized")}
+                                ? `${txn.categoryName ?? "—"} · ${txn.subcategoryName}`
+                                : (txn.categoryName ?? "Uncategorized")}
                             </span>
                           </div>
                         </div>
                         <div className="col-span-2 flex min-h-0 items-center sm:col-span-1 sm:h-full sm:min-w-0">
                           <TransactionLabelCell
                             transactionId={txn.id}
+                            merchantName={txn.merchantName}
                             value={txn.label ?? null}
                             onSaved={saveTransactionLabel}
+                            allLabels={distinctLabels}
                           />
                         </div>
                         <div className="hidden min-w-0 sm:flex sm:h-full sm:w-full sm:items-center sm:justify-start">

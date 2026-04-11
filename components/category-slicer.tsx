@@ -279,7 +279,6 @@ export function CategorySlicer({
                   <TransactionCategoryIcon
                     categoryName={opt.categoryName}
                     subcategoryName={opt.subcategoryName}
-                    categorySuggestion={null}
                     size="xs"
                   />
                   <span className="max-w-[5.5rem] truncate text-left text-[10px] font-semibold leading-none sm:max-w-[9rem]">

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
-import { transactions, accounts, recurringPatterns } from "@/lib/db/schema";
+import { transactions, accounts, recurringPatterns, userCategories } from "@/lib/db/schema";
 import { eq, and, gte, lte, sql, desc, ne } from "drizzle-orm";
 import { logServerError } from "@/lib/safe-error";
 
@@ -75,7 +75,6 @@ export async function GET() {
             baseAmount: transactions.baseAmount,
             baseCurrency: transactions.baseCurrency,
             foreignCurrency: transactions.foreignCurrency,
-            categorySuggestion: transactions.categorySuggestion,
             countryIso: transactions.countryIso,
             isRecurring: transactions.isRecurring,
           })
@@ -92,11 +91,12 @@ export async function GET() {
       resilientQuery(() =>
         db
           .select({
-            category: transactions.categorySuggestion,
+            category: userCategories.name,
             total: sql<string>`SUM(ABS(CAST(${transactions.baseAmount} AS numeric)))`,
             count: sql<number>`COUNT(*)::int`,
           })
           .from(transactions)
+          .leftJoin(userCategories, eq(transactions.categoryId, userCategories.id))
           .where(
             and(
               eq(transactions.userId, userId),
@@ -105,7 +105,7 @@ export async function GET() {
               sql`CAST(${transactions.baseAmount} AS numeric) < 0`,
             ),
           )
-          .groupBy(transactions.categorySuggestion)
+          .groupBy(userCategories.name)
           .orderBy(sql`SUM(ABS(CAST(${transactions.baseAmount} AS numeric))) DESC`)
           .limit(8),
       ),

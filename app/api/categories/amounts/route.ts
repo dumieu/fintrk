@@ -25,7 +25,7 @@ export async function GET() {
     if (!userId) return unauthorizedResponse();
 
     const labelExpr =
-      sql<string>`COALESCE(${userCategories.name}, NULLIF(TRIM(${transactions.categorySuggestion}), ''))`;
+      sql<string>`${userCategories.name}`;
 
     const rows = await resilientQuery(() =>
       db

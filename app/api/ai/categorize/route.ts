@@ -88,7 +88,6 @@ Return a JSON array of objects: [{"id": "uuid", "category": "Category Name", "co
       await resilientQuery(() =>
         db.update(transactions).set({
           categoryId: catId,
-          categorySuggestion: assignment.category,
           categoryConfidence: assignment.confidence.toString(),
           updatedAt: new Date(),
         }).where(and(eq(transactions.id, assignment.id), eq(transactions.userId, userId))),

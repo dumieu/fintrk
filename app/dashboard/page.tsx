@@ -44,7 +44,6 @@ interface DashboardData {
     baseAmount: string;
     baseCurrency: string;
     foreignCurrency: string | null;
-    categorySuggestion: string | null;
     countryIso: string | null;
     isRecurring: boolean;
   }[];
@@ -230,7 +229,6 @@ export default function DashboardPage() {
                               </p>
                               <p className="text-[10px] text-white/50">
                                 {formatDate(txn.postedDate)}
-                                {txn.categorySuggestion && ` · ${txn.categorySuggestion}`}
                                 {txn.countryIso && txn.countryIso !== "US" && (
                                   <span className="ml-1">
                                     <Globe className="w-2.5 h-2.5 inline text-[#AD74FF]" /> {txn.countryIso}
