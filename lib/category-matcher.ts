@@ -1,6 +1,6 @@
 import "server-only";
 import { db, resilientQuery } from "@/lib/db";
-import { categoryRules, categories } from "@/lib/db/schema";
+import { categoryRules, userCategories } from "@/lib/db/schema";
 import { eq, and, or, isNull, desc } from "drizzle-orm";
 
 /**
@@ -37,9 +37,9 @@ export async function matchCategory(
   if (aiSuggestion) {
     const cats = await resilientQuery(() =>
       db
-        .select({ id: categories.id })
-        .from(categories)
-        .where(eq(categories.name, aiSuggestion))
+        .select({ id: userCategories.id })
+        .from(userCategories)
+        .where(eq(userCategories.name, aiSuggestion))
         .limit(1),
     );
     if (cats.length > 0) return cats[0].id;
