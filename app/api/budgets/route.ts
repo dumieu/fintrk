@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
-import { budgets, transactions, categories } from "@/lib/db/schema";
+import { budgets, transactions } from "@/lib/db/schema";
 import { eq, and, gte, lte, sql } from "drizzle-orm";
 import { createBudgetSchema } from "@/lib/validations/budget";
 import { logServerError } from "@/lib/safe-error";
