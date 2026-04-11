@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
-import { transactions, accounts } from "@/lib/db/schema";
+import { transactions, accounts, userCategories } from "@/lib/db/schema";
 import { eq, and, sql, desc } from "drizzle-orm";
 import { logServerError } from "@/lib/safe-error";
 
@@ -26,12 +26,13 @@ export async function GET() {
         resilientQuery(() =>
           db
             .select({
-              category: transactions.categorySuggestion,
+              category: userCategories.name,
               total: sql<string>`SUM(ABS(CAST(${transactions.baseAmount} AS numeric)))`,
             })
             .from(transactions)
+            .leftJoin(userCategories, eq(transactions.categoryId, userCategories.id))
             .where(and(eq(transactions.userId, userId), sql`CAST(${transactions.baseAmount} AS numeric) < 0`))
-            .groupBy(transactions.categorySuggestion)
+            .groupBy(userCategories.name)
             .orderBy(sql`SUM(ABS(CAST(${transactions.baseAmount} AS numeric))) DESC`)
             .limit(10),
         ),

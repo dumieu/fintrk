@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
-import { transactions, aiInsights, recurringPatterns } from "@/lib/db/schema";
+import { transactions, aiInsights, recurringPatterns, userCategories } from "@/lib/db/schema";
 import { eq, and, gte, sql, desc } from "drizzle-orm";
 import { ai, GEMINI_MODEL } from "@/lib/gemini";
 import { logAiCost } from "@/lib/ai-cost";
@@ -24,12 +24,14 @@ export async function POST() {
     const [categoryTotals, recurring, txnCount] = await Promise.all([
       resilientQuery(() =>
         db.select({
-          category: transactions.categorySuggestion,
+          category: userCategories.name,
           total: sql<string>`SUM(ABS(CAST(${transactions.baseAmount} AS numeric)))`,
           count: sql<number>`COUNT(*)::int`,
-        }).from(transactions).where(
-          and(eq(transactions.userId, userId), gte(transactions.postedDate, dateFrom), sql`CAST(${transactions.baseAmount} AS numeric) < 0`),
-        ).groupBy(transactions.categorySuggestion).orderBy(sql`SUM(ABS(CAST(${transactions.baseAmount} AS numeric))) DESC`).limit(15),
+        }).from(transactions)
+          .leftJoin(userCategories, eq(transactions.categoryId, userCategories.id))
+          .where(
+            and(eq(transactions.userId, userId), gte(transactions.postedDate, dateFrom), sql`CAST(${transactions.baseAmount} AS numeric) < 0`),
+          ).groupBy(userCategories.name).orderBy(sql`SUM(ABS(CAST(${transactions.baseAmount} AS numeric))) DESC`).limit(15),
       ),
       resilientQuery(() =>
         db.select().from(recurringPatterns).where(and(eq(recurringPatterns.userId, userId), eq(recurringPatterns.isActive, true))),
