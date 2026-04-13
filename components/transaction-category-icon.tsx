@@ -82,6 +82,8 @@ type TransactionCategoryIconBase = {
   /** `md` = table cell; `sm` = compact row; `xs` = chip height (~h-6) with time-slicer row. */
   size?: "md" | "sm" | "xs";
   className?: string;
+  /** Slate-only shell (e.g. neutral category slicer chips). */
+  monochrome?: boolean;
 };
 
 export type TransactionCategoryIconProps =
@@ -118,6 +120,7 @@ function iconBoxClasses(size: "md" | "sm" | "xs" | undefined) {
 
 export function TransactionCategoryIcon(props: TransactionCategoryIconProps) {
   const className = props.className;
+  const mono = props.monochrome === true;
   const box = iconBoxClasses(props.size);
 
   if ("preset" in props && props.preset === "all") {
@@ -128,8 +131,8 @@ export function TransactionCategoryIcon(props: TransactionCategoryIconProps) {
         className={cn(
           "flex shrink-0 bg-gradient-to-br p-px",
           box.outer,
-          v.ring,
-          v.glow,
+          mono ? "from-white/20 via-white/10 to-white/[0.06] shadow-none" : v.ring,
+          mono ? "" : v.glow,
           className,
         )}
         aria-hidden
@@ -138,10 +141,13 @@ export function TransactionCategoryIcon(props: TransactionCategoryIconProps) {
           className={cn(
             "flex h-full w-full items-center justify-center backdrop-blur-sm",
             box.inner,
-            v.inner,
+            mono ? "bg-[#0b0d12]/95 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]" : v.inner,
           )}
         >
-          <Icon className={cn(v.icon, box.icon)} strokeWidth={2} />
+          <Icon
+            className={cn(mono ? "text-white/55 drop-shadow-none" : v.icon, box.icon)}
+            strokeWidth={2}
+          />
         </div>
       </div>
     );
@@ -155,15 +161,15 @@ export function TransactionCategoryIcon(props: TransactionCategoryIconProps) {
     categoryName,
     subcategoryName,
   );
-  const v = VARIANT[variant];
+  const v = VARIANT[mono ? "slate" : variant];
 
   return (
     <div
       className={cn(
         "flex shrink-0 bg-gradient-to-br p-px",
         box.outer,
-        v.ring,
-        v.glow,
+        mono ? "from-white/20 via-white/10 to-white/[0.06] shadow-none" : v.ring,
+        mono ? "" : v.glow,
         className,
       )}
       aria-hidden
@@ -172,10 +178,13 @@ export function TransactionCategoryIcon(props: TransactionCategoryIconProps) {
         className={cn(
           "flex h-full w-full items-center justify-center backdrop-blur-sm",
           box.inner,
-          v.inner,
+          mono ? "bg-[#0b0d12]/95 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]" : v.inner,
         )}
       >
-        <Icon className={cn(v.icon, box.icon)} strokeWidth={2} />
+        <Icon
+          className={cn(mono ? "text-white/55 drop-shadow-none" : v.icon, box.icon)}
+          strokeWidth={2}
+        />
       </div>
     </div>
   );

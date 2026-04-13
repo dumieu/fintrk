@@ -1,24 +1,25 @@
 "use client";
 
 import {
-  useState, useRef, useEffect, useCallback, useMemo,
+  useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo,
   type KeyboardEvent as ReactKeyboardEvent,
+  type MutableRefObject,
 } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  ChevronRight, ChevronDown,
   Plus, Pencil, Trash2, Check, X,
-  Store, Loader2,
+  Loader2,
 } from "lucide-react";
-import { FINTRK_TRANSACTIONS_CHANGED } from "@/lib/notify-transactions-changed";
 import {
   flowThemeForCategoryNames,
   type CategoryFlowTheme,
 } from "@/lib/category-flow-theme";
+import { isReservedOtherOutflowCategoryName } from "@/lib/reserved-user-categories";
 import {
   CategorySlicer,
   FlowThemeSlicer,
   SubcategoryTypeSlicer,
+  SubcategoryTypeInlinePicker,
   type CategorySlicerOption,
 } from "@/components/category-slicer";
 
@@ -67,23 +68,37 @@ const SUBCAT_TYPE_META: Record<SubcategoryType, { label: string; tip: string; bg
   discretionary:        { label: "Discretionary", tip: "Discretionary — fully optional, nice-to-have spending (e.g. dining out, streaming, travel)", bg: "bg-[#22C55E]/10", text: "text-[#86EFAC]", border: "border-[#22C55E]/25" },
 };
 
-function SubcategoryTypePill({ value, onClick }: { value: SubcategoryType | null; onClick: () => void }) {
-  const meta = value ? SUBCAT_TYPE_META[value] : null;
-  return (
-    <button
-      type="button"
-      onClick={(e) => { e.stopPropagation(); onClick(); }}
-      title={meta ? `${meta.tip} — click to change` : "Click to classify this expense"}
-      className={[
-        "shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[9px] font-medium border cursor-pointer transition-colors mr-1",
-        meta
-          ? `${meta.bg} ${meta.text} ${meta.border} hover:brightness-125`
-          : "bg-white/[0.04] text-white/25 border-white/[0.08] hover:text-white/45",
-      ].join(" ")}
-    >
-      {meta?.label ?? "—"}
-    </button>
-  );
+/** Category Mapping cards only: catch-all subs named like "Other…" render last. */
+function sortSubcategoriesOthersLast(subs: SubcategoryItem[]): SubcategoryItem[] {
+  return [...subs].sort((a, b) => {
+    const aOther = a.name.trim().toLowerCase().startsWith("other");
+    const bOther = b.name.trim().toLowerCase().startsWith("other");
+    if (aOther !== bOther) return aOther ? 1 : -1;
+    const oa = a.sortOrder ?? 0;
+    const ob = b.sortOrder ?? 0;
+    if (oa !== ob) return oa - ob;
+    return a.id - b.id;
+  });
+}
+
+/** Top-level "Other Outflow" or any subcategory under that parent. */
+function isLockedOtherOutflowTreeCategory(categories: CategoryItem[], targetId: number): boolean {
+  for (const c of categories) {
+    if (c.id === targetId && isReservedOtherOutflowCategoryName(c.name)) return true;
+    if (isReservedOtherOutflowCategoryName(c.name) && c.subcategories.some((s) => s.id === targetId)) return true;
+  }
+  return false;
+}
+
+function subcategoryPillClasses(
+  subcategoryType: SubcategoryType | null,
+  isOutflow: boolean,
+): string {
+  if (isOutflow && subcategoryType) {
+    const m = SUBCAT_TYPE_META[subcategoryType];
+    return `${m.bg} ${m.text} ${m.border}`;
+  }
+  return "bg-white/[0.05] text-white/50 border-white/[0.08]";
 }
 
 function InlineInput({
@@ -92,12 +107,15 @@ function InlineInput({
   onCancel,
   color,
   placeholder = "Enter name…",
+  /** Parent calls before unmounting (e.g. click-outside runs on mousedown before input blur). */
+  flushRef,
 }: {
   value: string;
   onSave: (v: string) => void;
   onCancel: () => void;
   color: string;
   placeholder?: string;
+  flushRef?: MutableRefObject<(() => void) | null>;
 }) {
   const [val, setVal] = useState(value);
   const ref = useRef<HTMLInputElement>(null);
@@ -111,13 +129,21 @@ function InlineInput({
     return () => clearTimeout(t);
   }, []);
 
-  const commit = () => {
+  const commit = useCallback(() => {
     if (committed.current) return;
     committed.current = true;
     const trimmed = val.trim();
     if (trimmed && trimmed !== value) onSave(trimmed);
     else onCancel();
-  };
+  }, [val, value, onSave, onCancel]);
+
+  useLayoutEffect(() => {
+    if (!flushRef) return;
+    flushRef.current = commit;
+    return () => {
+      flushRef.current = null;
+    };
+  }, [flushRef, commit]);
 
   const onKey = (e: ReactKeyboardEvent) => {
     if (e.key === "Enter") { e.preventDefault(); commit(); }
@@ -292,9 +318,6 @@ export function CategoryTableManager() {
   /** `""` = all subcategory types; otherwise filter outflow subs by type. */
   const [subcategoryTypeFilter, setSubcategoryTypeFilter] = useState<"" | SubcategoryType>("");
 
-  // Expand state
-  const [expandedCats, setExpandedCats] = useState<Set<number>>(new Set());
-
   // Editing state
   const [editId, setEditId] = useState<number | null>(null);
 
@@ -302,46 +325,59 @@ export function CategoryTableManager() {
   const [addingCatParent, setAddingCatParent] = useState(false);
   const [addingSubParentId, setAddingSubParentId] = useState<number | null>(null);
 
+  /** Subcategory pill opened for in-place name edit + expense-type picker. */
+  const [activeSubPillId, setActiveSubPillId] = useState<number | null>(null);
+  const activePillPanelRef = useRef<HTMLDivElement | null>(null);
+  /** Saves subcategory name before click-outside unmounts the panel (mousedown precedes blur). */
+  const subPillCommitFlushRef = useRef<(() => void) | null>(null);
+
   // Delete confirmation
   const [delConfirm, setDelConfirm] = useState<{
     id: number; label: string; hasChildren: boolean;
   } | null>(null);
 
-  // Merchants by subcategory
-  const [merchantMap, setMerchantMap] = useState<Record<string, string[]>>({});
-
-  const loadCategories = useCallback(async () => {
-    try {
-      const res = await fetch("/api/user-categories");
-      if (!res.ok) return;
-      const data = await res.json();
-      setCategories(data.categories ?? []);
-      if (loading) {
-        setExpandedCats(new Set((data.categories ?? []).map((c: CategoryItem) => c.id)));
-      }
-    } catch { /* ignore */ }
-    setLoading(false);
-  }, [loading]);
-
-  const loadMerchants = useCallback(async () => {
-    try {
-      const res = await fetch("/api/categories/merchants");
-      if (!res.ok) return;
-      const data = await res.json();
-      setMerchantMap(data.merchants ?? {});
-    } catch { /* ignore */ }
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/user-categories");
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        if (!cancelled) setCategories(data.categories ?? []);
+      } catch { /* ignore */ }
+      if (!cancelled) setLoading(false);
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
-    loadCategories();
-    loadMerchants();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    if (activeSubPillId == null) return;
+    const onDocMouseDown = (e: MouseEvent) => {
+      const el = activePillPanelRef.current;
+      const t = e.target;
+      if (!el || !(t instanceof Node) || el.contains(t)) return;
+      subPillCommitFlushRef.current?.();
+      setActiveSubPillId(null);
+    };
+    document.addEventListener("mousedown", onDocMouseDown);
+    return () => document.removeEventListener("mousedown", onDocMouseDown);
+  }, [activeSubPillId]);
 
   useEffect(() => {
-    const onTxn = () => { loadMerchants(); };
-    window.addEventListener(FINTRK_TRANSACTIONS_CHANGED, onTxn);
-    return () => window.removeEventListener(FINTRK_TRANSACTIONS_CHANGED, onTxn);
-  }, [loadMerchants]);
+    if (activeSubPillId == null) return;
+    if (isLockedOtherOutflowTreeCategory(categories, activeSubPillId)) setActiveSubPillId(null);
+  }, [activeSubPillId, categories]);
+
+  useEffect(() => {
+    if (editId == null) return;
+    if (isLockedOtherOutflowTreeCategory(categories, editId)) setEditId(null);
+  }, [editId, categories]);
+
+  useEffect(() => {
+    if (addingSubParentId == null) return;
+    const p = categories.find((c) => c.id === addingSubParentId);
+    if (p && isReservedOtherOutflowCategoryName(p.name)) setAddingSubParentId(null);
+  }, [addingSubParentId, categories]);
 
   const metaFilteredParents = useMemo(() => {
     if (metaFlowFilter === null) return categories;
@@ -394,13 +430,20 @@ export function CategoryTableManager() {
 
   /** Parents and subcategories after flow + category + expense-type filters. */
   const displayCategories = useMemo(() => {
-    if (!subcategoryTypeFilter) return filteredCategories;
-    return filteredCategories
-      .map((cat) => ({
-        ...cat,
-        subcategories: cat.subcategories.filter((s) => s.subcategoryType === subcategoryTypeFilter),
-      }))
-      .filter((cat) => cat.subcategories.length > 0);
+    const withSubs =
+      !subcategoryTypeFilter
+        ? filteredCategories
+        : filteredCategories
+            .map((cat) => ({
+              ...cat,
+              subcategories: cat.subcategories.filter((s) => s.subcategoryType === subcategoryTypeFilter),
+            }))
+            .filter((cat) => cat.subcategories.length > 0);
+
+    return withSubs.map((cat) => ({
+      ...cat,
+      subcategories: sortSubcategoriesOthersLast(cat.subcategories),
+    }));
   }, [filteredCategories, subcategoryTypeFilter]);
 
   const onMappingFlowSelect = useCallback((ft: string) => {
@@ -415,7 +458,6 @@ export function CategoryTableManager() {
     const num = Number(id);
     if (!Number.isNaN(num)) {
       setFlowFilterId(num);
-      setExpandedCats((p) => new Set(p).add(num));
     }
   }, []);
 
@@ -423,27 +465,8 @@ export function CategoryTableManager() {
     setSubcategoryTypeFilter(t === "" ? "" : (t as SubcategoryType));
   }, []);
 
-  // Toggle helpers
-  const toggleCat = useCallback((id: number) => {
-    setExpandedCats((p) => {
-      const n = new Set(p);
-      n.has(id) ? n.delete(id) : n.add(id);
-      return n;
-    });
-  }, []);
-
-  const expandAll = useCallback(() => {
-    setExpandedCats(new Set(displayCategories.map((c) => c.id)));
-  }, [displayCategories]);
-
-  const collapseAll = useCallback(() => {
-    setExpandedCats(new Set());
-  }, []);
-
-  const cycleSubcategoryType = useCallback(async (id: number, current: SubcategoryType | null) => {
-    const cycle: SubcategoryType[] = ["non-discretionary", "semi-discretionary", "discretionary"];
-    const idx = current ? cycle.indexOf(current) : -1;
-    const next = cycle[(idx + 1) % cycle.length];
+  const setSubcategoryType = useCallback(async (id: number, next: SubcategoryType) => {
+    if (isLockedOtherOutflowTreeCategory(categories, id)) return;
     setCategories((prev) =>
       prev.map((cat) => ({
         ...cat,
@@ -457,46 +480,173 @@ export function CategoryTableManager() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, subcategoryType: next }),
     });
-  }, []);
+  }, [categories]);
 
-  // CRUD via API
+  // CRUD — optimistic-first, then persist in the background.
+
   const renameCat = useCallback(async (id: number, name: string) => {
+    if (isLockedOtherOutflowTreeCategory(categories, id)) return;
     setEditId(null);
-    await fetch("/api/user-categories", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, name }),
-    });
-    await loadCategories();
-  }, [loadCategories]);
+    setActiveSubPillId(null);
+
+    setCategories((prev) =>
+      prev.map((cat) =>
+        cat.id === id
+          ? { ...cat, name }
+          : {
+              ...cat,
+              subcategories: cat.subcategories.map((s) =>
+                s.id === id ? { ...s, name } : s,
+              ),
+            },
+      ),
+    );
+
+    try {
+      await fetch("/api/user-categories", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, name }),
+      });
+    } catch { /* optimistic already applied */ }
+  }, [categories]);
 
   const addCategory = useCallback(async (name: string, parentId?: number) => {
+    if (parentId == null && isReservedOtherOutflowCategoryName(name)) return;
+    if (parentId != null) {
+      const parent = categories.find((c) => c.id === parentId);
+      if (parent && isReservedOtherOutflowCategoryName(parent.name)) return;
+    }
     setAddingCatParent(false);
     setAddingSubParentId(null);
-    await fetch("/api/user-categories", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, parentId }),
-    });
-    await loadCategories();
-    if (parentId) setExpandedCats((p) => new Set(p).add(parentId));
-  }, [loadCategories]);
+
+    const tempId = -(Date.now() + Math.random());
+    const slug = `${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now().toString(36)}`;
+
+    if (parentId) {
+      setCategories((prev) =>
+        prev.map((cat) =>
+          cat.id === parentId
+            ? {
+                ...cat,
+                subcategories: [
+                  ...cat.subcategories,
+                  { id: tempId, name, slug, icon: null, color: null, sortOrder: cat.subcategories.length + 1, subcategoryType: null },
+                ],
+              }
+            : cat,
+        ),
+      );
+    } else {
+      setCategories((prev) => [
+        ...prev,
+        { id: tempId, name, slug, icon: null, color: null, sortOrder: prev.length + 1, subcategories: [] },
+      ]);
+    }
+
+    try {
+      const res = await fetch("/api/user-categories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, parentId }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const realId = data.category?.[0]?.id ?? data.category?.id;
+        if (realId != null) {
+          setCategories((prev) =>
+            prev.map((cat) => {
+              if (cat.id === tempId) return { ...cat, id: realId };
+              return {
+                ...cat,
+                subcategories: cat.subcategories.map((s) =>
+                  s.id === tempId ? { ...s, id: realId } : s,
+                ),
+              };
+            }),
+          );
+        }
+      }
+    } catch { /* optimistic already applied */ }
+  }, [categories]);
 
   const confirmDelete = useCallback(async () => {
     if (!delConfirm) return;
-    await fetch("/api/user-categories", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: delConfirm.id }),
-    });
+    const { id } = delConfirm;
+    if (isLockedOtherOutflowTreeCategory(categories, id)) {
+      setDelConfirm(null);
+      return;
+    }
+    setActiveSubPillId(null);
     setDelConfirm(null);
-    await loadCategories();
-  }, [delConfirm, loadCategories]);
+
+    setCategories((prev) => {
+      const isTopLevel = prev.some((c) => c.id === id);
+      if (isTopLevel) return prev.filter((c) => c.id !== id);
+      return prev.map((cat) => ({
+        ...cat,
+        subcategories: cat.subcategories.filter((s) => s.id !== id),
+      }));
+    });
+
+    try {
+      // Never send JSON body on DELETE — many stacks drop it; server reads `?id=`.
+      const res = await fetch(
+        `/api/user-categories?id=${encodeURIComponent(String(id))}`,
+        { method: "DELETE" },
+      );
+      if (!res.ok) {
+        const r = await fetch("/api/user-categories");
+        if (r.ok) {
+          const data = await r.json();
+          setCategories(data.categories ?? []);
+        }
+      }
+    } catch {
+      try {
+        const r = await fetch("/api/user-categories");
+        if (r.ok) {
+          const data = await r.json();
+          setCategories(data.categories ?? []);
+        }
+      } catch { /* ignore */ }
+    }
+  }, [delConfirm, categories]);
 
   // Stats
   const totalCats = categories.length;
   const totalSubs = categories.reduce((s, c) => s + c.subcategories.length, 0);
   const visibleSubs = displayCategories.reduce((s, c) => s + c.subcategories.length, 0);
+
+  const outflowExpenseSubtypeTotals = useMemo(() => {
+    let non = 0;
+    let semi = 0;
+    let disc = 0;
+    for (const cat of categories) {
+      if (flowThemeForCategoryNames(null, cat.name) !== "outflow") continue;
+      for (const s of cat.subcategories) {
+        if (s.subcategoryType === "non-discretionary") non++;
+        else if (s.subcategoryType === "semi-discretionary") semi++;
+        else if (s.subcategoryType === "discretionary") disc++;
+      }
+    }
+    return { non, semi, disc };
+  }, [categories]);
+
+  const expenseSubtypeSummary = (
+    <>
+      <span className="text-white/35"> · </span>
+      <span className="text-white/40">
+        (
+        <span className="font-medium tabular-nums text-[#FCA5A5]">{outflowExpenseSubtypeTotals.non}</span>
+        {" Non-discretionary, "}
+        <span className="font-medium tabular-nums text-[#FDE68A]">{outflowExpenseSubtypeTotals.semi}</span>
+        {" Semi-discretionary, "}
+        <span className="font-medium tabular-nums text-[#86EFAC]">{outflowExpenseSubtypeTotals.disc}</span>
+        {" Discretionary )"}
+      </span>
+    </>
+  );
 
   if (loading) {
     return (
@@ -510,18 +660,21 @@ export function CategoryTableManager() {
     <div className="min-h-[80vh] bg-gradient-to-b from-[#08051a] via-[#10082a] to-[#160e35]">
       <div className="mx-auto max-w-4xl px-4 py-8">
         {/* Flow + expense type slicers — side by side (single row) */}
-        <div className="mb-4 flex w-full min-w-0 flex-row flex-nowrap items-stretch gap-3">
-          <div className="min-w-0 flex-1">
+        <div className="mb-4 flex w-full min-w-0 flex-row flex-wrap items-stretch gap-3">
+          <div className="w-max min-w-0 shrink-0">
             <FlowThemeSlicer
               showLabel={false}
+              neutralChips
+              compact
               selectedFlowTheme={metaFlowFilter ?? ""}
               onSelect={onMappingFlowSelect}
             />
           </div>
           {metaFlowFilter !== "inflow" && metaFlowFilter !== "savings" ? (
-            <div className="min-w-0 flex-1">
+            <div className="w-max min-w-0 shrink-0">
               <SubcategoryTypeSlicer
                 showLabel={false}
+                compact
                 selectedType={subcategoryTypeFilter}
                 onSelect={onMappingSubcategoryTypeSelect}
               />
@@ -533,6 +686,7 @@ export function CategoryTableManager() {
         <div className="mb-6 w-full min-w-0">
           <CategorySlicer
             showLabel={false}
+            neutralChips
             options={mappingCategorySlicerOptions}
             selectedId={flowFilterId === null ? "" : String(flowFilterId)}
             onSelect={onMappingCategorySelect}
@@ -543,10 +697,11 @@ export function CategoryTableManager() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold text-white sm:text-3xl">Category Mapping</h1>
-            <p className="text-sm text-white/50 mt-1">
+            <p className="mt-1 flex flex-wrap items-baseline gap-x-0 text-sm text-white/50">
               {metaFlowFilter === null && flowFilterId === null && !subcategoryTypeFilter ? (
                 <>
                   {totalCats} categories · {totalSubs} subcategories
+                  {expenseSubtypeSummary}
                 </>
               ) : (
                 <>
@@ -578,58 +733,28 @@ export function CategoryTableManager() {
                       </span>
                     </>
                   )}
+                  {expenseSubtypeSummary}
                 </>
               )}
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={expandAll}
-              className="px-3 py-1.5 text-xs font-medium rounded-lg text-white/40 hover:text-white/70 hover:bg-white/[0.06] transition-colors cursor-pointer"
-            >
-              Expand all
-            </button>
-            <button
-              type="button"
-              onClick={collapseAll}
-              className="px-3 py-1.5 text-xs font-medium rounded-lg text-white/40 hover:text-white/70 hover:bg-white/[0.06] transition-colors cursor-pointer"
-            >
-              Collapse all
-            </button>
-          </div>
         </div>
 
-        {/* Category sections */}
-        <div className="space-y-1">
+        {/* Category sections — 1 col on phones, 2 cols from md when container fits */}
+        <div className="grid grid-cols-1 gap-2 sm:gap-3 md:grid-cols-2 md:gap-3">
           {displayCategories.map((cat) => {
-            const catExpanded = expandedCats.has(cat.id);
             const catColor = cat.color ?? "#808080";
             const isOutflow = flowThemeForCategoryNames(null, cat.name) === "outflow";
+            const cardLocked = isReservedOtherOutflowCategoryName(cat.name);
 
             return (
               <div
                 key={cat.id}
-                className="rounded-xl overflow-hidden border border-white/[0.10] bg-white/[0.04]"
+                className="min-w-0 rounded-xl overflow-hidden border border-white/[0.10] bg-white/[0.04]"
               >
                 {/* Category header */}
-                <div className="group/cat flex items-center h-11 px-4 hover:bg-white/[0.03] transition-colors">
-                  <button
-                    type="button"
-                    onClick={() => toggleCat(cat.id)}
-                    className="p-0.5 mr-2 rounded hover:bg-white/10 text-white/30 hover:text-white/60 transition-colors shrink-0 cursor-pointer"
-                  >
-                    {catExpanded
-                      ? <ChevronDown className="w-3.5 h-3.5" />
-                      : <ChevronRight className="w-3.5 h-3.5" />}
-                  </button>
-
-                  <div
-                    className="w-2 h-2 rounded-full mr-3 shrink-0"
-                    style={{ backgroundColor: catColor }}
-                  />
-
-                  {editId === cat.id ? (
+                <div className="group/cat flex min-h-11 min-w-0 flex-wrap items-center gap-x-3 gap-y-1 px-4 py-1.5 hover:bg-white/[0.03] transition-colors">
+                  {editId === cat.id && !cardLocked ? (
                     <InlineInput
                       value={cat.name}
                       onSave={(name) => renameCat(cat.id, name)}
@@ -638,164 +763,146 @@ export function CategoryTableManager() {
                     />
                   ) : (
                     <>
-                      <span className="text-sm font-medium text-white/80 flex-1 truncate">
+                      <span className="min-w-0 truncate text-sm font-medium text-white/80">
                         {cat.name}
+                        <span className="font-medium text-white/45 tabular-nums">
+                          {" "}
+                          ({cat.subcategories.length})
+                        </span>
                       </span>
-                      <span className="text-[11px] text-white/20 tabular-nums mr-3 shrink-0">
-                        {cat.subcategories.length}
-                      </span>
-                      <div className="flex items-center gap-0.5 opacity-0 group-hover/cat:opacity-100 transition-opacity shrink-0">
+                      {!cardLocked && addingSubParentId !== cat.id ? (
                         <button
                           type="button"
-                          onClick={() => {
-                            setAddingSubParentId(cat.id);
-                            setExpandedCats((p) => new Set(p).add(cat.id));
-                          }}
-                          className="p-1 rounded hover:bg-white/10 text-white/25 hover:text-white/60 transition-colors cursor-pointer"
+                          onClick={() => setAddingSubParentId(cat.id)}
+                          className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-[11px] text-white/25 transition-colors hover:bg-white/[0.06] hover:text-white/50 cursor-pointer"
                           title="Add subcategory"
                         >
-                          <Plus className="w-3.5 h-3.5" />
+                          <Plus className="w-3 h-3" />
+                          Add subcategory
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => setEditId(cat.id)}
-                          className="p-1 rounded hover:bg-white/10 text-white/25 hover:text-white/60 transition-colors cursor-pointer"
-                          title="Rename"
-                        >
-                          <Pencil className="w-3 h-3" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setDelConfirm({
-                            id: cat.id,
-                            label: cat.name,
-                            hasChildren: cat.subcategories.length > 0,
-                          })}
-                          className="p-1 rounded hover:bg-red-500/20 text-white/25 hover:text-red-400 transition-colors cursor-pointer"
-                          title="Delete"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      </div>
+                      ) : null}
+                      <span className="min-w-2 flex-1" aria-hidden />
+                      {!cardLocked ? (
+                        <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover/cat:opacity-100">
+                          <button
+                            type="button"
+                            onClick={() => setEditId(cat.id)}
+                            className="p-1 rounded hover:bg-white/10 text-white/25 hover:text-white/60 transition-colors cursor-pointer"
+                            title="Rename"
+                          >
+                            <Pencil className="w-3 h-3" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDelConfirm({
+                              id: cat.id,
+                              label: cat.name,
+                              hasChildren: cat.subcategories.length > 0,
+                            })}
+                            className="p-1 rounded hover:bg-red-500/20 text-white/25 hover:text-red-400 transition-colors cursor-pointer"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ) : null}
                     </>
                   )}
                 </div>
 
-                {/* Subcategories */}
-                <AnimatePresence>
-                  {catExpanded && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: "auto" }}
-                      exit={{ opacity: 0, height: 0 }}
-                      transition={{ duration: 0.15 }}
-                    >
-                      <div className="border-t" style={{ borderColor: `${catColor}10` }}>
-                        {cat.subcategories.map((sub) => {
-                          const isEditingSub = editId === sub.id;
-                          const subMerchants = merchantMap[sub.name.toLowerCase()] ?? [];
-                          return (
-                            <div key={sub.id}>
-                              <div className="group/sub flex items-center h-9 pl-12 pr-3 hover:bg-white/[0.025] transition-colors">
-                                <div
-                                  className="w-1.5 h-1.5 rounded-full mr-3 shrink-0"
-                                  style={{ backgroundColor: `${catColor}50` }}
-                                />
-                                {isEditingSub ? (
-                                  <InlineInput
-                                    value={sub.name}
-                                    onSave={(name) => renameCat(sub.id, name)}
-                                    onCancel={() => setEditId(null)}
-                                    color={catColor}
-                                  />
-                                ) : (
-                                  <>
-                                    <span className="text-[13px] text-white/55 flex-1 truncate">
-                                      {sub.name}
-                                    </span>
-                                    {isOutflow && (
-                                      <SubcategoryTypePill
-                                        value={sub.subcategoryType}
-                                        onClick={() => cycleSubcategoryType(sub.id, sub.subcategoryType)}
-                                      />
-                                    )}
-                                    <div className="flex items-center gap-0.5 opacity-0 group-hover/sub:opacity-100 transition-opacity shrink-0">
-                                      <button
-                                        type="button"
-                                        onClick={() => setEditId(sub.id)}
-                                        className="p-1 rounded hover:bg-white/10 text-white/25 hover:text-white/60 transition-colors cursor-pointer"
-                                        title="Rename"
-                                      >
-                                        <Pencil className="w-3 h-3" />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => setDelConfirm({
-                                          id: sub.id,
-                                          label: sub.name,
-                                          hasChildren: false,
-                                        })}
-                                        className="p-1 rounded hover:bg-red-500/20 text-white/25 hover:text-red-400 transition-colors cursor-pointer"
-                                        title="Delete"
-                                      >
-                                        <Trash2 className="w-3 h-3" />
-                                      </button>
-                                    </div>
-                                  </>
-                                )}
-                              </div>
-                              {subMerchants.length > 0 && (
-                                <div className="ml-[3.75rem] mr-3 mb-1.5 mt-0.5 rounded-lg bg-white/[0.025] border border-white/[0.06] px-2.5 py-2">
-                                  <div className="flex items-center gap-1.5 mb-1.5">
-                                    <Store className="w-3 h-3 text-white/20" />
-                                    <span className="text-[10px] font-medium text-white/25 uppercase tracking-wider">Merchants</span>
-                                  </div>
-                                  <div className="flex flex-wrap gap-1.5">
-                                    {subMerchants.map((m) => (
-                                      <span
-                                        key={m}
-                                        className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] text-white/50 bg-white/[0.05] border border-white/[0.08] truncate max-w-[180px]"
-                                      >
-                                        {m}
-                                      </span>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-
-                        {addingSubParentId === cat.id ? (
-                          <div className="pl-12 pr-3 py-1.5">
-                            <NewItemInput
-                              color={catColor}
-                              placeholder="New subcategory…"
-                              onSave={(name) => addCategory(name, cat.id)}
-                              onCancel={() => setAddingSubParentId(null)}
-                            />
-                          </div>
-                        ) : cat.subcategories.length === 0 ? (
-                          <button
-                            type="button"
-                            onClick={() => setAddingSubParentId(cat.id)}
-                            className="flex items-center h-8 pl-12 pr-3 text-[11px] text-white/20 hover:text-white/45 transition-colors gap-1 cursor-pointer"
+                <div className="px-4 pb-3 pt-1">
+                  {cat.subcategories.length > 0 ? (
+                    <div className="flex flex-wrap gap-x-1.5 gap-y-2 items-center">
+                      {cat.subcategories.map((sub) =>
+                        cardLocked ? (
+                          <span
+                            key={sub.id}
+                            title="Built-in category (not editable)"
+                            className={[
+                              "inline-flex max-w-[200px] cursor-default items-center truncate rounded-full border px-2 py-0.5 text-[11px] text-white/70",
+                              subcategoryPillClasses(sub.subcategoryType, isOutflow),
+                            ].join(" ")}
                           >
-                            <Plus className="w-3 h-3" />
-                            Add subcategory
+                            {sub.name}
+                          </span>
+                        ) : activeSubPillId === sub.id ? (
+                          <div
+                            key={sub.id}
+                            ref={activePillPanelRef}
+                            className="w-full min-w-0 basis-full rounded-lg border border-white/[0.12] bg-black/20 p-2 space-y-2"
+                          >
+                            <div className="flex min-w-0 items-start gap-1.5">
+                              <div className="min-w-0 flex-1">
+                                <InlineInput
+                                  flushRef={subPillCommitFlushRef}
+                                  value={sub.name}
+                                  onSave={(name) => renameCat(sub.id, name)}
+                                  onCancel={() => setActiveSubPillId(null)}
+                                  color={catColor}
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                onPointerDown={(e) => {
+                                  if (e.pointerType === "mouse" && e.button !== 0) return;
+                                  // Same as expense-type chips: avoid input blur → commit/onCancel
+                                  // unmounting this row before the click opens delete confirm.
+                                  e.preventDefault();
+                                }}
+                                onClick={() => setDelConfirm({
+                                  id: sub.id,
+                                  label: sub.name,
+                                  hasChildren: false,
+                                })}
+                                className="shrink-0 rounded p-1.5 text-white/25 hover:bg-red-500/20 hover:text-red-400 transition-colors cursor-pointer"
+                                title="Delete subcategory"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                            {isOutflow ? (
+                              <SubcategoryTypeInlinePicker
+                                selected={sub.subcategoryType}
+                                onSelect={(t) => setSubcategoryType(sub.id, t)}
+                              />
+                            ) : null}
+                          </div>
+                        ) : (
+                          <button
+                            key={sub.id}
+                            type="button"
+                            onClick={() => setActiveSubPillId(sub.id)}
+                            title="Click to edit name and type"
+                            className={[
+                              "inline-flex max-w-[200px] items-center truncate rounded-full border px-2 py-0.5 text-[11px] transition-colors hover:brightness-110 cursor-pointer",
+                              subcategoryPillClasses(sub.subcategoryType, isOutflow),
+                            ].join(" ")}
+                          >
+                            {sub.name}
                           </button>
-                        ) : null}
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                        ),
+                      )}
+                    </div>
+                  ) : null}
+
+                  {!cardLocked && addingSubParentId === cat.id ? (
+                    <div className={cat.subcategories.length > 0 ? "mt-2" : "mt-1"}>
+                      <NewItemInput
+                        color={catColor}
+                        placeholder="New subcategory…"
+                        onSave={(name) => addCategory(name, cat.id)}
+                        onCancel={() => setAddingSubParentId(null)}
+                      />
+                    </div>
+                  ) : null}
+                </div>
               </div>
             );
           })}
 
           {/* Add top-level category */}
           {addingCatParent ? (
-            <div className="px-4 py-2">
+            <div className="col-span-full px-4 py-2">
               <NewItemInput
                 color="#808080"
                 placeholder="New category…"
@@ -807,7 +914,7 @@ export function CategoryTableManager() {
             <button
               type="button"
               onClick={() => setAddingCatParent(true)}
-              className="w-full flex items-center justify-center h-10 rounded-xl border border-dashed border-white/[0.08] text-xs text-white/25 hover:text-white/50 hover:border-white/[0.15] transition-colors gap-1.5 cursor-pointer"
+              className="col-span-full flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-white/[0.08] text-xs text-white/25 transition-colors hover:border-white/[0.15] hover:text-white/50 cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
               Add category

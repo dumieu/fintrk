@@ -1,16 +1,59 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
-import { userCategories } from "@/lib/db/schema";
-import { eq, and, isNull } from "drizzle-orm";
+import {
+  userCategories,
+  transactions,
+  merchants,
+  categoryRules,
+  recurringPatterns,
+  budgets,
+} from "@/lib/db/schema";
+import { eq, and, isNull, inArray } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { ensureUserCategories } from "@/lib/ensure-user-categories";
+import { isReservedOtherOutflowCategoryName } from "@/lib/reserved-user-categories";
 import { logServerError } from "@/lib/safe-error";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
 
 const NO_STORE = { "Cache-Control": "no-store" } as const;
+
+type UserCategoryRow = { name: string; parentId: number | null };
+
+/** Top-level "Other Outflow" or any descendant under that parent. */
+async function userCategoryRowLocked(userId: string, row: UserCategoryRow): Promise<boolean> {
+  if (row.parentId == null) {
+    return isReservedOtherOutflowCategoryName(row.name);
+  }
+  let pid: number | null = row.parentId;
+  while (pid != null) {
+    const [p] = await resilientQuery(() =>
+      db
+        .select({ name: userCategories.name, parentId: userCategories.parentId })
+        .from(userCategories)
+        .where(and(eq(userCategories.id, pid), eq(userCategories.userId, userId)))
+        .limit(1),
+    );
+    if (!p) return false;
+    if (p.parentId == null && isReservedOtherOutflowCategoryName(p.name)) return true;
+    pid = p.parentId;
+  }
+  return false;
+}
+
+async function userCategoryLockedById(userId: string, id: number): Promise<boolean> {
+  const [row] = await resilientQuery(() =>
+    db
+      .select({ name: userCategories.name, parentId: userCategories.parentId })
+      .from(userCategories)
+      .where(and(eq(userCategories.id, id), eq(userCategories.userId, userId)))
+      .limit(1),
+  );
+  if (!row) return false;
+  return userCategoryRowLocked(userId, row);
+}
 
 /**
  * GET — returns the user's full category hierarchy.
@@ -94,6 +137,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid input" }, { status: 400, headers: NO_STORE });
     }
 
+    if (parsed.data.parentId == null && isReservedOtherOutflowCategoryName(parsed.data.name)) {
+      return NextResponse.json({ error: "Reserved category" }, { status: 403, headers: NO_STORE });
+    }
+
     const slug = parsed.data.name
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
@@ -105,13 +152,16 @@ export async function POST(request: NextRequest) {
     if (parsed.data.parentId) {
       const [parentRow] = await resilientQuery(() =>
         db
-          .select({ color: userCategories.color })
+          .select({ color: userCategories.color, name: userCategories.name, parentId: userCategories.parentId })
           .from(userCategories)
           .where(and(eq(userCategories.id, parsed.data.parentId!), eq(userCategories.userId, userId)))
           .limit(1),
       );
       if (!parentRow) {
         return NextResponse.json({ error: "Parent category not found" }, { status: 404, headers: NO_STORE });
+      }
+      if (await userCategoryRowLocked(userId, { name: parentRow.name, parentId: parentRow.parentId })) {
+        return NextResponse.json({ error: "Reserved category" }, { status: 403, headers: NO_STORE });
       }
       color = parentRow.color ?? undefined;
     }
@@ -173,6 +223,29 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Invalid input" }, { status: 400, headers: NO_STORE });
     }
 
+    const [existing] = await resilientQuery(() =>
+      db
+        .select({ name: userCategories.name, parentId: userCategories.parentId })
+        .from(userCategories)
+        .where(and(eq(userCategories.id, parsed.data.id), eq(userCategories.userId, userId)))
+        .limit(1),
+    );
+    if (!existing) {
+      return NextResponse.json({ error: "Category not found" }, { status: 404, headers: NO_STORE });
+    }
+
+    if (await userCategoryRowLocked(userId, existing)) {
+      return NextResponse.json({ error: "Reserved category" }, { status: 403, headers: NO_STORE });
+    }
+
+    if (
+      parsed.data.name !== undefined &&
+      isReservedOtherOutflowCategoryName(parsed.data.name) &&
+      !isReservedOtherOutflowCategoryName(existing.name)
+    ) {
+      return NextResponse.json({ error: "Reserved category name" }, { status: 403, headers: NO_STORE });
+    }
+
     const setPayload: Record<string, unknown> = {};
     if (parsed.data.name !== undefined) setPayload.name = parsed.data.name;
     if (parsed.data.subcategoryType !== undefined) setPayload.subcategoryType = parsed.data.subcategoryType;
@@ -200,29 +273,96 @@ const deleteSchema = z.object({
   id: z.number().int(),
 });
 
+/** Clear FKs pointing at these user_categories rows so DELETE does not fail silently. */
+async function detachUserCategoryReferences(userId: string, categoryIds: number[]) {
+  const ids = [...new Set(categoryIds)].filter((n) => Number.isInteger(n));
+  if (ids.length === 0) return;
+
+  await resilientQuery(() =>
+    db
+      .update(transactions)
+      .set({ categoryId: null, updatedAt: new Date() })
+      .where(and(eq(transactions.userId, userId), inArray(transactions.categoryId, ids))),
+  );
+  await resilientQuery(() =>
+    db
+      .update(budgets)
+      .set({ categoryId: null, updatedAt: new Date() })
+      .where(and(eq(budgets.userId, userId), inArray(budgets.categoryId, ids))),
+  );
+  await resilientQuery(() =>
+    db
+      .update(recurringPatterns)
+      .set({ categoryId: null, updatedAt: new Date() })
+      .where(and(eq(recurringPatterns.userId, userId), inArray(recurringPatterns.categoryId, ids))),
+  );
+  await resilientQuery(() =>
+    db.update(merchants).set({ categoryId: null }).where(inArray(merchants.categoryId, ids)),
+  );
+  await resilientQuery(() =>
+    db.delete(categoryRules).where(inArray(categoryRules.categoryId, ids)),
+  );
+}
+
 /** DELETE — remove a category (and its children if it's a parent). */
 export async function DELETE(request: NextRequest) {
   try {
     const { userId } = await resilientAuth();
     if (!userId) return unauthorizedResponse();
 
-    const body = await request.json();
-    const parsed = deleteSchema.safeParse(body);
-    if (!parsed.success) {
-      return NextResponse.json({ error: "Invalid input" }, { status: 400, headers: NO_STORE });
+    // Prefer `?id=` — DELETE request bodies are often stripped by browsers/CDNs/proxies.
+    const q = request.nextUrl.searchParams.get("id");
+    let id: number;
+    if (q != null && q !== "") {
+      const n = Number(q);
+      if (!Number.isInteger(n)) {
+        return NextResponse.json({ error: "Invalid input" }, { status: 400, headers: NO_STORE });
+      }
+      id = n;
+    } else {
+      const body = await request.json().catch(() => ({}));
+      const parsed = deleteSchema.safeParse(body);
+      if (!parsed.success) {
+        return NextResponse.json({ error: "Invalid input" }, { status: 400, headers: NO_STORE });
+      }
+      id = parsed.data.id;
     }
 
-    // Delete children first (FK-safe)
+    const [owned] = await resilientQuery(() =>
+      db
+        .select({ id: userCategories.id })
+        .from(userCategories)
+        .where(and(eq(userCategories.id, id), eq(userCategories.userId, userId)))
+        .limit(1),
+    );
+    if (!owned) {
+      return NextResponse.json({ error: "Category not found" }, { status: 404, headers: NO_STORE });
+    }
+
+    if (await userCategoryLockedById(userId, id)) {
+      return NextResponse.json({ error: "Reserved category" }, { status: 403, headers: NO_STORE });
+    }
+
+    const childRows = await resilientQuery(() =>
+      db
+        .select({ id: userCategories.id })
+        .from(userCategories)
+        .where(and(eq(userCategories.parentId, id), eq(userCategories.userId, userId))),
+    );
+    const idsToDetach = [id, ...childRows.map((r) => r.id)];
+    await detachUserCategoryReferences(userId, idsToDetach);
+
+    // Delete children first (FK-safe for user_categories self-FK)
     await resilientQuery(() =>
       db
         .delete(userCategories)
-        .where(and(eq(userCategories.parentId, parsed.data.id), eq(userCategories.userId, userId))),
+        .where(and(eq(userCategories.parentId, id), eq(userCategories.userId, userId))),
     );
 
     const result = await resilientQuery(() =>
       db
         .delete(userCategories)
-        .where(and(eq(userCategories.id, parsed.data.id), eq(userCategories.userId, userId)))
+        .where(and(eq(userCategories.id, id), eq(userCategories.userId, userId)))
         .returning({ id: userCategories.id }),
     );
 

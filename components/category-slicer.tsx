@@ -44,6 +44,12 @@ const SCROLL_STEP_RATIO = 0.82;
 const SLICER_CHEVRON_BTN =
   "flex h-6 w-7 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-white/12 bg-black/30 px-1 text-white/70 transition-colors hover:border-white/25 hover:bg-white/[0.06] hover:text-white disabled:cursor-not-allowed disabled:pointer-events-none disabled:opacity-25";
 
+/** Non–color-coded chips (Category Mapping top slicers). */
+const NEUTRAL_CHIP_IDLE =
+  "border-white/12 bg-black/25 text-white/85 hover:border-white/22 hover:bg-white/[0.07]";
+const NEUTRAL_CHIP_ACTIVE =
+  "border-white/38 bg-white/[0.11] text-white shadow-[0_0_20px_-10px_rgba(255,255,255,0.1)] ring-1 ring-white/16";
+
 function useSlicerScrollState(deps: DependencyList) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canLeft, setCanLeft] = useState(false);
@@ -126,6 +132,10 @@ function chipClass(theme: CategoryFlowTheme, selected: boolean): string {
   return cn("transition-all duration-200", selected ? t.active : t.idle);
 }
 
+function neutralChipClass(selected: boolean): string {
+  return cn("transition-all duration-200", selected ? NEUTRAL_CHIP_ACTIVE : NEUTRAL_CHIP_IDLE);
+}
+
 function chipKeyDown(
   e: React.KeyboardEvent,
   onSelect: (id: string) => void,
@@ -142,12 +152,15 @@ export function CategorySlicer({
   selectedId,
   onSelect,
   showLabel = true,
+  /** When true, chips and icons use neutral styling (e.g. Category Mapping). */
+  neutralChips = false,
 }: {
   options: CategorySlicerOption[];
   selectedId: string;
   onSelect: (categoryId: string) => void;
   /** When false, hides the left "Category" title (e.g. Category Mapping page). */
   showLabel?: boolean;
+  neutralChips?: boolean;
 }) {
   const allSelected = selectedId === "";
   const { scrollRef, canLeft, canRight, scrollByDir } = useSlicerScrollState([options.length]);
@@ -248,13 +261,15 @@ export function CategorySlicer({
               onKeyDown={(e) => chipKeyDown(e, onSelect, "")}
               className={cn(
                 "flex h-6 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border px-2 py-0 transition-all duration-200",
-                allSelected
-                  ? "border-[#0BC18D]/55 bg-[#0BC18D]/18 text-white shadow-[0_0_26px_-10px_rgba(11,193,141,0.6)] ring-1 ring-[#0BC18D]/30"
-                  : "border-white/12 bg-black/25 text-white/85 hover:border-white/22 hover:bg-white/[0.07]",
+                neutralChips
+                  ? neutralChipClass(allSelected)
+                  : allSelected
+                    ? "border-[#0BC18D]/55 bg-[#0BC18D]/18 text-white shadow-[0_0_26px_-10px_rgba(11,193,141,0.6)] ring-1 ring-[#0BC18D]/30"
+                    : "border-white/12 bg-black/25 text-white/85 hover:border-white/22 hover:bg-white/[0.07]",
               )}
               aria-pressed={allSelected}
             >
-              <TransactionCategoryIcon preset="all" size="xs" />
+              <TransactionCategoryIcon preset="all" size="xs" monochrome={neutralChips} />
               <span className="max-w-[5.5rem] truncate text-left text-[10px] font-semibold leading-none sm:max-w-[9rem]">
                 All categories
               </span>
@@ -271,7 +286,7 @@ export function CategorySlicer({
                   onKeyDown={(e) => chipKeyDown(e, onSelect, opt.value)}
                   className={cn(
                     "flex h-6 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border px-2 py-0",
-                    chipClass(opt.flowTheme, selected),
+                    neutralChips ? neutralChipClass(selected) : chipClass(opt.flowTheme, selected),
                   )}
                   aria-pressed={selected}
                   title={opt.label}
@@ -280,6 +295,7 @@ export function CategorySlicer({
                     categoryName={opt.categoryName}
                     subcategoryName={opt.subcategoryName}
                     size="xs"
+                    monochrome={neutralChips}
                   />
                   <span className="max-w-[5.5rem] truncate text-left text-[10px] font-semibold leading-none sm:max-w-[9rem]">
                     {opt.label}
@@ -329,7 +345,12 @@ const SUBCAT_DOT: Record<SubcategoryTypeSlicerValue, string> = {
   discretionary: "#22C55E",
 };
 
-function subcatTypeChipClass(value: SubcategoryTypeSlicerValue, selected: boolean): string {
+function subcatTypeChipClass(
+  value: SubcategoryTypeSlicerValue,
+  selected: boolean,
+  neutral: boolean,
+): string {
+  if (neutral) return neutralChipClass(selected);
   const t = SUBCAT_CHIP[value];
   return cn("transition-all duration-200", selected ? t.active : t.idle);
 }
@@ -339,13 +360,20 @@ export function SubcategoryTypeSlicer({
   selectedType,
   onSelect,
   showLabel = true,
+  /** When true, chips and dots use neutral styling (e.g. Category Mapping). */
+  neutralChips = false,
+  /** No chevrons; backdrop shrink-wraps to chips (pair with `FlowThemeSlicer compact`). */
+  compact = false,
 }: {
   /** `""` = no type filter (all). */
   selectedType: string;
   onSelect: (subcategoryType: string) => void;
   showLabel?: boolean;
+  neutralChips?: boolean;
+  compact?: boolean;
 }) {
   const allSelected = selectedType === "";
+  const showExpenseTypeLabel = showLabel && !compact;
   const { scrollRef, canLeft, canRight, scrollByDir } = useSlicerScrollState([]);
   const onSelectRef = useRef(onSelect);
   useEffect(() => {
@@ -404,78 +432,150 @@ export function SubcategoryTypeSlicer({
     }
   }, [scrollRef]);
 
+  const subcatStripClass = compact
+    ? cn(
+        "flex min-h-6 w-max max-w-full shrink-0 touch-pan-x flex-nowrap gap-1.5 overflow-x-auto overscroll-x-contain px-0.5 py-0 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.14)_transparent]",
+        "cursor-grab active:cursor-grabbing select-none",
+      )
+    : cn(
+        "flex min-h-6 min-w-0 flex-1 touch-pan-x gap-1.5 overflow-x-auto overscroll-x-contain px-0.5 py-0 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.14)_transparent]",
+        "cursor-grab active:cursor-grabbing select-none",
+      );
+
+  const subcatChipStrip = (
+    <div
+      ref={scrollRef}
+      role="presentation"
+      onPointerDown={onPointerDownStrip}
+      onPointerMove={onPointerMoveStrip}
+      onPointerUp={onPointerUpStrip}
+      onPointerCancel={onPointerUpStrip}
+      className={subcatStripClass}
+    >
+      <button
+        type="button"
+        data-subcat-type-slicer-chip
+        data-subcat-type-slicer-value=""
+        onKeyDown={(e) => chipKeyDown(e, onSelect, "")}
+        className={cn(
+          "flex h-6 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border px-2 py-0 transition-all duration-200",
+          neutralChipClass(allSelected),
+        )}
+        aria-pressed={allSelected}
+      >
+        <span className="text-[10px] font-semibold leading-none">All</span>
+      </button>
+
+      {SUBCAT_TYPE_SLICER_OPTIONS.map((opt) => {
+        const selected = selectedType === opt.value;
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            data-subcat-type-slicer-chip
+            data-subcat-type-slicer-value={opt.value}
+            onKeyDown={(e) => chipKeyDown(e, onSelect, opt.value)}
+            className={cn(
+              "flex h-6 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border px-2 py-0",
+              subcatTypeChipClass(opt.value, selected, neutralChips),
+            )}
+            aria-pressed={selected}
+          >
+            {!neutralChips ? (
+              <span
+                className="size-1.5 shrink-0 rounded-full"
+                style={{ backgroundColor: SUBCAT_DOT[opt.value] }}
+                aria-hidden
+              />
+            ) : null}
+            <span className="max-w-[9rem] truncate text-left text-[10px] font-semibold leading-none sm:max-w-[14rem]">
+              {opt.label}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+
   return (
-    <div className="rounded-xl border border-white/[0.09] bg-gradient-to-b from-white/[0.07] to-white/[0.02] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] sm:rounded-2xl sm:p-2">
-      <div className={cn("flex min-w-0 items-center", showLabel ? "gap-1.5 sm:gap-3" : "gap-0")}>
-        {showLabel ? (
+    <div
+      className={cn(
+        "rounded-xl border border-white/[0.09] bg-gradient-to-b from-white/[0.07] to-white/[0.02] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] sm:rounded-2xl sm:p-2",
+        compact && "w-fit max-w-full shrink-0",
+      )}
+    >
+      <div className={cn("flex min-w-0 items-center", showExpenseTypeLabel ? "gap-1.5 sm:gap-3" : "gap-0")}>
+        {showExpenseTypeLabel ? (
           <p className="shrink-0 whitespace-nowrap px-0.5 text-[9px] font-medium uppercase tracking-wider text-white/40 sm:px-1 sm:text-[10px]">
             Expense type
           </p>
         ) : null}
-        <SlicerChevronRow
-          canLeft={canLeft}
-          canRight={canRight}
-          scrollByDir={scrollByDir}
-          leftAria="Scroll expense type options left"
-          rightAria="Scroll expense type options right"
-        >
-          <div
-            ref={scrollRef}
-            role="presentation"
-            onPointerDown={onPointerDownStrip}
-            onPointerMove={onPointerMoveStrip}
-            onPointerUp={onPointerUpStrip}
-            onPointerCancel={onPointerUpStrip}
-            className={cn(
-              "flex min-h-6 min-w-0 flex-1 touch-pan-x gap-1.5 overflow-x-auto overscroll-x-contain px-0.5 py-0 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.14)_transparent]",
-              "cursor-grab active:cursor-grabbing select-none",
-            )}
+        {compact ? (
+          subcatChipStrip
+        ) : (
+          <SlicerChevronRow
+            canLeft={canLeft}
+            canRight={canRight}
+            scrollByDir={scrollByDir}
+            leftAria="Scroll expense type options left"
+            rightAria="Scroll expense type options right"
           >
-            <button
-              type="button"
-              data-subcat-type-slicer-chip
-              data-subcat-type-slicer-value=""
-              onKeyDown={(e) => chipKeyDown(e, onSelect, "")}
-              className={cn(
-                "flex h-6 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border px-2 py-0 transition-all duration-200",
-                allSelected
-                  ? "border-[#0BC18D]/55 bg-[#0BC18D]/18 text-white shadow-[0_0_26px_-10px_rgba(11,193,141,0.6)] ring-1 ring-[#0BC18D]/30"
-                  : "border-white/12 bg-black/25 text-white/85 hover:border-white/22 hover:bg-white/[0.07]",
-              )}
-              aria-pressed={allSelected}
-            >
-              <span className="text-[10px] font-semibold leading-none">All</span>
-            </button>
-
-            {SUBCAT_TYPE_SLICER_OPTIONS.map((opt) => {
-              const selected = selectedType === opt.value;
-              return (
-                <button
-                  key={opt.value}
-                  type="button"
-                  data-subcat-type-slicer-chip
-                  data-subcat-type-slicer-value={opt.value}
-                  onKeyDown={(e) => chipKeyDown(e, onSelect, opt.value)}
-                  className={cn(
-                    "flex h-6 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border px-2 py-0",
-                    subcatTypeChipClass(opt.value, selected),
-                  )}
-                  aria-pressed={selected}
-                >
-                  <span
-                    className="size-1.5 shrink-0 rounded-full"
-                    style={{ backgroundColor: SUBCAT_DOT[opt.value] }}
-                    aria-hidden
-                  />
-                  <span className="max-w-[9rem] truncate text-left text-[10px] font-semibold leading-none sm:max-w-[14rem]">
-                    {opt.label}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </SlicerChevronRow>
+            {subcatChipStrip}
+          </SlicerChevronRow>
+        )}
       </div>
+    </div>
+  );
+}
+
+/** Compact three-way expense-type control (no scroll) — same chip colors as `SubcategoryTypeSlicer`. */
+export function SubcategoryTypeInlinePicker({
+  selected,
+  onSelect,
+  className,
+}: {
+  selected: SubcategoryTypeSlicerValue | null;
+  onSelect: (t: SubcategoryTypeSlicerValue) => void;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex min-w-0 gap-1 rounded-lg border border-white/[0.10] bg-black/30 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]",
+        className,
+      )}
+      role="group"
+      aria-label="Expense type"
+    >
+      {SUBCAT_TYPE_SLICER_OPTIONS.map((opt) => (
+        <button
+          key={opt.value}
+          type="button"
+          onPointerDown={(e) => {
+            if (e.pointerType === "mouse" && e.button !== 0) return;
+            // Prevent focus leaving the name field first — otherwise InlineInput
+            // blur runs commit → onCancel (unchanged name) and unmounts this panel
+            // before click fires (mouse + touch).
+            e.preventDefault();
+          }}
+          onClick={() => onSelect(opt.value)}
+          className={cn(
+            "flex min-h-[2.75rem] min-w-0 flex-1 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-md border px-0.5 py-1 transition-all duration-200 sm:min-h-0 sm:px-1 sm:py-1.5",
+            subcatTypeChipClass(opt.value, selected === opt.value, false),
+          )}
+          aria-pressed={selected === opt.value}
+          title={opt.label}
+        >
+          <span
+            className="size-1.5 shrink-0 rounded-full"
+            style={{ backgroundColor: SUBCAT_DOT[opt.value] }}
+            aria-hidden
+          />
+          <span className="line-clamp-2 w-full px-0.5 text-center text-[7px] font-semibold leading-[1.15] text-white/90 sm:text-[8px]">
+            {opt.label}
+          </span>
+        </button>
+      ))}
     </div>
   );
 }
@@ -493,6 +593,8 @@ export function FlowThemeSlicer({
   showLabel = true,
   /** No title/chevrons; outer width fits chips only (pair with Category slicer flex-1). */
   compact = false,
+  /** When true, flow chips and dots use neutral styling (e.g. Category Mapping). */
+  neutralChips = false,
 }: {
   /** `""` = no parent-flow filter (all). */
   selectedFlowTheme: string;
@@ -500,6 +602,7 @@ export function FlowThemeSlicer({
   /** When false, hides the left "Flow" title (e.g. Category Mapping page). Ignored when `compact`. */
   showLabel?: boolean;
   compact?: boolean;
+  neutralChips?: boolean;
 }) {
   const allSelected = selectedFlowTheme === "";
   const showFlowLabel = showLabel && !compact;
@@ -595,9 +698,11 @@ export function FlowThemeSlicer({
         onKeyDown={(e) => chipKeyDown(e, onSelect, "")}
         className={cn(
           "flex h-6 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border px-2 py-0 transition-all duration-200",
-          allSelected
-            ? "border-[#0BC18D]/55 bg-[#0BC18D]/18 text-white shadow-[0_0_26px_-10px_rgba(11,193,141,0.6)] ring-1 ring-[#0BC18D]/30"
-            : "border-white/12 bg-black/25 text-white/85 hover:border-white/22 hover:bg-white/[0.07]",
+          neutralChips
+            ? neutralChipClass(allSelected)
+            : allSelected
+              ? "border-[#0BC18D]/55 bg-[#0BC18D]/18 text-white shadow-[0_0_26px_-10px_rgba(11,193,141,0.6)] ring-1 ring-[#0BC18D]/30"
+              : "border-white/12 bg-black/25 text-white/85 hover:border-white/22 hover:bg-white/[0.07]",
         )}
         aria-pressed={allSelected}
       >
@@ -615,15 +720,17 @@ export function FlowThemeSlicer({
             onKeyDown={(e) => chipKeyDown(e, onSelect, opt.value)}
             className={cn(
               "flex h-6 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border px-2 py-0",
-              chipClass(opt.value, selected),
+              neutralChips ? neutralChipClass(selected) : chipClass(opt.value, selected),
             )}
             aria-pressed={selected}
           >
-            <span
-              className="size-1.5 shrink-0 rounded-full"
-              style={{ backgroundColor: dotColor[opt.value] }}
-              aria-hidden
-            />
+            {!neutralChips ? (
+              <span
+                className="size-1.5 shrink-0 rounded-full"
+                style={{ backgroundColor: dotColor[opt.value] }}
+                aria-hidden
+              />
+            ) : null}
             <span className="max-w-[8rem] truncate text-left text-[10px] font-semibold leading-none sm:max-w-[11rem]">
               {opt.label}
             </span>
