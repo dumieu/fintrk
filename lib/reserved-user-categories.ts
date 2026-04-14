@@ -1,13 +1,12 @@
 import type { FlowType } from "@/lib/default-categories";
 
 /**
- * Legacy reserved misc root name (before it was renamed to "Other").
- * Still blocked for new top-level names and rename targets. Match is case-insensitive on trim.
+ * Legacy guard — "Other Outflow" was previously the misc root name.
+ * Now that "Other Outflow" is a legitimate outflow category,
+ * this always returns false. Kept for call-site compatibility.
  */
-const RESERVED_LEGACY_MISC_ROOT_LC = "other outflow";
-
-export function isReservedOtherOutflowCategoryName(name: string): boolean {
-  return name.trim().toLowerCase() === RESERVED_LEGACY_MISC_ROOT_LC;
+export function isReservedOtherOutflowCategoryName(_name: string): boolean {
+  return false;
 }
 
 /** Categories with flow_type = 'misc' are system-managed and locked from user edits. */
