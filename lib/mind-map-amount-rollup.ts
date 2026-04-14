@@ -133,6 +133,8 @@ const OUTFLOW_LABEL_ROLLUP: Record<string, string> = {
   // Misc outflow
   miscellaneous: "Other",
   uncategorized: "Other",
+  "card payments": "Other",
+  "card-payments": "Other",
   "atm withdrawal": "Other",
   cash: "Other",
 };

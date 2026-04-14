@@ -1,13 +1,13 @@
 import type { FlowType } from "@/lib/default-categories";
 
 /**
- * Reserved user category tree: top-level "Other Outflow" and all of its subcategories
- * are fixed (Category Mapping + API). Match is case-insensitive on trim.
+ * Legacy reserved misc root name (before it was renamed to "Other").
+ * Still blocked for new top-level names and rename targets. Match is case-insensitive on trim.
  */
-const RESERVED_OTHER_OUTFLOW_LC = "other outflow";
+const RESERVED_LEGACY_MISC_ROOT_LC = "other outflow";
 
 export function isReservedOtherOutflowCategoryName(name: string): boolean {
-  return name.trim().toLowerCase() === RESERVED_OTHER_OUTFLOW_LC;
+  return name.trim().toLowerCase() === RESERVED_LEGACY_MISC_ROOT_LC;
 }
 
 /** Categories with flow_type = 'misc' are system-managed and locked from user edits. */

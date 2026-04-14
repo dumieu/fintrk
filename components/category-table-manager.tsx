@@ -83,7 +83,7 @@ function sortSubcategoriesOthersLast(subs: SubcategoryItem[]): SubcategoryItem[]
   });
 }
 
-/** Locked if misc flow OR top-level "Other Outflow" or any subcategory under that parent. */
+/** Locked if misc flow OR legacy top-level "Other Outflow" or any subcategory under that parent. */
 function isLockedCategory(categories: CategoryItem[], targetId: number): boolean {
   for (const c of categories) {
     if (c.id === targetId && (isMiscFlow(c.flowType) || isReservedOtherOutflowCategoryName(c.name))) return true;

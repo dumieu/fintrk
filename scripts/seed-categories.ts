@@ -205,7 +205,7 @@ const CATEGORY_TREE: CategorySeed[] = [
     color: "#808080",
     flowType: "misc",
     children: [
-      { name: "Uncategorized", slug: "uncategorized", icon: "HelpCircle" },
+      { name: "Card Payments", slug: "card-payments", icon: "CreditCard" },
       { name: "ATM Withdrawal", slug: "atm-withdrawal", icon: "Banknote" },
       { name: "Cash", slug: "cash", icon: "Coins" },
       { name: "Miscellaneous", slug: "miscellaneous", icon: "Package" },

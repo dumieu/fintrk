@@ -33,7 +33,7 @@ function fetchParentCategory(userId: string, parentId: number) {
   );
 }
 
-/** Locked if misc flow OR top-level "Other Outflow" or any descendant under that parent. */
+/** Locked if misc flow OR legacy top-level "Other Outflow" or any descendant under that parent. */
 async function userCategoryRowLocked(userId: string, row: UserCategoryRow): Promise<boolean> {
   if (isMiscFlow(row.flowType)) return true;
   if (row.parentId == null) {
