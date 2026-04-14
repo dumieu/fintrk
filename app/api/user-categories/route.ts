@@ -31,11 +31,12 @@ async function userCategoryRowLocked(userId: string, row: UserCategoryRow): Prom
   }
   let pid: number | null = row.parentId;
   while (pid != null) {
+    const currentPid = pid;
     const [p] = await resilientQuery(() =>
       db
         .select({ name: userCategories.name, parentId: userCategories.parentId, flowType: userCategories.flowType })
         .from(userCategories)
-        .where(and(eq(userCategories.id, pid), eq(userCategories.userId, userId)))
+        .where(and(eq(userCategories.id, currentPid), eq(userCategories.userId, userId)))
         .limit(1),
     );
     if (!p) return false;
