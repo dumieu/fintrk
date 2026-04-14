@@ -78,6 +78,7 @@ const DIR: Record<FlowType, number> = {
   inflow: (3 * Math.PI) / 4,
   savings: Math.PI / 4,
   outflow: -Math.PI / 2,
+  misc: -Math.PI / 2,
 };
 const SPRING = { type: "spring" as const, stiffness: 160, damping: 20 };
 
@@ -515,6 +516,7 @@ const FLOW_ICON: Record<FlowType, ReactNode> = {
   inflow: <TrendingUp className="w-7 h-7" />,
   savings: <PiggyBank className="w-7 h-7" />,
   outflow: <TrendingDown className="w-7 h-7" />,
+  misc: <TrendingDown className="w-7 h-7" />,
 };
 
 function MNode({
