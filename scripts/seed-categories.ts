@@ -173,6 +173,19 @@ const CATEGORY_TREE: CategorySeed[] = [
     ],
   },
   {
+    name: "Tax",
+    slug: "tax",
+    icon: "Receipt",
+    color: "#EF4444",
+    flowType: "outflow",
+    children: [
+      { name: "Income Tax", slug: "income-tax", icon: "Receipt", subcategoryType: "non-discretionary" },
+      { name: "Property Tax", slug: "property-tax-2", icon: "Landmark", subcategoryType: "non-discretionary" },
+      { name: "Sales Tax", slug: "sales-tax", icon: "Receipt", subcategoryType: "non-discretionary" },
+      { name: "Other Tax", slug: "other-tax", icon: "Receipt", subcategoryType: "non-discretionary" },
+    ],
+  },
+  {
     name: "Transfers",
     slug: "transfers",
     icon: "ArrowLeftRight",
