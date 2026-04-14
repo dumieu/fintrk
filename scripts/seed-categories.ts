@@ -181,6 +181,16 @@ const CATEGORY_TREE: CategorySeed[] = [
     ],
   },
   {
+    name: "Other Outflow",
+    slug: "other-outflow",
+    icon: "MoreHorizontal",
+    color: "#808080",
+    flowType: "outflow",
+    children: [
+      { name: "ATM Withdrawal", slug: "atm-withdrawal-outflow", icon: "Banknote" },
+    ],
+  },
+  {
     name: "Transfers",
     slug: "transfers",
     icon: "ArrowLeftRight",
