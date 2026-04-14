@@ -199,7 +199,7 @@ const CATEGORY_TREE: CategorySeed[] = [
     ],
   },
   {
-    name: "Other",
+    name: "Other Misc",
     slug: "other",
     icon: "MoreHorizontal",
     color: "#808080",
