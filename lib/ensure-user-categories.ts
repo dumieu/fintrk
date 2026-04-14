@@ -44,6 +44,7 @@ export async function ensureUserCategories(userId: string): Promise<void> {
           color: cat.color,
           sortOrder: cat.sortOrder,
           subcategoryType: cat.subcategoryType,
+          flowType: cat.flowType,
           systemCategoryId: cat.id,
         })
         .returning({ id: userCategories.id }),
@@ -69,6 +70,7 @@ export async function ensureUserCategories(userId: string): Promise<void> {
           color: cat.color,
           sortOrder: cat.sortOrder,
           subcategoryType: cat.subcategoryType,
+          flowType: cat.flowType,
           systemCategoryId: cat.id,
         })
         .returning({ id: userCategories.id }),

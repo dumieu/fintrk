@@ -12,18 +12,20 @@ import {
 import { eq, and, isNull, inArray } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { ensureUserCategories } from "@/lib/ensure-user-categories";
-import { isReservedOtherOutflowCategoryName } from "@/lib/reserved-user-categories";
+import { isReservedOtherOutflowCategoryName, isMiscFlow } from "@/lib/reserved-user-categories";
 import { logServerError } from "@/lib/safe-error";
 import { z } from "zod";
+import type { FlowType } from "@/lib/default-categories";
 
 export const dynamic = "force-dynamic";
 
 const NO_STORE = { "Cache-Control": "no-store" } as const;
 
-type UserCategoryRow = { name: string; parentId: number | null };
+type UserCategoryRow = { name: string; parentId: number | null; flowType: FlowType };
 
-/** Top-level "Other Outflow" or any descendant under that parent. */
+/** Locked if misc flow OR top-level "Other Outflow" or any descendant under that parent. */
 async function userCategoryRowLocked(userId: string, row: UserCategoryRow): Promise<boolean> {
+  if (isMiscFlow(row.flowType)) return true;
   if (row.parentId == null) {
     return isReservedOtherOutflowCategoryName(row.name);
   }
@@ -31,12 +33,13 @@ async function userCategoryRowLocked(userId: string, row: UserCategoryRow): Prom
   while (pid != null) {
     const [p] = await resilientQuery(() =>
       db
-        .select({ name: userCategories.name, parentId: userCategories.parentId })
+        .select({ name: userCategories.name, parentId: userCategories.parentId, flowType: userCategories.flowType })
         .from(userCategories)
         .where(and(eq(userCategories.id, pid), eq(userCategories.userId, userId)))
         .limit(1),
     );
     if (!p) return false;
+    if (isMiscFlow(p.flowType)) return true;
     if (p.parentId == null && isReservedOtherOutflowCategoryName(p.name)) return true;
     pid = p.parentId;
   }
@@ -46,7 +49,7 @@ async function userCategoryRowLocked(userId: string, row: UserCategoryRow): Prom
 async function userCategoryLockedById(userId: string, id: number): Promise<boolean> {
   const [row] = await resilientQuery(() =>
     db
-      .select({ name: userCategories.name, parentId: userCategories.parentId })
+      .select({ name: userCategories.name, parentId: userCategories.parentId, flowType: userCategories.flowType })
       .from(userCategories)
       .where(and(eq(userCategories.id, id), eq(userCategories.userId, userId)))
       .limit(1),
@@ -79,6 +82,7 @@ export async function GET() {
           color: userCategories.color,
           sortOrder: userCategories.sortOrder,
           subcategoryType: userCategories.subcategoryType,
+          flowType: userCategories.flowType,
           parentName: parent.name,
           parentColor: parent.color,
         })
@@ -97,6 +101,7 @@ export async function GET() {
       icon: cat.icon,
       color: cat.color,
       sortOrder: cat.sortOrder,
+      flowType: cat.flowType,
       subcategories: rows
         .filter((r) => r.parentId === cat.id)
         .map((sub) => ({
@@ -107,6 +112,7 @@ export async function GET() {
           color: sub.color,
           sortOrder: sub.sortOrder,
           subcategoryType: sub.subcategoryType,
+          flowType: sub.flowType,
         })),
     }));
 
@@ -123,6 +129,7 @@ export async function GET() {
 const addSchema = z.object({
   name: z.string().min(1).max(128),
   parentId: z.number().int().optional(),
+  flowType: z.enum(["inflow", "outflow", "savings"]).optional(),
 });
 
 /** POST — add a new category or subcategory. */
@@ -141,6 +148,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Reserved category" }, { status: 403, headers: NO_STORE });
     }
 
+    // Top-level categories MUST specify a flow (and misc is not allowed)
+    if (parsed.data.parentId == null && !parsed.data.flowType) {
+      return NextResponse.json({ error: "flowType is required for top-level categories" }, { status: 400, headers: NO_STORE });
+    }
+
     const slug = parsed.data.name
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
@@ -148,11 +160,12 @@ export async function POST(request: NextRequest) {
 
     let color: string | undefined;
     let icon: string | undefined;
+    let resolvedFlowType: FlowType;
 
     if (parsed.data.parentId) {
       const [parentRow] = await resilientQuery(() =>
         db
-          .select({ color: userCategories.color, name: userCategories.name, parentId: userCategories.parentId })
+          .select({ color: userCategories.color, name: userCategories.name, parentId: userCategories.parentId, flowType: userCategories.flowType })
           .from(userCategories)
           .where(and(eq(userCategories.id, parsed.data.parentId!), eq(userCategories.userId, userId)))
           .limit(1),
@@ -160,10 +173,13 @@ export async function POST(request: NextRequest) {
       if (!parentRow) {
         return NextResponse.json({ error: "Parent category not found" }, { status: 404, headers: NO_STORE });
       }
-      if (await userCategoryRowLocked(userId, { name: parentRow.name, parentId: parentRow.parentId })) {
+      if (await userCategoryRowLocked(userId, { name: parentRow.name, parentId: parentRow.parentId, flowType: parentRow.flowType })) {
         return NextResponse.json({ error: "Reserved category" }, { status: 403, headers: NO_STORE });
       }
       color = parentRow.color ?? undefined;
+      resolvedFlowType = parentRow.flowType;
+    } else {
+      resolvedFlowType = parsed.data.flowType!;
     }
 
     // Get max sortOrder for this level
@@ -192,6 +208,7 @@ export async function POST(request: NextRequest) {
           icon: icon ?? null,
           color: color ?? null,
           sortOrder: nextOrder,
+          flowType: resolvedFlowType,
         })
         .returning({ id: userCategories.id, name: userCategories.name, slug: userCategories.slug }),
     );
@@ -225,7 +242,7 @@ export async function PUT(request: NextRequest) {
 
     const [existing] = await resilientQuery(() =>
       db
-        .select({ name: userCategories.name, parentId: userCategories.parentId })
+        .select({ name: userCategories.name, parentId: userCategories.parentId, flowType: userCategories.flowType })
         .from(userCategories)
         .where(and(eq(userCategories.id, parsed.data.id), eq(userCategories.userId, userId)))
         .limit(1),

@@ -6,7 +6,6 @@ import { eq, and, gte, lte, ilike, or, desc, asc, sql, count, isNull, isNotNull,
 import { alias } from "drizzle-orm/pg-core";
 import { transactionFiltersSchema, updateCategorySchema, deleteTransactionsSchema, patchTransactionSchema } from "@/lib/validations/transaction";
 import { logServerError } from "@/lib/safe-error";
-import { flowThemeForCategoryNames } from "@/lib/category-flow-theme";
 
 export const dynamic = "force-dynamic";
 
@@ -27,24 +26,16 @@ export async function GET(request: NextRequest) {
     const conditions = [eq(transactions.userId, userId)];
 
     if (f.flowTheme) {
-      const flowParent = alias(userCategories, "flow_theme_parent");
       const catRows = await resilientQuery(() =>
         db
-          .select({
-            id: userCategories.id,
-            name: userCategories.name,
-            parentName: flowParent.name,
-          })
+          .select({ id: userCategories.id })
           .from(userCategories)
-          .leftJoin(flowParent, eq(userCategories.parentId, flowParent.id))
-          .where(eq(userCategories.userId, userId)),
+          .where(and(
+            eq(userCategories.userId, userId),
+            eq(userCategories.flowType, f.flowTheme as "inflow" | "outflow" | "savings" | "misc"),
+          )),
       );
-      const allowedIds = catRows
-        .filter((row) => {
-          const isSub = row.parentName != null && row.parentName !== "";
-          return flowThemeForCategoryNames(isSub ? row.parentName : null, row.name) === f.flowTheme;
-        })
-        .map((r) => r.id);
+      const allowedIds = catRows.map((r) => r.id);
       if (allowedIds.length === 0) {
         conditions.push(sql`1 = 0`);
       } else {

@@ -9,12 +9,14 @@ const sql = neon(process.env.DATABASE_URL!);
 const db = drizzle({ client: sql });
 
 type SubcategoryType = "discretionary" | "semi-discretionary" | "non-discretionary";
+type FlowType = "inflow" | "outflow" | "savings" | "misc";
 
 interface CategorySeed {
   name: string;
   slug: string;
   icon: string;
   color: string;
+  flowType: FlowType;
   children: { name: string; slug: string; icon: string; subcategoryType?: SubcategoryType }[];
 }
 
@@ -24,6 +26,7 @@ const CATEGORY_TREE: CategorySeed[] = [
     slug: "income",
     icon: "TrendingUp",
     color: "#0BC18D",
+    flowType: "inflow",
     children: [
       { name: "Salary", slug: "salary", icon: "Banknote" },
       { name: "Freelance", slug: "freelance", icon: "Briefcase" },
@@ -37,6 +40,7 @@ const CATEGORY_TREE: CategorySeed[] = [
     slug: "housing",
     icon: "Home",
     color: "#2CA2FF",
+    flowType: "outflow",
     children: [
       { name: "Rent / Mortgage", slug: "rent-mortgage", icon: "Building", subcategoryType: "non-discretionary" },
       { name: "Utilities", slug: "utilities", icon: "Plug", subcategoryType: "non-discretionary" },
@@ -50,6 +54,7 @@ const CATEGORY_TREE: CategorySeed[] = [
     slug: "transportation",
     icon: "Car",
     color: "#AD74FF",
+    flowType: "outflow",
     children: [
       { name: "Fuel", slug: "fuel", icon: "Fuel", subcategoryType: "non-discretionary" },
       { name: "Public Transit", slug: "public-transit", icon: "Train", subcategoryType: "semi-discretionary" },
@@ -64,6 +69,7 @@ const CATEGORY_TREE: CategorySeed[] = [
     slug: "food-drink",
     icon: "UtensilsCrossed",
     color: "#ECAA0B",
+    flowType: "outflow",
     children: [
       { name: "Groceries", slug: "groceries", icon: "ShoppingCart", subcategoryType: "non-discretionary" },
       { name: "Restaurants", slug: "restaurants", icon: "Utensils", subcategoryType: "discretionary" },
@@ -77,6 +83,7 @@ const CATEGORY_TREE: CategorySeed[] = [
     slug: "shopping",
     icon: "ShoppingBag",
     color: "#FF6F69",
+    flowType: "outflow",
     children: [
       { name: "Clothing", slug: "clothing", icon: "Shirt", subcategoryType: "discretionary" },
       { name: "Electronics", slug: "electronics", icon: "Monitor", subcategoryType: "discretionary" },
@@ -90,6 +97,7 @@ const CATEGORY_TREE: CategorySeed[] = [
     slug: "entertainment",
     icon: "Gamepad2",
     color: "#AD74FF",
+    flowType: "outflow",
     children: [
       { name: "Streaming", slug: "streaming", icon: "Tv", subcategoryType: "discretionary" },
       { name: "Gaming", slug: "gaming", icon: "Gamepad", subcategoryType: "discretionary" },
@@ -103,6 +111,7 @@ const CATEGORY_TREE: CategorySeed[] = [
     slug: "health",
     icon: "Heart",
     color: "#0BC18D",
+    flowType: "outflow",
     children: [
       { name: "Medical", slug: "medical", icon: "Stethoscope", subcategoryType: "non-discretionary" },
       { name: "Pharmacy", slug: "pharmacy", icon: "Pill", subcategoryType: "non-discretionary" },
@@ -116,6 +125,7 @@ const CATEGORY_TREE: CategorySeed[] = [
     slug: "financial",
     icon: "Landmark",
     color: "#2CA2FF",
+    flowType: "outflow",
     children: [
       { name: "Bank Fees", slug: "bank-fees", icon: "AlertCircle", subcategoryType: "non-discretionary" },
       { name: "Interest Charges", slug: "interest-charges", icon: "Percent", subcategoryType: "non-discretionary" },
@@ -129,6 +139,7 @@ const CATEGORY_TREE: CategorySeed[] = [
     slug: "travel",
     icon: "Plane",
     color: "#ECAA0B",
+    flowType: "outflow",
     children: [
       { name: "Flights", slug: "flights", icon: "PlaneTakeoff", subcategoryType: "discretionary" },
       { name: "Hotels", slug: "hotels", icon: "Hotel", subcategoryType: "discretionary" },
@@ -142,6 +153,7 @@ const CATEGORY_TREE: CategorySeed[] = [
     slug: "education",
     icon: "GraduationCap",
     color: "#AD74FF",
+    flowType: "outflow",
     children: [
       { name: "Tuition", slug: "tuition", icon: "School", subcategoryType: "non-discretionary" },
       { name: "Books & Supplies", slug: "books-supplies", icon: "BookOpen", subcategoryType: "semi-discretionary" },
@@ -153,6 +165,7 @@ const CATEGORY_TREE: CategorySeed[] = [
     slug: "gifts-donations",
     icon: "Gift",
     color: "#FF6F69",
+    flowType: "outflow",
     children: [
       { name: "Charity", slug: "charity", icon: "HandHeart", subcategoryType: "semi-discretionary" },
       { name: "Gifts", slug: "gifts", icon: "Gift", subcategoryType: "discretionary" },
@@ -164,6 +177,7 @@ const CATEGORY_TREE: CategorySeed[] = [
     slug: "transfers",
     icon: "ArrowLeftRight",
     color: "#808080",
+    flowType: "savings",
     children: [
       { name: "Internal Transfer", slug: "internal-transfer", icon: "Repeat" },
       { name: "Loan Payment", slug: "loan-payment", icon: "FileText" },
@@ -176,6 +190,7 @@ const CATEGORY_TREE: CategorySeed[] = [
     slug: "other",
     icon: "MoreHorizontal",
     color: "#808080",
+    flowType: "misc",
     children: [
       { name: "Uncategorized", slug: "uncategorized", icon: "HelpCircle" },
       { name: "ATM Withdrawal", slug: "atm-withdrawal", icon: "Banknote" },
@@ -204,6 +219,7 @@ async function seed() {
         icon: parent.icon,
         color: parent.color,
         sortOrder: order++,
+        flowType: parent.flowType,
       })
       .returning({ id: systemCategories.id });
 
@@ -216,6 +232,7 @@ async function seed() {
         color: parent.color,
         sortOrder: order++,
         subcategoryType: child.subcategoryType ?? null,
+        flowType: parent.flowType,
       });
     }
   }

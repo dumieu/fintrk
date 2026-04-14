@@ -1,4 +1,4 @@
-export type FlowType = "inflow" | "savings" | "outflow";
+export type FlowType = "inflow" | "outflow" | "savings" | "misc";
 
 export interface SubcategoryData {
   id: string;
@@ -24,11 +24,26 @@ function uid(): string {
   return `cat-${(++_counter).toString(36)}`;
 }
 
-/** Inflow = green, savings & investments = purple, outflow = red (mind map, slicer, etc.). */
+/** Inflow = green, savings & investments = purple, outflow = red, misc = grey. */
 export const FLOW_COLORS: Record<FlowType, string> = {
   inflow: "#22C55E",
-  savings: "#9333EA",
   outflow: "#EF4444",
+  savings: "#9333EA",
+  misc: "#808080",
+};
+
+export const FLOW_LABELS: Record<FlowType, string> = {
+  inflow: "Inflow",
+  outflow: "Outflow",
+  savings: "Savings & Investments",
+  misc: "Misc",
+};
+
+export const FLOW_TOOLTIPS: Record<FlowType, string> = {
+  inflow: "Money coming in — salary, freelance, dividends, refunds",
+  outflow: "Money going out — bills, shopping, dining, subscriptions",
+  savings: "Money set aside — transfers to savings, investments, retirement",
+  misc: "Uncategorized or ambiguous transactions",
 };
 
 export function getDefaultCategories(): FlowData[] {

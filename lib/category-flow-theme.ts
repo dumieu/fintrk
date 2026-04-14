@@ -1,3 +1,4 @@
+import type { FlowType } from "@/lib/default-categories";
 import {
   MIND_MAP_INFLOW_PARENTS,
   MIND_MAP_OUTFLOW_PARENTS,
@@ -7,7 +8,11 @@ import {
   rollupSavingsLabel,
 } from "@/lib/mind-map-amount-rollup";
 
-export type CategoryFlowTheme = "inflow" | "savings" | "outflow" | "unknown";
+/**
+ * CategoryFlowTheme now matches the DB flow_type enum.
+ * "unknown" is kept only as a UI fallback for legacy rows missing flowType.
+ */
+export type CategoryFlowTheme = FlowType | "unknown";
 
 const inflow = new Set(MIND_MAP_INFLOW_PARENTS.map((s) => s.toLowerCase()));
 const savings = new Set(MIND_MAP_SAVINGS_PARENTS.map((s) => s.toLowerCase()));
@@ -33,7 +38,6 @@ export function flowThemeForMindMapParentName(name: string): CategoryFlowTheme {
 function flowThemeForSingleLabel(raw: string): CategoryFlowTheme {
   const k = raw.trim();
   if (!k) return "unknown";
-  // Savings first — narrow labels (brokerage, CPF, …) before broader "Investment" inflow.
   if (rollupSavingsLabel(k)) return "savings";
   if (rollupInflowLabel(k)) return "inflow";
   if (rollupOutflowLabel(k)) return "outflow";
@@ -41,13 +45,16 @@ function flowThemeForSingleLabel(raw: string): CategoryFlowTheme {
 }
 
 /**
- * Theme for a DB category row: tries leaf name, parent name, combined string,
- * then exact mind-map parent match. Matches how transactions are grouped in the mind map.
+ * Preferred: use DB `flowType` directly when available.
+ * Falls back to heuristic name-based resolution for legacy data.
  */
 export function flowThemeForCategoryNames(
   parentName: string | null | undefined,
   leafName: string,
+  dbFlowType?: FlowType | null,
 ): CategoryFlowTheme {
+  if (dbFlowType) return dbFlowType;
+
   const leaf = leafName.trim();
   if (!leaf) return "unknown";
 

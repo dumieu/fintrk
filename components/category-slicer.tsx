@@ -14,22 +14,27 @@ export interface CategorySlicerOption {
   flowTheme: CategoryFlowTheme;
 }
 
-/** Chip tints: inflow green #22C55E, savings purple #9333EA, outflow red #EF4444 — keep aligned with `FLOW_COLORS`. */
+/** Chip tints — keep aligned with `FLOW_COLORS` in default-categories. */
 const THEME_CHIP: Record<CategoryFlowTheme, { idle: string; active: string }> = {
   inflow: {
     idle: "border-[#22C55E]/30 bg-[#22C55E]/10 text-white/90 hover:border-[#22C55E]/50 hover:bg-[#22C55E]/16",
     active:
       "border-[#22C55E]/70 bg-[#22C55E]/24 text-white shadow-[0_0_28px_-10px_rgba(34,197,94,0.55)] ring-1 ring-[#22C55E]/40",
   },
+  outflow: {
+    idle: "border-[#EF4444]/32 bg-[#EF4444]/10 text-white/90 hover:border-[#EF4444]/52 hover:bg-[#EF4444]/16",
+    active:
+      "border-[#EF4444]/72 bg-[#EF4444]/22 text-white shadow-[0_0_28px_-10px_rgba(239,68,68,0.5)] ring-1 ring-[#EF4444]/40",
+  },
   savings: {
     idle: "border-[#9333EA]/35 bg-[#9333EA]/12 text-white/90 hover:border-[#9333EA]/55 hover:bg-[#9333EA]/20",
     active:
       "border-[#9333EA]/75 bg-[#9333EA]/24 text-white shadow-[0_0_28px_-10px_rgba(147,51,234,0.5)] ring-1 ring-[#9333EA]/45",
   },
-  outflow: {
-    idle: "border-[#EF4444]/32 bg-[#EF4444]/10 text-white/90 hover:border-[#EF4444]/52 hover:bg-[#EF4444]/16",
+  misc: {
+    idle: "border-[#808080]/30 bg-[#808080]/10 text-white/90 hover:border-[#808080]/50 hover:bg-[#808080]/16",
     active:
-      "border-[#EF4444]/72 bg-[#EF4444]/22 text-white shadow-[0_0_28px_-10px_rgba(239,68,68,0.5)] ring-1 ring-[#EF4444]/40",
+      "border-[#808080]/70 bg-[#808080]/24 text-white shadow-[0_0_28px_-10px_rgba(128,128,128,0.45)] ring-1 ring-[#808080]/40",
   },
   unknown: {
     idle: "border-white/12 bg-black/25 text-white/85 hover:border-white/22 hover:bg-white/[0.07]",
@@ -582,8 +587,9 @@ export function SubcategoryTypeInlinePicker({
 
 const FLOW_THEME_OPTIONS: { value: CategoryFlowTheme; label: string }[] = [
   { value: "inflow", label: "Inflow" },
-  { value: "savings", label: "Savings & investments" },
   { value: "outflow", label: "Outflow" },
+  { value: "savings", label: "Savings & investments" },
+  { value: "misc", label: "Misc" },
 ];
 
 /** Parent flow (inflow / savings / outflow / other) — sits above category chips on Transactions. */
@@ -666,8 +672,9 @@ export function FlowThemeSlicer({
 
   const dotColor: Record<CategoryFlowTheme, string> = {
     inflow: "#22C55E",
-    savings: "#9333EA",
     outflow: "#EF4444",
+    savings: "#9333EA",
+    misc: "#808080",
     unknown: "rgba(255,255,255,0.35)",
   };
 

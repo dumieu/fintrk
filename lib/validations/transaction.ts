@@ -18,8 +18,8 @@ export const transactionFiltersSchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(25),
   sortBy: z.enum(["posted_date", "base_amount", "merchant_name", "category"]).default("posted_date"),
   sortDir: z.enum(["asc", "desc"]).default("desc"),
-  /** Filter by mind-map parent flow (inflow / savings / outflow / other). */
-  flowTheme: z.enum(["inflow", "savings", "outflow", "unknown"]).optional(),
+  /** Filter by flow type (inflow / outflow / savings / misc). */
+  flowTheme: z.enum(["inflow", "outflow", "savings", "misc", "unknown"]).optional(),
 });
 
 export type TransactionFilters = z.infer<typeof transactionFiltersSchema>;

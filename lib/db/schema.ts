@@ -40,6 +40,13 @@ export const subcategoryTypeEnum = pgEnum("subcategory_type", [
   "non-discretionary",
 ]);
 
+export const flowTypeEnum = pgEnum("flow_type", [
+  "inflow",
+  "outflow",
+  "savings",
+  "misc",
+]);
+
 // ─── Accounts ────────────────────────────────────────────────────────────────
 
 export const accounts = pgTable(
@@ -105,6 +112,7 @@ export const systemCategories = pgTable("system_categories", {
   color: varchar("color", { length: 7 }),
   sortOrder: integer("sort_order").default(0).notNull(),
   subcategoryType: subcategoryTypeEnum("subcategory_type"),
+  flowType: flowTypeEnum("flow_type").notNull(),
 });
 
 // ─── User Categories (per-user clone that can evolve independently) ──────────
@@ -121,6 +129,7 @@ export const userCategories = pgTable(
     color: varchar("color", { length: 7 }),
     sortOrder: integer("sort_order").default(0).notNull(),
     subcategoryType: subcategoryTypeEnum("subcategory_type"),
+    flowType: flowTypeEnum("flow_type").notNull(),
     systemCategoryId: integer("system_category_id").references(() => systemCategories.id),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },

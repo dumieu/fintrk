@@ -13,9 +13,10 @@ const NO_STORE = { "Cache-Control": "no-store" } as const;
 
 const FLOW_SORT_ORDER: Record<CategoryFlowTheme, number> = {
   inflow: 0,
-  savings: 1,
-  outflow: 2,
-  unknown: 3,
+  outflow: 1,
+  savings: 2,
+  misc: 3,
+  unknown: 4,
 };
 
 export interface CategoryFilterOption {
@@ -40,6 +41,7 @@ export async function GET() {
             id: userCategories.id,
             name: userCategories.name,
             parentName: parent.name,
+            flowType: userCategories.flowType,
           })
           .from(userCategories)
           .leftJoin(parent, eq(userCategories.parentId, parent.id))
@@ -73,7 +75,7 @@ export async function GET() {
           label: row.name,
           categoryName: isSub ? row.parentName! : row.name,
           subcategoryName: isSub ? row.name : null,
-          flowTheme: flowThemeForCategoryNames(isSub ? row.parentName : null, row.name),
+          flowTheme: (row.flowType ?? flowThemeForCategoryNames(isSub ? row.parentName : null, row.name)) as CategoryFlowTheme,
         };
       });
 

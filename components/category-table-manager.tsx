@@ -10,11 +10,10 @@ import {
   Plus, Pencil, Trash2, Check, X,
   Loader2,
 } from "lucide-react";
-import {
-  flowThemeForCategoryNames,
-  type CategoryFlowTheme,
-} from "@/lib/category-flow-theme";
-import { isReservedOtherOutflowCategoryName } from "@/lib/reserved-user-categories";
+import type { CategoryFlowTheme } from "@/lib/category-flow-theme";
+import { isReservedOtherOutflowCategoryName, isMiscFlow } from "@/lib/reserved-user-categories";
+import type { FlowType } from "@/lib/default-categories";
+import { FLOW_LABELS, FLOW_TOOLTIPS, FLOW_COLORS } from "@/lib/default-categories";
 import {
   CategorySlicer,
   FlowThemeSlicer,
@@ -35,6 +34,7 @@ interface SubcategoryItem {
   color: string | null;
   sortOrder: number;
   subcategoryType: SubcategoryType | null;
+  flowType: FlowType;
 }
 
 interface CategoryItem {
@@ -44,6 +44,7 @@ interface CategoryItem {
   icon: string | null;
   color: string | null;
   sortOrder: number;
+  flowType: FlowType;
   subcategories: SubcategoryItem[];
 }
 
@@ -51,8 +52,9 @@ interface CategoryItem {
 
 const META_FLOW_LABEL: Record<CategoryFlowTheme, string> = {
   inflow: "Inflow",
-  savings: "Savings & investments",
   outflow: "Outflow",
+  savings: "Savings & investments",
+  misc: "Misc",
   unknown: "Other",
 };
 
@@ -81,11 +83,11 @@ function sortSubcategoriesOthersLast(subs: SubcategoryItem[]): SubcategoryItem[]
   });
 }
 
-/** Top-level "Other Outflow" or any subcategory under that parent. */
-function isLockedOtherOutflowTreeCategory(categories: CategoryItem[], targetId: number): boolean {
+/** Locked if misc flow OR top-level "Other Outflow" or any subcategory under that parent. */
+function isLockedCategory(categories: CategoryItem[], targetId: number): boolean {
   for (const c of categories) {
-    if (c.id === targetId && isReservedOtherOutflowCategoryName(c.name)) return true;
-    if (isReservedOtherOutflowCategoryName(c.name) && c.subcategories.some((s) => s.id === targetId)) return true;
+    if (c.id === targetId && (isMiscFlow(c.flowType) || isReservedOtherOutflowCategoryName(c.name))) return true;
+    if ((isMiscFlow(c.flowType) || isReservedOtherOutflowCategoryName(c.name)) && c.subcategories.some((s) => s.id === targetId)) return true;
   }
   return false;
 }
@@ -303,6 +305,60 @@ function DeleteConfirm({
   );
 }
 
+/** Picker for choosing a flow when adding a new top-level category. Misc is excluded. */
+const USER_SELECTABLE_FLOWS: FlowType[] = ["inflow", "outflow", "savings"];
+
+function NewCategoryFlowPicker({ onSelect }: { onSelect: (ft: FlowType) => void }) {
+  const [open, setOpen] = useState(false);
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-white/[0.08] text-xs text-white/25 transition-colors hover:border-white/[0.15] hover:text-white/50 cursor-pointer"
+      >
+        <Plus className="w-3.5 h-3.5" />
+        Add category
+      </button>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-white/[0.12] bg-white/[0.04] p-3 space-y-2">
+      <p className="text-xs font-medium text-white/50">Pick a flow for the new category</p>
+      <div className="flex flex-wrap gap-2">
+        {USER_SELECTABLE_FLOWS.map((ft) => (
+          <button
+            key={ft}
+            type="button"
+            title={FLOW_TOOLTIPS[ft]}
+            onClick={() => { setOpen(false); onSelect(ft); }}
+            className="group/flow relative flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors hover:brightness-125 cursor-pointer"
+            style={{
+              borderColor: `${FLOW_COLORS[ft]}40`,
+              background: `${FLOW_COLORS[ft]}15`,
+              color: FLOW_COLORS[ft],
+            }}
+          >
+            {FLOW_LABELS[ft]}
+            <span className="pointer-events-none absolute -bottom-7 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-black/90 px-2 py-1 text-[10px] text-white/60 opacity-0 transition-opacity group-hover/flow:opacity-100 z-10">
+              {FLOW_TOOLTIPS[ft]}
+            </span>
+          </button>
+        ))}
+      </div>
+      <button
+        type="button"
+        onClick={() => setOpen(false)}
+        className="text-[11px] text-white/30 hover:text-white/50 transition-colors cursor-pointer"
+      >
+        Cancel
+      </button>
+    </div>
+  );
+}
+
 /* ═══════════════════════════ MAIN COMPONENT ══════════════════════════════ */
 
 export function CategoryTableManager() {
@@ -321,8 +377,8 @@ export function CategoryTableManager() {
   // Editing state
   const [editId, setEditId] = useState<number | null>(null);
 
-  // Adding state
-  const [addingCatParent, setAddingCatParent] = useState(false);
+  // Adding state — for top-level, stores the selected flow; null = not adding
+  const [addingCatFlow, setAddingCatFlow] = useState<FlowType | null>(null);
   const [addingSubParentId, setAddingSubParentId] = useState<number | null>(null);
 
   /** Subcategory pill opened for in-place name edit + expense-type picker. */
@@ -365,25 +421,23 @@ export function CategoryTableManager() {
 
   useEffect(() => {
     if (activeSubPillId == null) return;
-    if (isLockedOtherOutflowTreeCategory(categories, activeSubPillId)) setActiveSubPillId(null);
+    if (isLockedCategory(categories, activeSubPillId)) setActiveSubPillId(null);
   }, [activeSubPillId, categories]);
 
   useEffect(() => {
     if (editId == null) return;
-    if (isLockedOtherOutflowTreeCategory(categories, editId)) setEditId(null);
+    if (isLockedCategory(categories, editId)) setEditId(null);
   }, [editId, categories]);
 
   useEffect(() => {
     if (addingSubParentId == null) return;
     const p = categories.find((c) => c.id === addingSubParentId);
-    if (p && isReservedOtherOutflowCategoryName(p.name)) setAddingSubParentId(null);
+    if (p && (isMiscFlow(p.flowType) || isReservedOtherOutflowCategoryName(p.name))) setAddingSubParentId(null);
   }, [addingSubParentId, categories]);
 
   const metaFilteredParents = useMemo(() => {
     if (metaFlowFilter === null) return categories;
-    return categories.filter(
-      (c) => flowThemeForCategoryNames(null, c.name) === metaFlowFilter,
-    );
+    return categories.filter((c) => c.flowType === metaFlowFilter);
   }, [categories, metaFlowFilter]);
 
   useEffect(() => {
@@ -392,9 +446,9 @@ export function CategoryTableManager() {
     }
   }, [metaFilteredParents, flowFilterId]);
 
-  /** Inflow / savings subs have no expense type — clear type filter when leaving outflow-only context. */
+  /** Only outflow subs have expense type — clear type filter for other flows. */
   useEffect(() => {
-    if (metaFlowFilter === "inflow" || metaFlowFilter === "savings") {
+    if (metaFlowFilter && metaFlowFilter !== "outflow") {
       setSubcategoryTypeFilter("");
     }
   }, [metaFlowFilter]);
@@ -416,7 +470,7 @@ export function CategoryTableManager() {
       label: c.name,
       categoryName: c.name,
       subcategoryName: null,
-      flowTheme: flowThemeForCategoryNames(null, c.name),
+      flowTheme: c.flowType as CategoryFlowTheme,
     }));
   }, [metaFilteredParents, subcategoryTypeFilter]);
 
@@ -466,7 +520,7 @@ export function CategoryTableManager() {
   }, []);
 
   const setSubcategoryType = useCallback(async (id: number, next: SubcategoryType) => {
-    if (isLockedOtherOutflowTreeCategory(categories, id)) return;
+    if (isLockedCategory(categories, id)) return;
     setCategories((prev) =>
       prev.map((cat) => ({
         ...cat,
@@ -485,7 +539,7 @@ export function CategoryTableManager() {
   // CRUD — optimistic-first, then persist in the background.
 
   const renameCat = useCallback(async (id: number, name: string) => {
-    if (isLockedOtherOutflowTreeCategory(categories, id)) return;
+    if (isLockedCategory(categories, id)) return;
     setEditId(null);
     setActiveSubPillId(null);
 
@@ -511,13 +565,18 @@ export function CategoryTableManager() {
     } catch { /* optimistic already applied */ }
   }, [categories]);
 
-  const addCategory = useCallback(async (name: string, parentId?: number) => {
+  const addCategory = useCallback(async (name: string, parentId?: number, flowType?: FlowType) => {
     if (parentId == null && isReservedOtherOutflowCategoryName(name)) return;
     if (parentId != null) {
       const parent = categories.find((c) => c.id === parentId);
-      if (parent && isReservedOtherOutflowCategoryName(parent.name)) return;
+      if (parent && (isMiscFlow(parent.flowType) || isReservedOtherOutflowCategoryName(parent.name))) return;
     }
-    setAddingCatParent(false);
+
+    const resolvedFlow = parentId
+      ? categories.find((c) => c.id === parentId)?.flowType ?? "outflow"
+      : flowType ?? "outflow";
+
+    setAddingCatFlow(null);
     setAddingSubParentId(null);
 
     const tempId = -(Date.now() + Math.random());
@@ -531,7 +590,7 @@ export function CategoryTableManager() {
                 ...cat,
                 subcategories: [
                   ...cat.subcategories,
-                  { id: tempId, name, slug, icon: null, color: null, sortOrder: cat.subcategories.length + 1, subcategoryType: null },
+                  { id: tempId, name, slug, icon: null, color: null, sortOrder: cat.subcategories.length + 1, subcategoryType: null, flowType: resolvedFlow },
                 ],
               }
             : cat,
@@ -540,15 +599,17 @@ export function CategoryTableManager() {
     } else {
       setCategories((prev) => [
         ...prev,
-        { id: tempId, name, slug, icon: null, color: null, sortOrder: prev.length + 1, subcategories: [] },
+        { id: tempId, name, slug, icon: null, color: null, sortOrder: prev.length + 1, flowType: resolvedFlow, subcategories: [] },
       ]);
     }
 
     try {
+      const bodyPayload: Record<string, unknown> = { name, parentId };
+      if (!parentId) bodyPayload.flowType = resolvedFlow;
       const res = await fetch("/api/user-categories", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, parentId }),
+        body: JSON.stringify(bodyPayload),
       });
       if (res.ok) {
         const data = await res.json();
@@ -573,7 +634,7 @@ export function CategoryTableManager() {
   const confirmDelete = useCallback(async () => {
     if (!delConfirm) return;
     const { id } = delConfirm;
-    if (isLockedOtherOutflowTreeCategory(categories, id)) {
+    if (isLockedCategory(categories, id)) {
       setDelConfirm(null);
       return;
     }
@@ -623,7 +684,7 @@ export function CategoryTableManager() {
     let semi = 0;
     let disc = 0;
     for (const cat of categories) {
-      if (flowThemeForCategoryNames(null, cat.name) !== "outflow") continue;
+      if (cat.flowType !== "outflow") continue;
       for (const s of cat.subcategories) {
         if (s.subcategoryType === "non-discretionary") non++;
         else if (s.subcategoryType === "semi-discretionary") semi++;
@@ -670,7 +731,7 @@ export function CategoryTableManager() {
               onSelect={onMappingFlowSelect}
             />
           </div>
-          {metaFlowFilter !== "inflow" && metaFlowFilter !== "savings" ? (
+          {metaFlowFilter === null || metaFlowFilter === "outflow" ? (
             <div className="w-max min-w-0 shrink-0">
               <SubcategoryTypeSlicer
                 showLabel={false}
@@ -744,8 +805,8 @@ export function CategoryTableManager() {
         <div className="grid grid-cols-1 gap-2 sm:gap-3 md:grid-cols-2 md:gap-3">
           {displayCategories.map((cat) => {
             const catColor = cat.color ?? "#808080";
-            const isOutflow = flowThemeForCategoryNames(null, cat.name) === "outflow";
-            const cardLocked = isReservedOtherOutflowCategoryName(cat.name);
+            const isOutflow = cat.flowType === "outflow";
+            const cardLocked = isMiscFlow(cat.flowType) || isReservedOtherOutflowCategoryName(cat.name);
 
             return (
               <div
@@ -900,25 +961,29 @@ export function CategoryTableManager() {
             );
           })}
 
-          {/* Add top-level category */}
-          {addingCatParent ? (
-            <div className="col-span-full px-4 py-2">
+          {/* Add top-level category — step 1: pick flow, step 2: enter name */}
+          {addingCatFlow ? (
+            <div className="col-span-full px-4 py-2 space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-white/40">Flow:</span>
+                <span
+                  className="rounded-full px-2.5 py-0.5 text-xs font-medium"
+                  style={{ background: `${FLOW_COLORS[addingCatFlow]}25`, color: FLOW_COLORS[addingCatFlow] }}
+                >
+                  {FLOW_LABELS[addingCatFlow]}
+                </span>
+              </div>
               <NewItemInput
-                color="#808080"
+                color={FLOW_COLORS[addingCatFlow]}
                 placeholder="New category…"
-                onSave={(name) => addCategory(name)}
-                onCancel={() => setAddingCatParent(false)}
+                onSave={(name) => addCategory(name, undefined, addingCatFlow)}
+                onCancel={() => setAddingCatFlow(null)}
               />
             </div>
           ) : (
-            <button
-              type="button"
-              onClick={() => setAddingCatParent(true)}
-              className="col-span-full flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-white/[0.08] text-xs text-white/25 transition-colors hover:border-white/[0.15] hover:text-white/50 cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Add category
-            </button>
+            <div className="col-span-full">
+              <NewCategoryFlowPicker onSelect={(ft) => setAddingCatFlow(ft)} />
+            </div>
           )}
         </div>
       </div>
