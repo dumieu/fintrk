@@ -31,7 +31,7 @@ async function userCategoryRowLocked(userId: string, row: UserCategoryRow): Prom
   }
   let pid: number | null = row.parentId;
   while (pid != null) {
-    const currentPid = pid;
+    const currentPid: number = pid;
     const [p] = await resilientQuery(() =>
       db
         .select({ name: userCategories.name, parentId: userCategories.parentId, flowType: userCategories.flowType })
