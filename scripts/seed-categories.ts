@@ -91,6 +91,7 @@ const CATEGORY_TREE: CategorySeed[] = [
       { name: "Groceries, Food & Drink", slug: "groceries-food-drink", icon: "ShoppingCart", subcategoryType: "non-discretionary" },
       { name: "Personal Care", slug: "personal-care", icon: "Sparkles", subcategoryType: "semi-discretionary" },
       { name: "Online Shopping", slug: "online-shopping", icon: "Globe", subcategoryType: "discretionary" },
+      { name: "Apparel", slug: "apparel", icon: "Shirt", subcategoryType: "discretionary" },
       { name: "Other", slug: "other-shopping", icon: "MoreHorizontal" },
     ],
   },
