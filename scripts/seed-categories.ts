@@ -36,7 +36,19 @@ const CATEGORY_TREE: CategorySeed[] = [
     ],
   },
   {
-    name: "Housing",
+    name: "Tax",
+    slug: "tax",
+    icon: "Receipt",
+    color: "#EF4444",
+    flowType: "outflow",
+    children: [
+      { name: "Income Tax", slug: "income-tax", icon: "Receipt", subcategoryType: "non-discretionary" },
+      { name: "Property Tax", slug: "property-tax-2", icon: "Receipt", subcategoryType: "non-discretionary" },
+      { name: "Other", slug: "other-tax-misc", icon: "Receipt", subcategoryType: "non-discretionary" },
+    ],
+  },
+  {
+    name: "Household",
     slug: "housing",
     icon: "Home",
     color: "#2CA2FF",
@@ -44,9 +56,10 @@ const CATEGORY_TREE: CategorySeed[] = [
     children: [
       { name: "Rent / Mortgage", slug: "rent-mortgage", icon: "Building", subcategoryType: "non-discretionary" },
       { name: "Utilities", slug: "utilities", icon: "Plug", subcategoryType: "non-discretionary" },
-      { name: "Insurance", slug: "insurance-housing", icon: "Shield", subcategoryType: "non-discretionary" },
+      { name: "Domestic Help", slug: "domestic-help", icon: "Users", subcategoryType: "non-discretionary" },
+      { name: "Property Insurance", slug: "insurance-housing", icon: "Shield", subcategoryType: "non-discretionary" },
       { name: "Maintenance", slug: "maintenance", icon: "Wrench", subcategoryType: "semi-discretionary" },
-      { name: "Property Tax", slug: "property-tax", icon: "Landmark", subcategoryType: "non-discretionary" },
+      { name: "Other", slug: "other-household", icon: "MoreHorizontal" },
     ],
   },
   {
@@ -58,24 +71,12 @@ const CATEGORY_TREE: CategorySeed[] = [
     children: [
       { name: "Fuel", slug: "fuel", icon: "Fuel", subcategoryType: "non-discretionary" },
       { name: "Public Transit", slug: "public-transit", icon: "Train", subcategoryType: "semi-discretionary" },
-      { name: "Ride Share", slug: "ride-share", icon: "Navigation", subcategoryType: "semi-discretionary" },
+      { name: "Car Maintenance", slug: "car-maintenance", icon: "Wrench", subcategoryType: "semi-discretionary" },
+      { name: "Ride Share & Taxi", slug: "ride-share", icon: "Navigation", subcategoryType: "semi-discretionary" },
       { name: "Parking", slug: "parking", icon: "ParkingSquare", subcategoryType: "semi-discretionary" },
       { name: "Car Payment", slug: "car-payment", icon: "CarFront", subcategoryType: "non-discretionary" },
       { name: "Car Insurance", slug: "car-insurance", icon: "Shield", subcategoryType: "non-discretionary" },
-    ],
-  },
-  {
-    name: "Food & Drink",
-    slug: "food-drink",
-    icon: "UtensilsCrossed",
-    color: "#ECAA0B",
-    flowType: "outflow",
-    children: [
-      { name: "Groceries", slug: "groceries", icon: "ShoppingCart", subcategoryType: "non-discretionary" },
-      { name: "Restaurants", slug: "restaurants", icon: "Utensils", subcategoryType: "discretionary" },
-      { name: "Coffee", slug: "coffee", icon: "Coffee", subcategoryType: "discretionary" },
-      { name: "Delivery", slug: "delivery", icon: "Truck", subcategoryType: "semi-discretionary" },
-      { name: "Bars & Nightlife", slug: "bars-nightlife", icon: "Wine", subcategoryType: "discretionary" },
+      { name: "Other", slug: "other-transport", icon: "MoreHorizontal" },
     ],
   },
   {
@@ -85,11 +86,12 @@ const CATEGORY_TREE: CategorySeed[] = [
     color: "#FF6F69",
     flowType: "outflow",
     children: [
-      { name: "Clothing", slug: "clothing", icon: "Shirt", subcategoryType: "discretionary" },
-      { name: "Electronics", slug: "electronics", icon: "Monitor", subcategoryType: "discretionary" },
-      { name: "Home & Garden", slug: "home-garden", icon: "Flower", subcategoryType: "discretionary" },
+      { name: "Technology", slug: "technology", icon: "Monitor", subcategoryType: "discretionary" },
+      { name: "Home & Garden", slug: "electronics", icon: "Flower", subcategoryType: "discretionary" },
+      { name: "Groceries, Food & Drink", slug: "groceries-food-drink", icon: "ShoppingCart", subcategoryType: "non-discretionary" },
       { name: "Personal Care", slug: "personal-care", icon: "Sparkles", subcategoryType: "semi-discretionary" },
       { name: "Online Shopping", slug: "online-shopping", icon: "Globe", subcategoryType: "discretionary" },
+      { name: "Other", slug: "other-shopping", icon: "MoreHorizontal" },
     ],
   },
   {
@@ -101,23 +103,24 @@ const CATEGORY_TREE: CategorySeed[] = [
     children: [
       { name: "Streaming", slug: "streaming", icon: "Tv", subcategoryType: "discretionary" },
       { name: "Gaming", slug: "gaming", icon: "Gamepad", subcategoryType: "discretionary" },
+      { name: "Restaurants & Delivery", slug: "restaurants-delivery", icon: "Utensils", subcategoryType: "discretionary" },
+      { name: "Bars & Nightlife", slug: "bars-nightlife-ent", icon: "Wine", subcategoryType: "discretionary" },
       { name: "Events & Concerts", slug: "events-concerts", icon: "Ticket", subcategoryType: "discretionary" },
       { name: "Hobbies", slug: "hobbies", icon: "Palette", subcategoryType: "discretionary" },
-      { name: "Books & Media", slug: "books-media", icon: "Book", subcategoryType: "discretionary" },
+      { name: "Other", slug: "other-entertainment", icon: "MoreHorizontal" },
     ],
   },
   {
-    name: "Health",
+    name: "Health & Fitness",
     slug: "health",
     icon: "Heart",
     color: "#0BC18D",
     flowType: "outflow",
     children: [
       { name: "Medical", slug: "medical", icon: "Stethoscope", subcategoryType: "non-discretionary" },
-      { name: "Pharmacy", slug: "pharmacy", icon: "Pill", subcategoryType: "non-discretionary" },
       { name: "Fitness", slug: "fitness", icon: "Dumbbell", subcategoryType: "semi-discretionary" },
       { name: "Health Insurance", slug: "health-insurance", icon: "ShieldCheck", subcategoryType: "non-discretionary" },
-      { name: "Mental Health", slug: "mental-health", icon: "Brain", subcategoryType: "semi-discretionary" },
+      { name: "Other", slug: "other-health", icon: "MoreHorizontal" },
     ],
   },
   {
@@ -142,10 +145,12 @@ const CATEGORY_TREE: CategorySeed[] = [
     flowType: "outflow",
     children: [
       { name: "Flights", slug: "flights", icon: "PlaneTakeoff", subcategoryType: "discretionary" },
-      { name: "Hotels", slug: "hotels", icon: "Hotel", subcategoryType: "discretionary" },
+      { name: "Accommodation", slug: "accommodation", icon: "Hotel", subcategoryType: "discretionary" },
+      { name: "Meals", slug: "travel-meals", icon: "Utensils", subcategoryType: "discretionary" },
       { name: "Activities", slug: "travel-activities", icon: "Map", subcategoryType: "discretionary" },
       { name: "Travel Insurance", slug: "travel-insurance", icon: "Shield", subcategoryType: "semi-discretionary" },
       { name: "Car Rental", slug: "car-rental", icon: "CarFront", subcategoryType: "discretionary" },
+      { name: "Other", slug: "other-travel", icon: "MoreHorizontal" },
     ],
   },
   {
@@ -156,8 +161,11 @@ const CATEGORY_TREE: CategorySeed[] = [
     flowType: "outflow",
     children: [
       { name: "Tuition", slug: "tuition", icon: "School", subcategoryType: "non-discretionary" },
-      { name: "Books & Supplies", slug: "books-supplies", icon: "BookOpen", subcategoryType: "semi-discretionary" },
+      { name: "School", slug: "school", icon: "School", subcategoryType: "semi-discretionary" },
+      { name: "Extracurricular Activities", slug: "extracurricular", icon: "Award", subcategoryType: "semi-discretionary" },
+      { name: "Books & Media", slug: "books-media-edu", icon: "BookOpen", subcategoryType: "semi-discretionary" },
       { name: "Courses & Certifications", slug: "courses", icon: "Award", subcategoryType: "semi-discretionary" },
+      { name: "Other", slug: "other-education", icon: "MoreHorizontal" },
     ],
   },
   {
@@ -169,20 +177,7 @@ const CATEGORY_TREE: CategorySeed[] = [
     children: [
       { name: "Charity", slug: "charity", icon: "HandHeart", subcategoryType: "semi-discretionary" },
       { name: "Gifts", slug: "gifts", icon: "Gift", subcategoryType: "discretionary" },
-      { name: "Religious", slug: "religious", icon: "Church", subcategoryType: "semi-discretionary" },
-    ],
-  },
-  {
-    name: "Tax",
-    slug: "tax",
-    icon: "Receipt",
-    color: "#EF4444",
-    flowType: "outflow",
-    children: [
-      { name: "Income Tax", slug: "income-tax", icon: "Receipt", subcategoryType: "non-discretionary" },
-      { name: "Property Tax", slug: "property-tax-2", icon: "Landmark", subcategoryType: "non-discretionary" },
-      { name: "Sales Tax", slug: "sales-tax", icon: "Receipt", subcategoryType: "non-discretionary" },
-      { name: "Other Tax", slug: "other-tax", icon: "Receipt", subcategoryType: "non-discretionary" },
+      { name: "Other", slug: "other-gifts", icon: "MoreHorizontal" },
     ],
   },
   {
@@ -206,9 +201,6 @@ const CATEGORY_TREE: CategorySeed[] = [
     flowType: "misc",
     children: [
       { name: "Card Payments", slug: "card-payments", icon: "CreditCard" },
-      { name: "ATM Withdrawal", slug: "atm-withdrawal", icon: "Banknote" },
-      { name: "Cash", slug: "cash", icon: "Coins" },
-      { name: "Miscellaneous", slug: "miscellaneous", icon: "Package" },
     ],
   },
 ];

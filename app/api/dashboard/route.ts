@@ -141,16 +141,22 @@ export async function GET() {
     }
 
     const CATEGORY_COLORS: Record<string, string> = {
+      "Tax": "#EF4444",
+      "Household": "#2CA2FF",
+      "Transportation": "#AD74FF",
+      "Shopping": "#FF6F69",
+      "Entertainment": "#AD74FF",
+      "Health & Fitness": "#0BC18D",
+      "Financial": "#2CA2FF",
+      "Travel": "#ECAA0B",
+      "Education": "#AD74FF",
+      "Gifts & Donations": "#FF6F69",
+      "Income": "#0BC18D",
       "Food & Drink": "#ECAA0B",
       "Groceries": "#ECAA0B",
       "Restaurants": "#ECAA0B",
-      "Shopping": "#FF6F69",
-      "Transportation": "#AD74FF",
       "Housing": "#2CA2FF",
-      "Entertainment": "#AD74FF",
       "Health": "#0BC18D",
-      "Financial": "#2CA2FF",
-      "Travel": "#ECAA0B",
     };
 
     return NextResponse.json(

@@ -1,0 +1,19 @@
+-- Reshape system_categories to match the new default hierarchy.
+-- This migration was applied directly via neon() calls;
+-- the file is kept for documentation / re-run safety.
+--
+-- Changes:
+--   Tax:           removed Sales Tax, Other Tax; added "Other"
+--   Housing→Household: renamed parent; Insurance→Property Insurance; removed Property Tax child; added Domestic Help, Other
+--   Food & Drink:  deleted parent + all children (merged into Shopping & Entertainment)
+--   Shopping:      Clothing→Technology, Electronics→Home & Garden, Home & Garden→Groceries Food & Drink; added Other
+--   Entertainment: added Restaurants & Delivery, Bars & Nightlife; Books & Media→Other
+--   Health→Health & Fitness: removed Pharmacy, Mental Health; added Other
+--   Travel:        Hotels→Accommodation; added Meals, Other
+--   Education:     Books & Supplies→School; added Extracurricular Activities, Books & Media, Other
+--   Gifts & Donations: removed Religious; added Other
+--   Transportation: Ride Share→Ride Share & Taxi; added Car Maintenance, Other
+--   Other Misc:    removed ATM Withdrawal, Cash, Miscellaneous
+--   Sort orders:   renumbered all rows
+--
+-- Already executed against production on 2026-04-14.

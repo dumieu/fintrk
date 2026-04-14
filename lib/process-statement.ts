@@ -113,7 +113,7 @@ User's merchant history:
 `;
 
 function buildSystemInstruction(subcategoryList: string): string {
-  return `You are FinTRK, a financial data extraction engine. You receive bank statement data (as a markdown table or as a PDF/image) and extract every transaction into a strictly structured JSON array.
+  return `You are FinTRK, a financial statement (credit card, debit card, checking account) data extraction engine. You receive bank statement data (as a markdown table or as a PDF/image) and extract every transaction into a strictly structured JSON array.
 
 For EACH transaction, you MUST:
 
@@ -140,6 +140,13 @@ For EACH transaction, you MUST:
    - country_iso: ISO 3166-1 alpha-2 country code, inferred from explicit country indicators, currency, or merchant name recognition. Default to the account's country if ambiguous.
    - category_suggestion: your best category from this exact list: ${subcategoryList}
      IMPORTANT: To determine the correct category, you MUST analyze the ENTIRE raw_description — not only the merchant name. Transaction descriptions often contain keywords like "rental", "groceries", "salary", "insurance", "transfer", "loan", "utilities", "dining", "fuel", etc. that are strong category signals. Always use every available clue from the full description text, any embedded notes, and the merchant name together to pick the most accurate category.
+
+SPECIAL CATEGORY RULES (apply BEFORE general classification):
+
+   A) CARD PAYMENTS — category "Other Misc" → subcategory "Card Payments":
+      On CREDIT CARD statements: look for POSITIVE (credit) transactions that are payments made TO the credit card to reduce the outstanding balance. These typically appear as "PAYMENT RECEIVED", "PAYMENT THANK YOU", "AUTOPAY", "PAYMENT - THANK YOU", "ONLINE PAYMENT", "MOBILE PAYMENT", "PAYMENT FROM CHECKING", "BILL PAYMENT", "CR ADJUSTMENT", or similar bank-generated descriptions — NOT merchant purchases. If you are confident the transaction is a payment toward the credit card balance, assign category_suggestion = "Card Payments" (the subcategory under "Other Misc").
+      On CHECKING / DEBIT CARD statements: look for NEGATIVE (debit) transactions that are payments made FROM the checking account TO a credit card. These typically appear as "CREDIT CARD PAYMENT", "CC PAYMENT", "CARD PAYMENT", "PAYMENT TO VISA", "PAYMENT TO MASTERCARD", "PAYMENT TO AMEX", "PAY CREDIT CARD", or the bank's own credit card product name. If you are confident the transaction is a payment toward a credit card, assign category_suggestion = "Card Payments".
+      Do NOT tag regular merchant purchases as Card Payments — only balance payments / transfers between the user's own accounts.
 
 5. PATTERNS:
    - is_recurring: true if this merchant appears to charge on a regular schedule (subscriptions, rent, salary, insurance, loan payments)
