@@ -23,6 +23,16 @@ const NO_STORE = { "Cache-Control": "no-store" } as const;
 
 type UserCategoryRow = { name: string; parentId: number | null; flowType: FlowType };
 
+function fetchParentCategory(userId: string, parentId: number) {
+  return resilientQuery(() =>
+    db
+      .select({ name: userCategories.name, parentId: userCategories.parentId, flowType: userCategories.flowType })
+      .from(userCategories)
+      .where(and(eq(userCategories.id, parentId), eq(userCategories.userId, userId)))
+      .limit(1),
+  );
+}
+
 /** Locked if misc flow OR top-level "Other Outflow" or any descendant under that parent. */
 async function userCategoryRowLocked(userId: string, row: UserCategoryRow): Promise<boolean> {
   if (isMiscFlow(row.flowType)) return true;
@@ -31,14 +41,7 @@ async function userCategoryRowLocked(userId: string, row: UserCategoryRow): Prom
   }
   let pid: number | null = row.parentId;
   while (pid != null) {
-    const currentPid: number = pid;
-    const [p] = await resilientQuery(() =>
-      db
-        .select({ name: userCategories.name, parentId: userCategories.parentId, flowType: userCategories.flowType })
-        .from(userCategories)
-        .where(and(eq(userCategories.id, currentPid), eq(userCategories.userId, userId)))
-        .limit(1),
-    );
+    const [p] = await fetchParentCategory(userId, pid);
     if (!p) return false;
     if (isMiscFlow(p.flowType)) return true;
     if (p.parentId == null && isReservedOtherOutflowCategoryName(p.name)) return true;
