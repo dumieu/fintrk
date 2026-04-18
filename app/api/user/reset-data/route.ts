@@ -13,8 +13,9 @@ import {
   budgets,
   goals,
   userCategories,
+  merchants,
 } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { logServerError } from "@/lib/safe-error";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +28,9 @@ const NO_STORE = { "Cache-Control": "no-store" } as const;
  *
  * Deletion order respects FK constraints:
  *   transactions → statements → file_upload_log → accounts → everything else
+ *
+ * merchants is a shared table, so we null out FK references before
+ * dropping user_categories.
  */
 export async function DELETE() {
   try {
@@ -52,6 +56,25 @@ export async function DELETE() {
     await del("aiCosts", aiCosts);
     await del("budgets", budgets);
     await del("goals", goals);
+
+    // Detach merchants from this user's categories before dropping them.
+    // merchants is a shared table so we can't delete rows, just null the FK.
+    const userCatIds = await resilientQuery(() =>
+      db
+        .select({ id: userCategories.id })
+        .from(userCategories)
+        .where(eq(userCategories.userId, userId)),
+    );
+    if (userCatIds.length > 0) {
+      const ids = userCatIds.map((r) => r.id);
+      await resilientQuery(() =>
+        db
+          .update(merchants)
+          .set({ categoryId: null })
+          .where(inArray(merchants.categoryId, ids)),
+      );
+    }
+
     await del("userCategories", userCategories);
     await del("accounts", accounts);
 

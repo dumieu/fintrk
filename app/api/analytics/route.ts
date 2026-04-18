@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server";
 import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
-import { transactions, accounts, userCategories } from "@/lib/db/schema";
-import { eq, and, sql, desc } from "drizzle-orm";
+import { transactions, accounts } from "@/lib/db/schema";
+import {
+  categoryRollupLabelSql,
+  leafCategory,
+  parentCategory,
+} from "@/lib/db/category-rollup";
+import { eq, and, sql } from "drizzle-orm";
 import { logServerError } from "@/lib/safe-error";
 
 export const dynamic = "force-dynamic";
@@ -23,18 +28,34 @@ export async function GET() {
     const { userId } = await resilientAuth();
     if (!userId) return unauthorizedResponse();
 
-    const [categoryBreakdown, dayOfWeek, topMerchants, countrySpend, fxData, userAccounts] =
-      await Promise.all([
+    const [
+      categoryBreakdown,
+      dayOfWeek,
+      dayOfWeekCategories,
+      countrySpend,
+      fxData,
+      userAccounts,
+    ] = await Promise.all([
         resilientQuery(() =>
           db
             .select({
-              category: userCategories.name,
+              category: categoryRollupLabelSql,
               total: sql<string>`SUM(ABS(CAST(${transactions.baseAmount} AS numeric)))`,
             })
             .from(transactions)
-            .leftJoin(userCategories, eq(transactions.categoryId, userCategories.id))
+            .leftJoin(
+              leafCategory,
+              and(eq(transactions.categoryId, leafCategory.id), eq(leafCategory.userId, userId)),
+            )
+            .leftJoin(
+              parentCategory,
+              and(
+                eq(leafCategory.parentId, parentCategory.id),
+                eq(parentCategory.userId, userId),
+              ),
+            )
             .where(and(eq(transactions.userId, userId), sql`CAST(${transactions.baseAmount} AS numeric) < 0`))
-            .groupBy(userCategories.name)
+            .groupBy(categoryRollupLabelSql)
             .orderBy(sql`SUM(ABS(CAST(${transactions.baseAmount} AS numeric))) DESC`)
             .limit(10),
         ),
@@ -54,16 +75,24 @@ export async function GET() {
         resilientQuery(() =>
           db
             .select({
-              name: transactions.merchantName,
+              dow: sql<number>`EXTRACT(DOW FROM ${transactions.postedDate}::date)::int`,
+              category: categoryRollupLabelSql,
               total: sql<string>`SUM(ABS(CAST(${transactions.baseAmount} AS numeric)))`,
-              count: sql<number>`COUNT(*)::int`,
-              currency: transactions.baseCurrency,
             })
             .from(transactions)
-            .where(and(eq(transactions.userId, userId), sql`${transactions.merchantName} IS NOT NULL`))
-            .groupBy(transactions.merchantName, transactions.baseCurrency)
-            .orderBy(sql`SUM(ABS(CAST(${transactions.baseAmount} AS numeric))) DESC`)
-            .limit(10),
+            .leftJoin(
+              leafCategory,
+              and(eq(transactions.categoryId, leafCategory.id), eq(leafCategory.userId, userId)),
+            )
+            .leftJoin(
+              parentCategory,
+              and(
+                eq(leafCategory.parentId, parentCategory.id),
+                eq(parentCategory.userId, userId),
+              ),
+            )
+            .where(and(eq(transactions.userId, userId), sql`CAST(${transactions.baseAmount} AS numeric) < 0`))
+            .groupBy(categoryRollupLabelSql, sql`EXTRACT(DOW FROM ${transactions.postedDate}::date)`),
         ),
 
         resilientQuery(() =>
@@ -105,6 +134,24 @@ export async function GET() {
       dowArray[idx] = parseFloat(row.total ?? "0");
     }
 
+    const dayOfWeekCategoryBreakdown: {
+      label: string;
+      amount: number;
+      color: string;
+    }[][] = Array.from({ length: 7 }, () => []);
+    for (const row of dayOfWeekCategories) {
+      const idx = row.dow === 0 ? 6 : row.dow - 1;
+      const label = row.category;
+      dayOfWeekCategoryBreakdown[idx].push({
+        label,
+        amount: parseFloat(row.total ?? "0"),
+        color: CATEGORY_COLORS[label] ?? "#808080",
+      });
+    }
+    for (const arr of dayOfWeekCategoryBreakdown) {
+      arr.sort((a, b) => b.amount - a.amount);
+    }
+
     let fxTotal = 0;
     let worstSpread = 0;
     for (const row of fxData) {
@@ -124,12 +171,7 @@ export async function GET() {
           color: CATEGORY_COLORS[c.category ?? ""] ?? "#808080",
         })),
         dayOfWeekSpend: dowArray,
-        topMerchants: topMerchants.map((m) => ({
-          name: m.name ?? "Unknown",
-          total: parseFloat(m.total ?? "0"),
-          count: m.count,
-          currency: m.currency,
-        })),
+        dayOfWeekCategoryBreakdown,
         countrySpend: countrySpend.map((c) => ({
           country: c.country ?? "XX",
           total: parseFloat(c.total ?? "0"),

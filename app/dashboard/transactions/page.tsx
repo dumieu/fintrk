@@ -15,6 +15,7 @@ import {
   Trash2,
   Loader2,
   ChevronDown,
+  SlidersHorizontal,
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -34,6 +35,7 @@ import { TransactionCategoryIcon } from "@/components/transaction-category-icon"
 import {
   CategorySlicer,
   FlowThemeSlicer,
+  SubcategoryTypeSlicer,
   type CategorySlicerOption,
 } from "@/components/category-slicer";
 import { TimeSlicer } from "@/components/time-slicer";
@@ -87,6 +89,8 @@ interface Filters {
   categoryId: string;
   /** Mind-map parent flow filter; empty = all. */
   flowTheme: string;
+  /** Expense type (subcategory); empty = all. */
+  subcategoryType: string;
   accountKind: string;
   accountNumber: string;
   amountMin: number;
@@ -129,6 +133,7 @@ function buildTransactionQueryParams(f: Filters, page: number): URLSearchParams 
   if (f.accountId) params.set("accountId", f.accountId);
   if (f.categoryId) params.set("categoryId", f.categoryId);
   if (f.flowTheme) params.set("flowTheme", f.flowTheme);
+  if (f.subcategoryType) params.set("subcategoryType", f.subcategoryType);
   if (f.accountKind) params.set("accountKind", f.accountKind);
   if (f.accountNumber.trim()) params.set("accountNumber", f.accountNumber.trim());
   if (f.amountMin > AMOUNT_RANGE_MIN) params.set("amountMin", f.amountMin.toString());
@@ -1104,16 +1109,17 @@ function AmountRangeSlider({
           ref={trackRef}
           className="absolute inset-x-0 top-1/2 h-[5px] -translate-y-1/2 rounded-full"
           style={{
-            background: "linear-gradient(90deg, rgba(252,165,165,.15), rgba(255,255,255,.06) 50%, rgba(167,243,208,.15))",
+            background:
+              "linear-gradient(90deg, rgba(252,165,165,.15) 0%, rgba(255,255,255,.06) 50%, rgba(167,243,208,.15) 100%)",
           }}
         />
+        {/* Full-width gradient so $0 stays at the visual center (50%); clip to selected span */}
         <div
-          className="absolute top-1/2 h-[5px] -translate-y-1/2 rounded-full"
+          className="absolute inset-x-0 top-1/2 h-[5px] -translate-y-1/2 rounded-full"
           style={{
-            left: `${pctMin}%`,
-            right: `${100 - pctMax}%`,
-            background: "linear-gradient(90deg, #FCA5A5, #7E57C2 50%, #A7F3D0)",
+            background: "linear-gradient(90deg, #FCA5A5 0%, #7E57C2 50%, #A7F3D0 100%)",
             boxShadow: "0 0 8px rgba(126,87,194,.35)",
+            clipPath: `inset(0 ${100 - pctMax}% 0 ${pctMin}% round 2.5px)`,
           }}
         />
 
@@ -1150,16 +1156,28 @@ function AmountRangeSlider({
 
       {/* Value labels — positioned below the track */}
       <div className="absolute inset-x-0 -bottom-3.5 flex items-center justify-between px-0.5">
-        <span className={cn(
-          "text-[10px] font-semibold tabular-nums transition-colors",
-          valueMin > min ? "text-[#FCA5A5]" : "text-white/30",
-        )}>
+        <span
+          className={cn(
+            "text-[10px] font-semibold tabular-nums transition-colors",
+            valueMin === min
+              ? "text-white/30"
+              : valueMin >= 0
+                ? "text-[#A7F3D0]"
+                : "text-[#FCA5A5]",
+          )}
+        >
           ${formatCompact(valueMin)}
         </span>
-        <span className={cn(
-          "text-[10px] font-semibold tabular-nums transition-colors",
-          valueMax < max ? "text-[#A7F3D0]" : "text-white/30",
-        )}>
+        <span
+          className={cn(
+            "text-[10px] font-semibold tabular-nums transition-colors",
+            valueMax === max
+              ? "text-white/30"
+              : valueMax >= 0
+                ? "text-[#A7F3D0]"
+                : "text-[#FCA5A5]",
+          )}
+        >
           ${formatCompact(valueMax)}
         </span>
       </div>
@@ -1174,6 +1192,7 @@ export default function TransactionsPage() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [filtersSheetOpen, setFiltersSheetOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteInProgress, setDeleteInProgress] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -1185,6 +1204,7 @@ export default function TransactionsPage() {
     accountId: "",
     categoryId: "",
     flowTheme: "",
+    subcategoryType: "",
     accountKind: "",
     accountNumber: "",
     amountMin: AMOUNT_RANGE_MIN,
@@ -1236,7 +1256,11 @@ export default function TransactionsPage() {
           const opt = categoryOptions.find((o) => o.value === f.categoryId);
           if (opt && opt.flowTheme !== ft) categoryId = "";
         }
-        return { ...f, flowTheme: ft, categoryId };
+        let subcategoryType = f.subcategoryType;
+        if (ft && ft !== "outflow") {
+          subcategoryType = "";
+        }
+        return { ...f, flowTheme: ft, categoryId, subcategoryType };
       });
     },
     [categoryOptions],
@@ -1290,6 +1314,7 @@ export default function TransactionsPage() {
     filters.accountId,
     filters.categoryId,
     filters.flowTheme,
+    filters.subcategoryType,
     filters.dateFrom,
     filters.dateTo,
     filters.isRecurring,
@@ -1563,8 +1588,7 @@ export default function TransactionsPage() {
           className="mb-3 flex shrink-0 flex-col gap-3 sm:mb-4 sm:flex-row sm:items-end sm:justify-between sm:gap-4"
         >
           <div className="min-w-0">
-            <h1 className="text-xl font-bold leading-tight text-white sm:text-2xl md:text-3xl">Transactions</h1>
-            <p className="mt-1 flex flex-wrap items-center gap-x-1 text-xs leading-snug text-white/70 sm:text-sm">
+            <p className="flex flex-wrap items-center gap-x-1 text-xs leading-snug text-white/70 sm:text-sm">
               <span>
                 {total > 0 ? (
                   <>
@@ -1620,15 +1644,25 @@ export default function TransactionsPage() {
               )}
             </p>
           </div>
-          <Link href="/dashboard/upload" className="shrink-0 sm:ml-auto">
-            <Button
-              variant="ghost"
-              className="w-full justify-center text-[#0BC18D] hover:bg-[#0BC18D]/10 sm:w-auto"
-            >
-              <Upload className="mr-2 h-4 w-4" />
-              Import More
-            </Button>
-          </Link>
+          <div className="flex shrink-0 gap-2 sm:ml-auto">
+            <Link href="/dashboard/profile">
+              <Button
+                variant="ghost"
+                className="w-full justify-center text-white/85 hover:bg-white/10 sm:w-auto"
+              >
+                My Profile
+              </Button>
+            </Link>
+            <Link href="/dashboard/upload">
+              <Button
+                variant="ghost"
+                className="w-full justify-center text-[#0BC18D] hover:bg-[#0BC18D]/10 sm:w-auto"
+              >
+                <Upload className="mr-2 h-4 w-4" />
+                Import More
+              </Button>
+            </Link>
+          </div>
         </motion.div>
 
         {selectedCount > 0 && (
@@ -1712,66 +1746,121 @@ export default function TransactionsPage() {
           </div>
         )}
 
-        {/* Search + Amount Range + Period */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.1 }}
-          className="mb-3 flex min-w-0 shrink-0 flex-col gap-2 sm:mb-4 sm:flex-row sm:items-center sm:gap-3"
-        >
-          {/* Search — full width on xs; ~1/6 from sm */}
-          <div className="relative w-full min-w-0 shrink-0 sm:w-[16.666%]">
-            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-white/50 sm:left-3" />
-            <input
-              type="text"
-              placeholder="Search…"
-              value={filters.search}
-              onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
-              className="w-full rounded-lg border border-white/15 bg-white/[0.05] py-2 pl-9 pr-3 text-sm text-white placeholder:text-white/45 focus:border-[#0BC18D]/40 focus:outline-none focus:ring-1 focus:ring-[#0BC18D]/20 sm:py-2.5 sm:pl-10"
-            />
-          </div>
+        {/* Search + Amount range + Filters; extra filters slide open below */}
+        <div className="mb-3 min-w-0 shrink-0 sm:mb-4">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.1 }}
+            className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3"
+          >
+            <div className="relative w-full min-w-0 shrink-0 sm:w-[16.666%]">
+              <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-white/50 sm:left-3" />
+              <input
+                type="text"
+                placeholder="Search…"
+                value={filters.search}
+                onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
+                className="w-full rounded-lg border border-white/15 bg-white/[0.05] py-2 pl-9 pr-3 text-sm text-white placeholder:text-white/45 focus:border-[#0BC18D]/40 focus:outline-none focus:ring-1 focus:ring-[#0BC18D]/20 sm:py-2.5 sm:pl-10"
+              />
+            </div>
+            <div className="min-w-0 w-full sm:min-w-0 sm:flex-1">
+              <AmountRangeSlider
+                min={AMOUNT_RANGE_MIN}
+                max={AMOUNT_RANGE_MAX}
+                step={AMOUNT_STEP}
+                valueMin={filters.amountMin}
+                valueMax={filters.amountMax}
+                onChange={(lo, hi) => setFilters((f) => ({ ...f, amountMin: lo, amountMax: hi }))}
+              />
+            </div>
+            <div className="flex w-full shrink-0 justify-stretch sm:w-auto sm:justify-start">
+              <button
+                type="button"
+                onClick={() => setFiltersSheetOpen((o) => !o)}
+                className={cn(
+                  "group relative flex w-full min-w-0 items-center justify-center gap-2 overflow-hidden rounded-xl border border-[#0BC18D]/45 bg-gradient-to-br from-[#0BC18D]/18 via-[#6D28D9]/12 to-[#2CA2FF]/15 px-4 py-2.5 text-sm font-semibold text-white shadow-[0_0_28px_-10px_rgba(11,193,141,0.55)] transition-[border-color,box-shadow,transform] sm:w-auto sm:min-w-[8.5rem]",
+                  "hover:border-[#0BC18D]/80 hover:shadow-[0_0_36px_-8px_rgba(11,193,141,0.65)] active:scale-[0.98]",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0BC18D]/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#08051a]",
+                )}
+                aria-expanded={filtersSheetOpen}
+                aria-controls="txn-filters-panel"
+              >
+                <span
+                  className="pointer-events-none absolute inset-0 opacity-70 transition-opacity group-hover:opacity-100"
+                  aria-hidden
+                  style={{
+                    background:
+                      "radial-gradient(120% 80% at 0% 0%, rgba(11,193,141,0.22), transparent 55%), radial-gradient(100% 100% at 100% 100%, rgba(44,162,255,0.18), transparent 50%)",
+                  }}
+                />
+                <SlidersHorizontal className="relative h-4 w-4 shrink-0 text-[#AD74FF]" aria-hidden />
+                <span className="relative">Filters</span>
+                <ChevronDown
+                  className={cn(
+                    "relative h-4 w-4 shrink-0 text-white/50 transition-transform duration-200",
+                    filtersSheetOpen && "rotate-180",
+                  )}
+                  aria-hidden
+                />
+              </button>
+            </div>
+          </motion.div>
 
-          {/* Amount range — fills horizontal space between search and Period on sm+ */}
-          <div className="my-4 min-w-0 w-full sm:my-0 sm:min-w-0 sm:flex-1">
-            <AmountRangeSlider
-              min={AMOUNT_RANGE_MIN}
-              max={AMOUNT_RANGE_MAX}
-              step={AMOUNT_STEP}
-              valueMin={filters.amountMin}
-              valueMax={filters.amountMax}
-              onChange={(lo, hi) => setFilters((f) => ({ ...f, amountMin: lo, amountMax: hi }))}
-            />
+          <div
+            className={cn(
+              "grid transition-[grid-template-rows] duration-300 ease-out",
+              filtersSheetOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+            )}
+          >
+            <div className="min-h-0 overflow-hidden">
+              <div
+                id="txn-filters-panel"
+                className="mt-3 rounded-xl border border-white/[0.10] bg-white/[0.04] px-3 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] sm:px-4"
+              >
+                <div className="flex max-h-[min(70vh,560px)] flex-col gap-3 overflow-y-auto overscroll-y-contain pr-0.5 [scrollbar-gutter:stable]">
+                  {/* Period + Flow + expense type: stacked on small screens, one row from lg */}
+                  <div className="flex flex-col gap-3 lg:flex-row lg:flex-nowrap lg:items-stretch lg:gap-2">
+                    <div className="min-w-0 max-w-full shrink-0 self-start lg:flex-none">
+                      <TimeSlicer
+                        showLabel={false}
+                        activePreset={detectTimePreset(filters.dateFrom, filters.dateTo)}
+                        onSelect={handleTimePreset}
+                      />
+                    </div>
+                    <div className="min-w-0 w-full lg:min-w-0 lg:flex-1 [&>div]:w-full [&>div]:max-w-none">
+                      <FlowThemeSlicer
+                        compact
+                        selectedFlowTheme={filters.flowTheme}
+                        onSelect={onFlowThemeSelect}
+                      />
+                    </div>
+                    {(!filters.flowTheme || filters.flowTheme === "outflow") && (
+                      <div className="min-w-0 w-full lg:min-w-0 lg:flex-1 [&>div]:w-full [&>div]:max-w-none">
+                        <SubcategoryTypeSlicer
+                          showLabel={false}
+                          compact
+                          selectedType={filters.subcategoryType}
+                          onSelect={(t) =>
+                            setFilters((f) => ({ ...f, subcategoryType: t }))
+                          }
+                        />
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <CategorySlicer
+                      showLabel={false}
+                      options={categoryOptionsForSlicer}
+                      selectedId={filters.categoryId}
+                      onSelect={(categoryId) => setFilters((f) => ({ ...f, categoryId }))}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
-
-          <div className="w-full max-w-full sm:w-auto sm:shrink-0">
-            <TimeSlicer
-              activePreset={detectTimePreset(filters.dateFrom, filters.dateTo)}
-              onSelect={handleTimePreset}
-            />
-          </div>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1, duration: 0.25 }}
-          className="mb-3 flex w-full min-w-0 shrink-0 flex-row flex-nowrap items-stretch gap-3 sm:mb-4"
-        >
-          <div className="shrink-0">
-            <FlowThemeSlicer
-              compact
-              selectedFlowTheme={filters.flowTheme}
-              onSelect={onFlowThemeSelect}
-            />
-          </div>
-          <div className="min-w-0 flex-1">
-            <CategorySlicer
-              options={categoryOptionsForSlicer}
-              selectedId={filters.categoryId}
-              onSelect={(categoryId) => setFilters((f) => ({ ...f, categoryId }))}
-            />
-          </div>
-        </motion.div>
+        </div>
 
         {/* Transaction Table — fills remaining viewport; list scrolls inside */}
         <Card className="flex min-h-0 flex-1 flex-col overflow-hidden border-white/[0.10] bg-white/[0.04] py-0 text-white rounded-xl sm:rounded-2xl">
@@ -1787,7 +1876,7 @@ export default function TransactionsPage() {
                 className="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-auto overscroll-y-contain [scrollbar-gutter:stable]"
               >
                 {/* Desktop header — sticky within scroll area */}
-                <div className="sticky top-0 z-10 hidden sm:grid sm:grid-cols-[auto_minmax(0,1.65fr)_minmax(4.5rem,6.5rem)_minmax(0,12rem)_max-content_80px_minmax(7rem,1.25fr)_36px] sm:items-center gap-2 border-b border-white/10 bg-[#10082a]/95 px-3 py-2.5 backdrop-blur-md sm:px-4 sm:py-3">
+                <div className="sticky top-0 z-10 hidden sm:grid sm:grid-cols-[auto_minmax(0,1.65fr)_minmax(4.5rem,6.5rem)_minmax(0,12rem)_minmax(7.5rem,10rem)_80px_minmax(7rem,1.25fr)_36px] sm:items-center sm:justify-items-stretch gap-2 border-b border-white/10 bg-[#10082a]/95 px-3 py-2.5 backdrop-blur-md sm:px-4 sm:py-3">
                   <div className="flex min-w-0 items-center justify-center gap-1">
                     <span className="inline-flex h-7 w-7 shrink-0" aria-hidden />
                     <button
@@ -1828,7 +1917,7 @@ export default function TransactionsPage() {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         transition={{ delay: Math.min(i, 24) * 0.015 }}
-                        className="relative grid grid-cols-[auto_1fr] gap-1.5 px-2.5 py-2.5 pr-10 transition-colors hover:bg-white/[0.06] sm:grid-cols-[auto_minmax(0,1.65fr)_minmax(4.5rem,6.5rem)_minmax(0,12rem)_max-content_80px_minmax(7rem,1.25fr)_36px] sm:gap-2 sm:px-4 sm:py-3 sm:pr-4"
+                        className="relative grid grid-cols-[auto_1fr] gap-1.5 px-2.5 py-2.5 pr-10 transition-colors hover:bg-white/[0.06] sm:grid-cols-[auto_minmax(0,1.65fr)_minmax(4.5rem,6.5rem)_minmax(0,12rem)_minmax(7.5rem,10rem)_80px_minmax(7rem,1.25fr)_36px] sm:justify-items-stretch sm:gap-2 sm:px-4 sm:py-3 sm:pr-4"
                       >
                         <TransactionInsightHover txn={txn}>
                           <div className="flex min-w-0 items-center gap-0.5 sm:gap-1">
@@ -1838,7 +1927,7 @@ export default function TransactionsPage() {
                             </div>
                           </div>
                         </TransactionInsightHover>
-                        <div className="min-w-0">
+                        <div className="min-w-0 overflow-hidden">
                           <div className="min-w-0 py-0.5 -my-0.5 pr-1">
                             <MerchantNameEditor
                               txn={txn}
@@ -1875,9 +1964,9 @@ export default function TransactionsPage() {
                             onSaved={saveCategory}
                           />
                         </div>
-                        <div className="flex min-h-0 w-max max-w-full flex-col items-start justify-center text-left sm:h-full sm:min-h-[2.5rem]">
+                        <div className="flex min-h-0 w-full min-w-0 max-w-full flex-col items-start justify-center text-left sm:h-full sm:min-h-[2.5rem]">
                           <span className={cn(
-                            "whitespace-nowrap text-xs font-bold tabular-nums",
+                            "min-w-0 whitespace-nowrap text-xs font-bold tabular-nums",
                             isPositive && "text-[#A7F3D0]",
                             isNegative && "text-[#FCA5A5]",
                             !isPositive && !isNegative && "text-white/70",

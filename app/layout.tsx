@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
+import { ClerkDbUserSync } from "@/components/clerk-db-user-sync";
 import { ClerkProviderWrapper } from "@/components/clerk-theme-wrapper";
 import { SiteFooter } from "@/components/site-footer";
 
@@ -86,6 +87,7 @@ export default function RootLayout({
         className={`${inter.className} flex h-dvh max-h-dvh min-h-0 min-w-0 flex-col overflow-hidden`}
       >
         <ClerkProviderWrapper>
+          <ClerkDbUserSync />
           <Providers>
             <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
               {/* flex + min-h-0 so dashboard routes can fill height; overflow-y-auto for long non-dashboard pages */}

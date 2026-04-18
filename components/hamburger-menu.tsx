@@ -29,6 +29,7 @@ import {
   LogOut,
   Settings,
   Network,
+  Waves,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { FintrkShortLogo } from "@/components/fintrk-short-logo";
@@ -65,7 +66,8 @@ export function HamburgerMenu() {
   const navItems = [
     { label: "Upload Statement", href: `${basePath}/upload`, icon: Upload },
     { label: "Transactions", href: `${basePath}/transactions`, icon: ArrowLeftRight },
-    { label: "Analytics", href: `${basePath}/analytics`, icon: BarChart3 },
+    { label: "Cashflow", href: `${basePath}/cashflow`, icon: Waves },
+    { label: "Spend Analytics", href: `${basePath}/analytics`, icon: BarChart3 },
     { label: "Budget", href: `${basePath}/budget`, icon: PiggyBank },
     { label: "Goals", href: `${basePath}/goals`, icon: Target },
     { label: "Accounts", href: `${basePath}/accounts`, icon: Landmark },

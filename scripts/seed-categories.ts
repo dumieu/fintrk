@@ -197,12 +197,7 @@ const CATEGORY_TREE: CategorySeed[] = [
     icon: "ArrowLeftRight",
     color: "#808080",
     flowType: "savings",
-    children: [
-      { name: "Internal Transfer", slug: "internal-transfer", icon: "Repeat" },
-      { name: "Loan Payment", slug: "loan-payment", icon: "FileText" },
-      { name: "Credit Card Payment", slug: "credit-card-payment", icon: "CreditCard" },
-      { name: "Savings Transfer", slug: "savings-transfer", icon: "PiggyBank" },
-    ],
+    children: [{ name: "Internal Transfer", slug: "internal-transfer", icon: "Repeat" }],
   },
   {
     name: "Other Misc",

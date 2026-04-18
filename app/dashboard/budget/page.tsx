@@ -53,11 +53,7 @@ export default function BudgetPage() {
   return (
     <div className="min-h-[80vh] bg-gradient-to-b from-[#08051a] via-[#10082a] to-[#160e35]">
       <div className="mx-auto max-w-7xl px-4 py-8">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-8 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-white sm:text-3xl">Budget Manager</h1>
-            <p className="mt-1 text-sm text-white/70">Set spending limits and track progress</p>
-          </div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-8 flex justify-end">
           <Button onClick={() => setShowCreate(true)} className="bg-gradient-to-r from-[#0BC18D] to-[#2CA2FF] text-white font-semibold hover:opacity-90">
             <Plus className="w-4 h-4 mr-2" />
             New Budget

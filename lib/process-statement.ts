@@ -1,12 +1,12 @@
 import "server-only";
 import { db, resilientQuery } from "@/lib/db";
-import { accounts, transactions, statements, userCategories, merchants, fileUploadLog } from "@/lib/db/schema";
+import { accounts, transactions, statements, userCategories, merchants, fileUploadLog, users } from "@/lib/db/schema";
 import { ensureUserCategories } from "@/lib/ensure-user-categories";
 import { ai, GEMINI_MODEL } from "@/lib/gemini";
 import { logAiCost } from "@/lib/ai-cost";
 import { logServerError } from "@/lib/safe-error";
 import { aiResponseSchema } from "@/lib/validations/ingest";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, asc, desc, sql } from "drizzle-orm";
 
 /**
  * Queries the categories table and the user's transactions to build:
@@ -22,7 +22,7 @@ async function buildUserContext(userId: string) {
   const [allCats, userMerchantRows] = await Promise.all([
     resilientQuery(() =>
       db
-        .select({ id: userCategories.id, name: userCategories.name, parentId: userCategories.parentId })
+        .select({ id: userCategories.id, name: userCategories.name, slug: userCategories.slug, parentId: userCategories.parentId })
         .from(userCategories)
         .where(eq(userCategories.userId, userId))
         .orderBy(userCategories.sortOrder),
@@ -49,6 +49,7 @@ async function buildUserContext(userId: string) {
 
   const tree: Record<string, Record<string, Set<string>>> = {};
   const subcategoryNames: string[] = [];
+  const travelSubcategoryNames = new Set<string>();
 
   for (const c of allCats) {
     if (c.parentId == null) {
@@ -60,7 +61,11 @@ async function buildUserContext(userId: string) {
         const childName = c.name.trim().toLowerCase();
         tree[parentName] ??= {};
         tree[parentName][childName] ??= new Set();
-        subcategoryNames.push(c.name.trim());
+        // Use slugs for LLM output to avoid ambiguous duplicate names like "Other".
+        subcategoryNames.push(c.slug.trim());
+        if (parentName === "travel") {
+          travelSubcategoryNames.add(c.slug.trim());
+        }
       }
     }
   }
@@ -92,7 +97,11 @@ async function buildUserContext(userId: string) {
     }
   }
 
-  return { historyJson: JSON.stringify(result), subcategoryNames };
+  return {
+    historyJson: JSON.stringify(result),
+    subcategoryNames,
+    travelSubcategoryNames: [...travelSubcategoryNames].sort(),
+  };
 }
 
 const MERCHANT_HISTORY_INSTRUCTIONS = `
@@ -112,7 +121,14 @@ Below is a JSON object representing this user's existing category → subcategor
 User's merchant history:
 `;
 
-function buildSystemInstruction(subcategoryList: string): string {
+function buildSystemInstruction(
+  subcategoryList: string,
+  travelSubcategoryList: string,
+  userMainCurrency: string | null,
+  detectTravel: "Yes" | "No",
+): string {
+  const mc = userMainCurrency?.toUpperCase() ?? "UNKNOWN";
+  const dt = detectTravel;
   return `You are FinTRK, a financial statement (credit card, debit card, checking account) data extraction engine. You receive bank statement data (as a markdown table or as a PDF/image) and extract every transaction into a strictly structured JSON array.
 
 For EACH transaction, you MUST:
@@ -138,19 +154,37 @@ For EACH transaction, you MUST:
 
 4. CLASSIFICATION:
    - country_iso: ISO 3166-1 alpha-2 country code, inferred from explicit country indicators, currency, or merchant name recognition. Default to the account's country if ambiguous.
-   - category_suggestion: your best category from this exact list: ${subcategoryList}
-     MANDATORY — SUBCATEGORY ONLY: The list above contains SUBCATEGORIES (children). You MUST ALWAYS assign a subcategory — NEVER a parent category. Parent categories (e.g. "Food & Dining", "Transportation", "Shopping", "Other Misc") are groupings only and must NOT appear as category_suggestion values. Always drill down to the most specific subcategory that fits. If multiple subcategories could apply, pick the closest match. Only if absolutely NO subcategory is even remotely applicable AND you have high confidence (≥ 0.8) that the parent category is correct, you may fall back to a parent — but this should be extremely rare (< 1% of transactions).
+   - category_suggestion: your best category from this exact list of SUBCATEGORY SLUGS: ${subcategoryList}
+     MANDATORY — SUBCATEGORY SLUG ONLY: The list above contains SUBCATEGORY SLUGS (children). You MUST ALWAYS output one of those exact slug values — NEVER a parent category name and NEVER a free-form label. Parent categories (e.g. "Food & Dining", "Transportation", "Shopping", "Other Misc") are groupings only and must NOT appear as category_suggestion values. Always drill down to the most specific subcategory that fits.
      IMPORTANT: To determine the correct subcategory, you MUST analyze the ENTIRE raw_description — not only the merchant name. Transaction descriptions often contain keywords like "rental", "groceries", "salary", "insurance", "transfer", "loan", "utilities", "dining", "fuel", etc. that are strong category signals. Always use every available clue from the full description text, any embedded notes, and the merchant name together to pick the most accurate subcategory.
 
 SPECIAL CATEGORY RULES (apply BEFORE general classification):
 
-   A) CARD PAYMENTS — category "Other Misc" → subcategory "Card Payments":
-      On CREDIT CARD statements: look for POSITIVE (credit) transactions that are payments made TO the credit card to reduce the outstanding balance. These typically appear as "PAYMENT RECEIVED", "PAYMENT THANK YOU", "AUTOPAY", "PAYMENT - THANK YOU", "ONLINE PAYMENT", "MOBILE PAYMENT", "PAYMENT FROM CHECKING", "BILL PAYMENT", "CR ADJUSTMENT", or similar bank-generated descriptions — NOT merchant purchases. If you are confident the transaction is a payment toward the credit card balance, assign category_suggestion = "Card Payments" (the subcategory under "Other Misc").
-      On CHECKING / DEBIT CARD statements: look for NEGATIVE (debit) transactions that are payments made FROM the checking account TO a credit card. These typically appear as "CREDIT CARD PAYMENT", "CC PAYMENT", "CARD PAYMENT", "PAYMENT TO VISA", "PAYMENT TO MASTERCARD", "PAYMENT TO AMEX", "PAY CREDIT CARD", or the bank's own credit card product name. If you are confident the transaction is a payment toward a credit card, assign category_suggestion = "Card Payments".
+  FX TRAVEL OVERRIDE (MANDATORY):
+     DETECT_TRAVEL for this request: ${dt}.
+     USER_MAIN_CURRENCY for this request: ${mc}.
+     ONLY WHEN DETECT_TRAVEL == "Yes": If (a) a transaction has foreign_currency AND foreign_currency != "USD" OR (b) base_currency != USER_MAIN_CURRENCY, you MUST map it to the parent Category "Travel" and set category_suggestion to the BEST-FITTING Travel SUBCATEGORY SLUG from this list: ${travelSubcategoryList || "travel"}.
+     WHEN DETECT_TRAVEL == "No": do NOT apply this FX Travel override rule.
+
+     CRITICAL — PICK THE RIGHT TRAVEL SUBCATEGORY (do NOT default everything to "Flights"):
+     Use the merchant name, raw_description, and spending context to choose the most appropriate Travel subcategory:
+       • Flights / Airlines / Air tickets → "Flights"
+       • Hotels / Hostels / Airbnb / Lodging → "Accommodation"
+       • Restaurants / Fast food / Cafés / Groceries / Supermarkets / Food & drink → "Meals"
+       • Tours / Sightseeing / Theme parks / Museums / Attractions → "Activities"
+       • Travel insurance → "Travel Insurance"
+       • Car rental / Vehicle hire → "Car Rental"
+       • Fuel / Gas stations / Parking / Tolls / Taxis / Ride-share / Public transit / Trains → "Other" (travel transport)
+       • All other foreign-currency spending (retail shopping, personal care, pharmacies, etc.) → "Other"
+     "Flights" is ONLY for actual airline/flight bookings. Never use it as a catch-all.
+
+   A) CARD PAYMENTS — category "Other Misc" → subcategory slug "card-payments":
+      On CREDIT CARD statements: look for POSITIVE (credit) transactions that are payments made TO the credit card to reduce the outstanding balance. These typically appear as "PAYMENT RECEIVED", "PAYMENT THANK YOU", "AUTOPAY", "PAYMENT - THANK YOU", "ONLINE PAYMENT", "MOBILE PAYMENT", "PAYMENT FROM CHECKING", "BILL PAYMENT", "CR ADJUSTMENT", or similar bank-generated descriptions — NOT merchant purchases. If you are confident the transaction is a payment toward the credit card balance, assign category_suggestion = "card-payments" (if this slug exists in the allowed list).
+      On CHECKING / DEBIT CARD statements: look for NEGATIVE (debit) transactions that are payments made FROM the checking account TO a credit card. These typically appear as "CREDIT CARD PAYMENT", "CC PAYMENT", "CARD PAYMENT", "PAYMENT TO VISA", "PAYMENT TO MASTERCARD", "PAYMENT TO AMEX", "PAY CREDIT CARD", or the bank's own credit card product name. If you are confident the transaction is a payment toward a credit card, assign category_suggestion = "card-payments" (if present in allowed list).
       Do NOT tag regular merchant purchases as Card Payments — only balance payments / transfers between the user's own accounts.
 
-   B) ATM WITHDRAWALS — category "Other Misc" → subcategory "ATM Withdrawal":
-      Carefully scan every transaction for ATM cash withdrawal patterns. These appear under many descriptions across banks and countries: "ATM WITHDRAWAL", "ATM WDL", "ATM W/D", "CASH WITHDRAWAL", "CASH WDL", "ATM CASH", "SELF-SERVICE WITHDRAWAL", "INSTANT CASH", "CARDLESS WITHDRAWAL", "ATM-", "S/A ATM", "NWD" (non-branch withdrawal), "CASH ADVANCE" (at an ATM, not a merchant), or descriptions containing the word "ATM" together with an amount or location. Also watch for locale-specific variants: "RETRAIT DAB", "CAJERO", "GELDAUTOMAT", "PRELIEVO ATM/BANCOMAT", "SAQUE", etc. If the transaction is clearly a cash withdrawal from an ATM (negative on checking/savings, or cash advance on credit), assign category_suggestion = "ATM Withdrawal". Do NOT confuse ATM withdrawals with point-of-sale cashback or merchant purchases that happen to mention a location near an ATM.
+   B) ATM WITHDRAWALS — category "Other Misc" → subcategory slug "atm-withdrawal-outflow":
+      Carefully scan every transaction for ATM cash withdrawal patterns. These appear under many descriptions across banks and countries: "ATM WITHDRAWAL", "ATM WDL", "ATM W/D", "CASH WITHDRAWAL", "CASH WDL", "ATM CASH", "SELF-SERVICE WITHDRAWAL", "INSTANT CASH", "CARDLESS WITHDRAWAL", "ATM-", "S/A ATM", "NWD" (non-branch withdrawal), "CASH ADVANCE" (at an ATM, not a merchant), or descriptions containing the word "ATM" together with an amount or location. Also watch for locale-specific variants: "RETRAIT DAB", "CAJERO", "GELDAUTOMAT", "PRELIEVO ATM/BANCOMAT", "SAQUE", etc. If the transaction is clearly a cash withdrawal from an ATM (negative on checking/savings, or cash advance on credit), assign category_suggestion = "atm-withdrawal-outflow" (if this slug exists in the allowed list). Do NOT confuse ATM withdrawals with point-of-sale cashback or merchant purchases that happen to mention a location near an ATM.
 
    C) BANK FEES & INTEREST — category "Other Misc" → subcategory "Bank Fees":
       Identify all bank-imposed fees and interest charges across any account type. These are negative transactions (charges to the customer) that are NOT merchant purchases. Common patterns include:
@@ -159,7 +193,7 @@ SPECIAL CATEGORY RULES (apply BEFORE general classification):
       - Late / penalty fees: "LATE FEE", "LATE PAYMENT FEE", "OVERLIMIT FEE", "OVER LIMIT FEE", "RETURNED PAYMENT FEE", "NSF FEE", "INSUFFICIENT FUNDS FEE", "PENALTY FEE"
       - Transaction fees: "FOREIGN TRANSACTION FEE", "FX FEE", "CROSS-BORDER FEE", "CASH ADVANCE FEE", "BALANCE TRANSFER FEE", "CONVENIENCE FEE", "PROCESSING FEE"
       - Other bank charges: "STMT FEE", "PAPER STATEMENT FEE", "REPLACEMENT CARD FEE", "EXPEDITED CARD FEE", "WIRE FEE", "TRANSFER FEE", "DORMANCY FEE", "INACTIVITY FEE", "MIN BALANCE FEE"
-      If the transaction is clearly a fee or interest charge imposed by the bank or card issuer, assign category_suggestion = "Bank Fees". Do NOT confuse bank fees with third-party service charges from merchants (e.g. a convenience fee charged by a utility company is a utility payment, not a bank fee).
+      If the transaction is clearly a fee or interest charge imposed by the bank or card issuer, assign category_suggestion = "bank-fees". Do NOT confuse bank fees with third-party service charges from merchants (e.g. a convenience fee charged by a utility company is a utility payment, not a bank fee).
 
 5. PATTERNS:
    - is_recurring: true if this merchant appears to charge on a regular schedule (subscriptions, rent, salary, insurance, loan payments)
@@ -328,6 +362,107 @@ function pickAccountForStatement(
   return undefined;
 }
 
+/**
+ * Synonym thesaurus — groups of related spending-concept words.
+ * NOT tied to any category name or slug; purely a word-similarity aid.
+ * When a travel subcategory name contains a word from a group, all words
+ * in that group become associated with that subcategory.
+ */
+const SYNONYM_GROUPS: string[][] = [
+  ["meal", "food", "restaurant", "grocery", "dining", "cafe", "bar", "nightlife", "delivery", "supermarket", "drink", "coffee", "deli", "bakery", "eat", "bistro", "cuisine"],
+  ["flight", "airline", "air", "plane", "aviation", "airport", "boarding"],
+  ["accommodation", "hotel", "hostel", "lodging", "stay", "airbnb", "motel", "resort", "inn"],
+  ["car", "vehicle", "automobile", "rental", "hire", "lease"],
+  ["activity", "tour", "museum", "attraction", "sightseeing", "entertainment", "event", "concert", "hobby", "sport", "fitness", "recreation", "show", "theater", "cinema"],
+  ["insurance", "coverage", "policy", "protection"],
+  ["transport", "fuel", "gas", "petrol", "parking", "taxi", "uber", "ride", "transit", "train", "bus", "fare", "toll"],
+  ["shop", "apparel", "clothing", "retail", "purchase", "store", "mall", "boutique", "technology", "electronics"],
+];
+
+const synonymIndex = new Map<string, Set<string>>();
+for (const group of SYNONYM_GROUPS) {
+  const s = new Set(group);
+  for (const w of group) synonymIndex.set(w, s);
+}
+
+function tokenize(s: string): string[] {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().split(/\s+/).filter(Boolean);
+}
+
+function stem(word: string): string {
+  if (word.endsWith("ies") && word.length > 4) return word.slice(0, -3) + "y";
+  if (word.endsWith("ses") || word.endsWith("zes")) return word.slice(0, -2);
+  if (word.endsWith("ing") && word.length > 5) return word.slice(0, -3);
+  if (word.endsWith("s") && !word.endsWith("ss") && word.length > 3) return word.slice(0, -1);
+  return word;
+}
+
+function expandTokens(tokens: string[]): Set<string> {
+  const out = new Set<string>();
+  for (const raw of tokens) {
+    out.add(raw);
+    const stemmed = stem(raw);
+    out.add(stemmed);
+    for (const form of [raw, stemmed]) {
+      const group = synonymIndex.get(form);
+      if (group) for (const w of group) out.add(w);
+    }
+  }
+  return out;
+}
+
+/**
+ * Returns a function that maps an original non-travel category suggestion
+ * to the best-fitting Travel subcategory by word/synonym overlap.
+ * Adapts automatically to whatever subcategories exist under Travel.
+ */
+function buildTravelMatcher(
+  travelChildren: { name: string; slug: string }[],
+  fallbackSlug: string | null,
+): (originalSuggestion: string) => string {
+  const scored = travelChildren
+    .filter((c) => !/\bother\b/i.test(c.name))
+    .map((c) => ({
+      slug: c.slug,
+      keywords: expandTokens([...tokenize(c.name), ...tokenize(c.slug)]),
+    }));
+
+  return (originalSuggestion: string): string => {
+    const inputTokens = expandTokens(tokenize(originalSuggestion));
+    let best: string | null = null;
+    let bestScore = 0;
+    for (const sub of scored) {
+      let score = 0;
+      for (const w of inputTokens) {
+        if (sub.keywords.has(w)) score++;
+      }
+      if (score > bestScore) {
+        bestScore = score;
+        best = sub.slug;
+      }
+    }
+    return best ?? fallbackSlug ?? "other";
+  };
+}
+
+function normalizedIso(code: string | null | undefined): string {
+  return (code ?? "").trim().toUpperCase();
+}
+
+function isTravelOverrideMatch(
+  txn: { foreign_currency?: string | null; base_currency: string },
+  detectTravel: "Yes" | "No",
+  userMainCurrency: string | null,
+): boolean {
+  if (detectTravel !== "Yes") return false;
+  const foreign = normalizedIso(txn.foreign_currency);
+  const base = normalizedIso(txn.base_currency);
+  const main = normalizedIso(userMainCurrency);
+  const hasNonUsdForeign = foreign !== "" && foreign !== "USD";
+  const baseDiffersFromMain = main !== "" && base !== "" && base !== main;
+  return hasNonUsdForeign || baseDiffersFromMain;
+}
+
 async function markUploadLogFailed(userId: string, fileName: string, fileSize: number, fileHash: string | null) {
   await db.update(fileUploadLog)
     .set({ outcome: "failed" })
@@ -338,6 +473,94 @@ async function markUploadLogFailed(userId: string, fileName: string, fileSize: n
         eq(fileUploadLog.fileSize, fileSize),
       ),
     ).catch(() => {});
+}
+
+/** Normalize empty strings so Zod `.length(3)` fields don't fail on `""` (treated as present, not null). */
+function sanitizeAiJsonForValidation(input: unknown): unknown {
+  if (input === null || typeof input !== "object") return input;
+  if (Array.isArray(input)) return input.map(sanitizeAiJsonForValidation);
+
+  const o = input as Record<string, unknown>;
+  const out: Record<string, unknown> = { ...o };
+
+  const blankToNull = (v: unknown) => (v === "" ? null : v);
+
+  if (out.transactions && Array.isArray(out.transactions)) {
+    out.transactions = out.transactions.map((txn) => {
+      if (txn === null || typeof txn !== "object") return txn;
+      const t = { ...(txn as Record<string, unknown>) };
+      t.foreign_currency = blankToNull(t.foreign_currency);
+      t.country_iso = blankToNull(t.country_iso);
+      t.reference_id = t.reference_id === "" ? null : t.reference_id;
+      return t;
+    });
+  }
+
+  if (out.account_metadata && typeof out.account_metadata === "object" && out.account_metadata !== null) {
+    const m = { ...(out.account_metadata as Record<string, unknown>) };
+    m.country_iso = blankToNull(m.country_iso);
+    out.account_metadata = m;
+  }
+
+  return out;
+}
+
+async function updateUserMainCurrency(userId: string) {
+  const [topCurrencies, totals] = await Promise.all([
+    resilientQuery(() =>
+      db
+        .select({
+          baseCurrency: transactions.baseCurrency,
+          txCount: sql<number>`count(distinct ${transactions.id})::int`,
+        })
+        .from(transactions)
+        .where(eq(transactions.userId, userId))
+        .groupBy(transactions.baseCurrency)
+        .orderBy(
+          desc(sql`count(distinct ${transactions.id})`),
+          asc(transactions.baseCurrency),
+        )
+        .limit(1),
+    ),
+    resilientQuery(() =>
+      db
+        .select({
+          txCount: sql<number>`count(distinct ${transactions.id})::int`,
+        })
+        .from(transactions)
+        .where(eq(transactions.userId, userId)),
+    ),
+  ]);
+
+  const topCurrency = topCurrencies[0];
+  const mainCurrency = topCurrency?.baseCurrency ?? null;
+  const mainCurrencyTransactions = topCurrency?.txCount ?? 0;
+  const totalTransactions = totals[0]?.txCount ?? 0;
+  const mainCurrencyPercentage =
+    totalTransactions > 0
+      ? (mainCurrencyTransactions / totalTransactions).toFixed(2)
+      : "0.00";
+
+  await resilientQuery(() =>
+    db
+      .insert(users)
+      .values({
+        clerkUserId: userId,
+        mainCurrency,
+        mainCurrencyTransactions,
+        mainCurrencyPercentage,
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: users.clerkUserId,
+        set: {
+          mainCurrency,
+          mainCurrencyTransactions,
+          mainCurrencyPercentage,
+          updatedAt: new Date(),
+        },
+      }),
+  );
 }
 
 export async function processStatement(statementId: number) {
@@ -364,14 +587,33 @@ export async function processStatement(statementId: number) {
   let aiText: string;
   let inputTokens = 0;
   let outputTokens = 0;
+  let userMainCurrency: string | null = null;
+  let detectTravel: "Yes" | "No" = "Yes";
 
   try {
     const parsed = JSON.parse(payload);
     const fileHint = `Original file name: ${stmt.fileName}\nUse this together with the document to infer account_type (e.g. ACC_/account exports vs CC_/card exports).\n\n`;
 
-    const { historyJson, subcategoryNames } = await buildUserContext(userId);
+    const [{ historyJson, subcategoryNames, travelSubcategoryNames }, userRows] = await Promise.all([
+      buildUserContext(userId),
+      resilientQuery(() =>
+        db
+          .select({ mainCurrency: users.mainCurrency, detectTravel: users.detectTravel })
+          .from(users)
+          .where(eq(users.clerkUserId, userId))
+          .limit(1),
+      ),
+    ]);
+    userMainCurrency = userRows[0]?.mainCurrency?.toUpperCase() ?? null;
+    detectTravel = userRows[0]?.detectTravel === "No" ? "No" : "Yes";
+    const compactCurrencyHint = `MC:${userMainCurrency ?? "UNKNOWN"} DT:${detectTravel}\n`;
     const historyBlock = `${MERCHANT_HISTORY_INSTRUCTIONS}${historyJson}\n\n`;
-    const systemInstruction = buildSystemInstruction(subcategoryNames.join(", "));
+    const systemInstruction = buildSystemInstruction(
+      subcategoryNames.join(", "),
+      travelSubcategoryNames.join(", "),
+      userMainCurrency,
+      detectTravel,
+    );
 
     if (parsed.type === "binary") {
       const result = await ai.models.generateContent({
@@ -380,7 +622,7 @@ export async function processStatement(statementId: number) {
           role: "user",
           parts: [
             { inlineData: { mimeType: parsed.mimeType, data: parsed.base64 } },
-            { text: `${historyBlock}${fileHint}Extract all transactions from this bank statement.` },
+            { text: `${historyBlock}${compactCurrencyHint}${fileHint}Extract all transactions from this bank statement.` },
           ],
         }],
         config: {
@@ -399,7 +641,7 @@ export async function processStatement(statementId: number) {
         model: GEMINI_MODEL,
         contents: [{
           role: "user",
-          parts: [{ text: `${historyBlock}${fileHint}Extract all transactions from this bank statement data:\n\n${markdown}` }],
+          parts: [{ text: `${historyBlock}${compactCurrencyHint}${fileHint}Extract all transactions from this bank statement data:\n\n${markdown}` }],
         }],
         config: {
           systemInstruction,
@@ -424,19 +666,30 @@ export async function processStatement(statementId: number) {
   logAiCost({ userId, model: GEMINI_MODEL, query: "ingest", inputTokens, outputTokens }).catch(() => {});
 
   let aiParsed: unknown;
-  try { aiParsed = JSON.parse(aiText); } catch {
+  try {
+    aiParsed = JSON.parse(aiText);
+  } catch {
     await db.update(statements).set({ status: "failed", aiError: "AI returned invalid JSON" }).where(eq(statements.id, statementId));
     await markUploadLogFailed(userId, stmt.fileName, stmt.fileSize, stmt.fileHash);
     return;
   }
 
-  const validation = aiResponseSchema.safeParse(aiParsed);
+  const validation = aiResponseSchema.safeParse(sanitizeAiJsonForValidation(aiParsed));
   if (!validation.success) {
-    await db.update(statements).set({ status: "failed", aiError: "Schema validation failed" }).where(eq(statements.id, statementId));
+    const brief =
+      validation.error.issues
+        .slice(0, 3)
+        .map((i) => `${i.path.join(".")}: ${i.message}`)
+        .join("; ") || "Schema validation failed";
+    await db
+      .update(statements)
+      .set({ status: "failed", aiError: `Schema validation failed (${brief})` })
+      .where(eq(statements.id, statementId));
     await markUploadLogFailed(userId, stmt.fileName, stmt.fileSize, stmt.fileHash);
     return;
   }
 
+  try {
   const aiResult = validation.data;
   let meta = { ...aiResult.account_metadata };
 
@@ -476,7 +729,13 @@ export async function processStatement(statementId: number) {
     ),
     resilientQuery(() =>
       db
-        .select({ id: userCategories.id, name: userCategories.name, slug: userCategories.slug })
+        .select({
+          id: userCategories.id,
+          name: userCategories.name,
+          slug: userCategories.slug,
+          parentId: userCategories.parentId,
+          sortOrder: userCategories.sortOrder,
+        })
         .from(userCategories)
         .where(eq(userCategories.userId, userId)),
     ),
@@ -546,15 +805,90 @@ export async function processStatement(statementId: number) {
             )
             .limit(1),
         );
+        if (!existing?.id) {
+          logServerError(
+            `process-statement/${statementId}`,
+            new Error("Duplicate account insert but no matching row found after retry"),
+          );
+          throw new Error("Account creation race: could not resolve account row");
+        }
         accountId = existing.id;
       }
     }
   }
 
-  const categoryMap = new Map<string, number>();
+  const categorySlugMap = new Map<string, number>();
+  const categoryNameToIds = new Map<string, number[]>();
+  const categoryNameById = new Map<number, string>();
+  const categorySlugById = new Map<number, string>();
+  const leafCategories = allCategories.filter((c) => c.parentId != null);
   for (const cat of allCategories) {
-    categoryMap.set(cat.name.toLowerCase(), cat.id);
-    categoryMap.set(cat.slug, cat.id);
+    categorySlugMap.set(cat.slug.toLowerCase(), cat.id);
+    const lowerName = cat.name.toLowerCase();
+    const ids = categoryNameToIds.get(lowerName) ?? [];
+    ids.push(cat.id);
+    categoryNameToIds.set(lowerName, ids);
+    categoryNameById.set(cat.id, cat.name);
+    categorySlugById.set(cat.id, cat.slug);
+  }
+
+  const uniqueNameMap = new Map<string, number>();
+  for (const [name, ids] of categoryNameToIds.entries()) {
+    if (ids.length === 1) uniqueNameMap.set(name, ids[0]);
+  }
+
+  // Strict server-side guard: AI suggestions must resolve to an existing Neon category.
+  // Resolution order: exact slug -> unique category name. Ambiguous names are rejected.
+  function resolveExistingCategoryId(
+    suggestion: string | null | undefined,
+    options?: { allowFallback?: boolean },
+  ): number | undefined {
+    const allowFallback = options?.allowFallback ?? false;
+    const key = (suggestion ?? "").trim().toLowerCase();
+    if (!key) return allowFallback ? leafCategories[0]?.id ?? allCategories[0]?.id : undefined;
+    const bySlug = categorySlugMap.get(key);
+    if (bySlug) return bySlug;
+    const byUniqueName = uniqueNameMap.get(key);
+    if (byUniqueName) return byUniqueName;
+    return allowFallback ? leafCategories[0]?.id ?? allCategories[0]?.id : undefined;
+  }
+
+  // Hard server-side enforcement: if detectTravel is enabled and the FX/base rules match,
+  // force category_suggestion into Travel (LLM prompt remains advisory, this is deterministic).
+  const travelParentIds = new Set(
+    allCategories
+      .filter((c) => c.parentId == null && (c.name.toLowerCase() === "travel" || c.slug === "travel"))
+      .map((c) => c.id),
+  );
+  const travelChildren = allCategories
+    .filter((c) => c.parentId != null && travelParentIds.has(c.parentId))
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+  const travelNameSet = new Set(travelChildren.map((c) => c.name.toLowerCase()));
+  const travelSlugSet = new Set(travelChildren.map((c) => c.slug));
+  const travelOtherChild =
+    travelChildren.find((c) => /\bother\b/i.test(c.name) || /\bother\b/.test(c.slug)) ??
+    travelChildren[travelChildren.length - 1] ??
+    null;
+
+  const bestTravelSubcategory = buildTravelMatcher(travelChildren, travelOtherChild?.slug ?? null);
+
+  if (travelChildren.length > 0) {
+    for (const txn of aiResult.transactions) {
+      if (!isTravelOverrideMatch(txn, detectTravel, userMainCurrency)) continue;
+      const suggested = txn.category_suggestion?.toLowerCase() ?? "";
+      const alreadyTravel = travelNameSet.has(suggested) || travelSlugSet.has(suggested) || suggested === "travel";
+      if (!alreadyTravel) {
+        txn.category_suggestion = bestTravelSubcategory(txn.category_suggestion ?? "");
+      }
+    }
+  }
+
+  // Final normalization: force every AI category suggestion into an existing Neon category.
+  for (const txn of aiResult.transactions) {
+    const resolvedId = resolveExistingCategoryId(txn.category_suggestion);
+    if (!resolvedId) continue;
+    txn.category_suggestion =
+      categorySlugById.get(resolvedId) ?? categoryNameById.get(resolvedId) ?? txn.category_suggestion;
   }
 
   const uniqueMerchants = new Map<string, { canonical: string; mcc?: number; country?: string; catId?: number }>();
@@ -568,7 +902,7 @@ export async function processStatement(statementId: number) {
         canonical,
         mcc: txn.mcc_code ?? undefined,
         country: txn.country_iso ?? undefined,
-        catId: txn.category_suggestion ? categoryMap.get(txn.category_suggestion.toLowerCase()) : undefined,
+        catId: resolveExistingCategoryId(txn.category_suggestion),
       });
     }
   }
@@ -593,7 +927,7 @@ export async function processStatement(statementId: number) {
   let duplicates = 0;
 
   const txnRows = aiResult.transactions.map((txn) => {
-    const catId = txn.category_suggestion ? categoryMap.get(txn.category_suggestion.toLowerCase()) : undefined;
+    const catId = resolveExistingCategoryId(txn.category_suggestion);
     const merchantId = txn.merchant_name ? merchantIdCache.get(canonicalizeMerchant(txn.merchant_name).toLowerCase()) : undefined;
     return {
       userId, accountId, statementId,
@@ -636,6 +970,8 @@ export async function processStatement(statementId: number) {
     duplicates += r.duplicates;
   }
 
+  await updateUserMainCurrency(userId);
+
   await db.update(statements).set({
     status: "completed", aiModel: GEMINI_MODEL, aiProcessedAt: new Date(),
     accountId, transactionsImported: imported, transactionsDuplicate: duplicates,
@@ -643,4 +979,14 @@ export async function processStatement(statementId: number) {
     periodEnd: meta.statement_period_end ?? undefined,
     fileData: null,
   }).where(eq(statements.id, statementId));
+  } catch (persistErr) {
+    const msg = persistErr instanceof Error ? persistErr.message : String(persistErr);
+    const truncated = msg.length > 2000 ? `${msg.slice(0, 2000)}…` : msg;
+    await db
+      .update(statements)
+      .set({ status: "failed", aiError: truncated })
+      .where(eq(statements.id, statementId));
+    await markUploadLogFailed(userId, stmt.fileName, stmt.fileSize, stmt.fileHash);
+    logServerError(`process-statement/${statementId}`, persistErr);
+  }
 }

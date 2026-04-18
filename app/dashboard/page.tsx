@@ -114,16 +114,8 @@ export default function DashboardPage() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-8 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4"
+          className="mb-8 flex justify-end"
         >
-          <div>
-            <h1 className="text-2xl font-bold text-white sm:text-3xl">Financial Command Center</h1>
-            <p className="mt-1 text-sm text-white/70">
-              {hasData
-                ? `${data.kpis.transactionCount} transactions this month across ${data.kpis.accountCount} account${data.kpis.accountCount !== 1 ? "s" : ""}`
-                : "Upload your first statement to get started"}
-            </p>
-          </div>
           <Link href="/dashboard/upload">
             <Button className="bg-gradient-to-r from-[#0BC18D] to-[#2CA2FF] text-white font-semibold hover:opacity-90 transition-opacity">
               <Upload className="w-4 h-4 mr-2" />

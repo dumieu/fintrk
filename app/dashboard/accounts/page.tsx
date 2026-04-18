@@ -69,13 +69,10 @@ export default function AccountsPage() {
   return (
     <div className="min-h-[80vh] bg-gradient-to-b from-[#08051a] via-[#10082a] to-[#160e35]">
       <div className="mx-auto max-w-7xl px-4 py-8">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-8 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-white sm:text-3xl">Accounts</h1>
-            <p className="mt-1 text-sm text-white/70">
-              {accounts.length > 0 ? `${accounts.length} linked account${accounts.length !== 1 ? "s" : ""}` : "No accounts yet — they are auto-created when you upload statements"}
-            </p>
-          </div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-white/70">
+            {accounts.length > 0 ? `${accounts.length} linked account${accounts.length !== 1 ? "s" : ""}` : "No accounts yet — they are auto-created when you upload statements"}
+          </p>
           <Button onClick={() => setShowCreate(true)} variant="ghost" className="text-[#0BC18D] hover:bg-[#0BC18D]/10 border border-[#0BC18D]/20">
             <Plus className="w-4 h-4 mr-2" />
             Add Manually

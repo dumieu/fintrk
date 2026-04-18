@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,9 +13,13 @@ import {
   DialogTrigger,
   DialogClose,
 } from "@/components/ui/dialog";
-import { Trash2, Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Trash2, Loader2, CheckCircle2, AlertTriangle, Info } from "lucide-react";
+
+const DETECT_TRAVEL_CURRENCY_HELP =
+  "When this is on, spending in another currency is sorted into Travel so you can spot trip-related purchases at a glance.";
 
 type ResetState = "idle" | "confirming" | "loading" | "done" | "error";
+type DetectTravel = "Yes" | "No";
 
 export default function ProfilePage() {
   const [state, setState] = useState<ResetState>("idle");
@@ -23,6 +27,12 @@ export default function ProfilePage() {
   const [errorMsg, setErrorMsg] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [confirmText, setConfirmText] = useState("");
+  const [detectTravel, setDetectTravel] = useState<DetectTravel>("Yes");
+  const [initialDetectTravel, setInitialDetectTravel] = useState<DetectTravel>("Yes");
+  const [loadingDetectTravel, setLoadingDetectTravel] = useState(true);
+  const [savingDetectTravel, setSavingDetectTravel] = useState(false);
+  const [detectTravelError, setDetectTravelError] = useState<string | null>(null);
+  const [detectTravelSaved, setDetectTravelSaved] = useState(false);
 
   const handleReset = useCallback(async () => {
     setState("loading");
@@ -54,22 +64,115 @@ export default function ProfilePage() {
   }, [state]);
 
   const canConfirm = confirmText.toLowerCase() === "delete all";
+  const hasDetectTravelChanges = detectTravel !== initialDetectTravel;
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingDetectTravel(true);
+    fetch("/api/user/profile")
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return;
+        const value: DetectTravel = data.detectTravel === "No" ? "No" : "Yes";
+        setDetectTravel(value);
+        setInitialDetectTravel(value);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setDetectTravelError("Failed to load profile settings.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingDetectTravel(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const saveDetectTravel = useCallback(async () => {
+    setSavingDetectTravel(true);
+    setDetectTravelSaved(false);
+    setDetectTravelError(null);
+    try {
+      const res = await fetch("/api/user/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ detectTravel }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(typeof body.error === "string" ? body.error : "Failed to save profile settings.");
+      }
+      setInitialDetectTravel(detectTravel);
+      setDetectTravelSaved(true);
+      window.setTimeout(() => setDetectTravelSaved(false), 1600);
+    } catch (err) {
+      setDetectTravelError(err instanceof Error ? err.message : "Failed to save profile settings.");
+    } finally {
+      setSavingDetectTravel(false);
+    }
+  }, [detectTravel]);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold sm:text-3xl">My Profile</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Manage your personal information and preferences
-        </p>
-      </div>
-
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Personal Information</CardTitle>
         </CardHeader>
-        <CardContent className="flex items-center justify-center h-64 text-muted-foreground text-sm">
-          Profile settings will appear here
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Configure how AI categorization handles travel detection.
+          </p>
+
+          {loadingDetectTravel ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading profile settings...
+            </div>
+          ) : (
+            <div className="max-w-xs space-y-2">
+              <div className="flex items-center gap-1.5">
+                <label
+                  htmlFor="detect-travel"
+                  className="text-sm font-medium text-foreground"
+                >
+                  Detect Travel from Currency
+                </label>
+                <button
+                  type="button"
+                  className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline focus-visible:ring-2 focus-visible:ring-ring/50"
+                  title={DETECT_TRAVEL_CURRENCY_HELP}
+                  aria-label={DETECT_TRAVEL_CURRENCY_HELP}
+                >
+                  <Info className="size-3.5" strokeWidth={2} aria-hidden />
+                </button>
+              </div>
+              <select
+                id="detect-travel"
+                value={detectTravel}
+                onChange={(e) => setDetectTravel(e.target.value === "No" ? "No" : "Yes")}
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring/50"
+              >
+                <option value="Yes">Yes</option>
+                <option value="No">No</option>
+              </select>
+            </div>
+          )}
+
+          <div className="flex items-center gap-3">
+            <Button
+              type="button"
+              onClick={() => void saveDetectTravel()}
+              disabled={loadingDetectTravel || savingDetectTravel || !hasDetectTravelChanges}
+            >
+              {savingDetectTravel ? "Saving..." : "Save"}
+            </Button>
+            {detectTravelSaved ? <span className="text-sm text-green-600 dark:text-green-400">Saved</span> : null}
+          </div>
+
+          {detectTravelError ? (
+            <p className="text-sm text-destructive">{detectTravelError}</p>
+          ) : null}
         </CardContent>
       </Card>
 

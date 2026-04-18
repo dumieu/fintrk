@@ -6,6 +6,7 @@ import {
   integer,
   numeric,
   boolean,
+  bigint,
   date,
   timestamp,
   jsonb,
@@ -15,6 +16,7 @@ import {
   pgEnum,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
+import type { UserJSON } from "@clerk/backend";
 
 // ─── Enums ───────────────────────────────────────────────────────────────────
 
@@ -46,6 +48,34 @@ export const flowTypeEnum = pgEnum("flow_type", [
   "savings",
   "misc",
 ]);
+
+// ─── Users (Clerk identity) ──────────────────────────────────────────────────
+
+export const users = pgTable(
+  "users",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    clerkUserId: varchar("clerk_user_id", { length: 255 }).notNull(),
+    detectTravel: varchar("detect_travel", { length: 3 }).default("Yes").notNull(),
+    mainCurrency: varchar("main_currency", { length: 3 }),
+    mainCurrencyTransactions: integer("main_currency_transactions").default(0).notNull(),
+    mainCurrencyPercentage: numeric("main_currency_percentage", { precision: 5, scale: 2 })
+      .default("0.00")
+      .notNull(),
+    /** Clerk `UserJSON.updated_at` (epoch ms) — used to skip redundant writes */
+    clerkUpdatedAtMs: bigint("clerk_updated_at_ms", { mode: "number" }),
+    primaryEmail: varchar("primary_email", { length: 255 }),
+    firstName: varchar("first_name", { length: 256 }),
+    lastName: varchar("last_name", { length: 256 }),
+    username: varchar("username", { length: 256 }),
+    imageUrl: text("image_url"),
+    /** Full Clerk `UserJSON` payload (authoritative mirror) */
+    clerkSnapshot: jsonb("clerk_snapshot").$type<UserJSON>(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("users_clerk_user_id_idx").on(t.clerkUserId)],
+);
 
 // ─── Accounts ────────────────────────────────────────────────────────────────
 

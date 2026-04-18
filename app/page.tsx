@@ -9,6 +9,6 @@ export default async function Home() {
     userId = authResult.userId;
   }
 
-  if (!userId) redirect("/auth");
+  if (!userId) redirect("/unauth1");
   redirect("/dashboard");
 }

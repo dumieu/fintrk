@@ -43,6 +43,27 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    if (f.subcategoryType) {
+      const typeRows = await resilientQuery(() =>
+        db
+          .select({ id: userCategories.id })
+          .from(userCategories)
+          .where(and(
+            eq(userCategories.userId, userId),
+            eq(
+              userCategories.subcategoryType,
+              f.subcategoryType as "discretionary" | "semi-discretionary" | "non-discretionary",
+            ),
+          )),
+      );
+      const typeIds = typeRows.map((r) => r.id);
+      if (typeIds.length === 0) {
+        conditions.push(sql`1 = 0`);
+      } else {
+        conditions.push(inArray(transactions.categoryId, typeIds));
+      }
+    }
+
     if (f.accountId) conditions.push(eq(transactions.accountId, f.accountId));
     if (f.categoryId) conditions.push(eq(transactions.categoryId, f.categoryId));
     if (f.dateFrom) conditions.push(gte(transactions.postedDate, f.dateFrom));

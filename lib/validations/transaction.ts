@@ -20,6 +20,10 @@ export const transactionFiltersSchema = z.object({
   sortDir: z.enum(["asc", "desc"]).default("desc"),
   /** Filter by flow type (inflow / outflow / savings / misc). */
   flowTheme: z.enum(["inflow", "outflow", "savings", "misc", "unknown"]).optional(),
+  /** Filter by subcategory expense type (outflow subcategories). */
+  subcategoryType: z
+    .enum(["discretionary", "semi-discretionary", "non-discretionary"])
+    .optional(),
 });
 
 export type TransactionFilters = z.infer<typeof transactionFiltersSchema>;

@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarClock, CalendarDays, CalendarRange, InfinityIcon } from "lucide-react";
+import { CalendarClock, CalendarRange, InfinityIcon, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { TimePresetId } from "@/lib/time-range-presets";
 
@@ -10,7 +10,7 @@ type PresetRow = {
   label: string;
   /** Accessible / tooltip name. */
   ariaLabel: string;
-  icon: typeof CalendarDays;
+  icon: LucideIcon;
   accent: string;
   activeAccent: string;
 };
@@ -25,16 +25,6 @@ const PRESETS: PresetRow[] = [
       "border-white/18 bg-gradient-to-br from-white/[0.09] to-white/[0.02] hover:border-white/28 hover:from-white/[0.12]",
     activeAccent:
       "border-[#0BC18D]/55 bg-gradient-to-br from-[#0BC18D]/20 to-[#0BC18D]/8 shadow-[0_0_28px_-12px_rgba(11,193,141,0.55)] ring-1 ring-[#0BC18D]/35",
-  },
-  {
-    id: "30d",
-    label: "30d",
-    ariaLabel: "Last 30 days",
-    icon: CalendarDays,
-    accent:
-      "border-[#2CA2FF]/25 bg-gradient-to-br from-[#2CA2FF]/12 to-[#AD74FF]/8 hover:border-[#2CA2FF]/45",
-    activeAccent:
-      "border-[#2CA2FF]/60 bg-gradient-to-br from-[#2CA2FF]/22 to-[#AD74FF]/12 shadow-[0_0_28px_-12px_rgba(44,162,255,0.45)] ring-1 ring-[#2CA2FF]/35",
   },
   {
     id: "90d",
@@ -61,16 +51,21 @@ const PRESETS: PresetRow[] = [
 export function TimeSlicer({
   activePreset,
   onSelect,
+  /** When false, hides the left "Period" title (e.g. compact filters panel). */
+  showLabel = true,
 }: {
   activePreset: TimePresetId | null;
   onSelect: (preset: TimePresetId) => void;
+  showLabel?: boolean;
 }) {
   return (
     <div className="w-fit max-w-full rounded-xl border border-white/[0.09] bg-gradient-to-b from-white/[0.07] to-white/[0.02] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] sm:rounded-2xl sm:p-2">
-      <div className="flex flex-nowrap items-center gap-1.5 sm:gap-2">
-        <p className="shrink-0 whitespace-nowrap px-0.5 text-[9px] font-medium uppercase tracking-wider text-white/40 sm:px-1 sm:text-[10px]">
-          Period
-        </p>
+      <div className={cn("flex flex-nowrap items-center", showLabel ? "gap-1.5 sm:gap-2" : "gap-0")}>
+        {showLabel ? (
+          <p className="shrink-0 whitespace-nowrap px-0.5 text-[9px] font-medium uppercase tracking-wider text-white/40 sm:px-1 sm:text-[10px]">
+            Period
+          </p>
+        ) : null}
         <div
           role="toolbar"
           aria-label="Time range"

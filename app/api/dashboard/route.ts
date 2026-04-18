@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
-import { transactions, accounts, recurringPatterns, userCategories } from "@/lib/db/schema";
+import { transactions, accounts, recurringPatterns } from "@/lib/db/schema";
+import {
+  categoryRollupLabelSql,
+  leafCategory,
+  parentCategory,
+} from "@/lib/db/category-rollup";
 import { eq, and, gte, lte, sql, desc, ne } from "drizzle-orm";
 import { logServerError } from "@/lib/safe-error";
 
@@ -91,12 +96,22 @@ export async function GET() {
       resilientQuery(() =>
         db
           .select({
-            category: userCategories.name,
+            category: categoryRollupLabelSql,
             total: sql<string>`SUM(ABS(CAST(${transactions.baseAmount} AS numeric)))`,
             count: sql<number>`COUNT(*)::int`,
           })
           .from(transactions)
-          .leftJoin(userCategories, eq(transactions.categoryId, userCategories.id))
+          .leftJoin(
+            leafCategory,
+            and(eq(transactions.categoryId, leafCategory.id), eq(leafCategory.userId, userId)),
+          )
+          .leftJoin(
+            parentCategory,
+            and(
+              eq(leafCategory.parentId, parentCategory.id),
+              eq(parentCategory.userId, userId),
+            ),
+          )
           .where(
             and(
               eq(transactions.userId, userId),
@@ -105,7 +120,7 @@ export async function GET() {
               sql`CAST(${transactions.baseAmount} AS numeric) < 0`,
             ),
           )
-          .groupBy(userCategories.name)
+          .groupBy(categoryRollupLabelSql)
           .orderBy(sql`SUM(ABS(CAST(${transactions.baseAmount} AS numeric))) DESC`)
           .limit(8),
       ),
