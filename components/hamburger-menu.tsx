@@ -30,6 +30,7 @@ import {
   Settings,
   Network,
   Waves,
+  ScanSearch,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { FintrkShortLogo } from "@/components/fintrk-short-logo";
@@ -68,6 +69,7 @@ export function HamburgerMenu() {
     { label: "Transactions", href: `${basePath}/transactions`, icon: ArrowLeftRight },
     { label: "Cashflow", href: `${basePath}/cashflow`, icon: Waves },
     { label: "Spend Analytics", href: `${basePath}/analytics`, icon: BarChart3 },
+    { label: "Money X-Ray", href: `${basePath}/x-ray`, icon: ScanSearch, accent: true as const },
     { label: "Budget", href: `${basePath}/budget`, icon: PiggyBank },
     { label: "Goals", href: `${basePath}/goals`, icon: Target },
     { label: "Accounts", href: `${basePath}/accounts`, icon: Landmark },
@@ -157,6 +159,7 @@ export function HamburgerMenu() {
             {navItems.map((item) => {
               const isActive = pathname.startsWith(item.href);
               const Icon = item.icon;
+              const accent = "accent" in item && item.accent;
               return (
                 <li key={item.href}>
                   <SheetClose
@@ -165,13 +168,22 @@ export function HamburgerMenu() {
                       <Link
                         href={item.href}
                         className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                          isActive
-                            ? "bg-primary/10"
-                            : "text-muted-foreground hover:bg-muted/50"
+                          accent
+                            ? "border border-emerald-300/30 bg-gradient-to-r from-emerald-400/15 via-cyan-400/10 to-violet-400/10 text-white shadow-[0_0_18px_rgba(11,193,141,0.18)] hover:from-emerald-400/25 hover:via-cyan-400/15 hover:to-violet-400/15"
+                            : isActive
+                              ? "bg-primary/10"
+                              : "text-muted-foreground hover:bg-muted/50"
                         }`}
                       >
-                        <Icon className="w-5 h-5 shrink-0" />
+                        <Icon
+                          className={`w-5 h-5 shrink-0 ${accent ? "text-emerald-300" : ""}`}
+                        />
                         {item.label}
+                        {accent && (
+                          <span className="ml-auto rounded-full bg-emerald-300/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-emerald-200">
+                            New
+                          </span>
+                        )}
                       </Link>
                     }
                   />

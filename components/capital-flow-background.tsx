@@ -39,7 +39,7 @@ export function CapitalFlowBackground() {
     let w = 0;
     let h = 0;
 
-    function resize() {
+    const resize = () => {
       const rect = container.getBoundingClientRect();
       w = rect.width;
       h = rect.height;
@@ -47,7 +47,7 @@ export function CapitalFlowBackground() {
       canvas.width = Math.floor(w * dpr);
       canvas.height = Math.floor(h * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    }
+    };
     resize();
 
     const mobile = w < 768;
@@ -195,13 +195,13 @@ export function CapitalFlowBackground() {
     };
     const onTouchEnd = () => { mouse.active = false; };
 
-    function triggerBurst(clientX: number, clientY: number) {
+    const triggerBurst = (clientX: number, clientY: number) => {
       const r = container.getBoundingClientRect();
       const x = clientX - r.left;
       const y = clientY - r.top;
       if (!inBounds(x, y)) return;
       bursts.push({ x, y, age: 0, life: 60 });
-    }
+    };
     const onClick = (e: MouseEvent) => {
       // Don't burst when the user clicks an actual interactive element
       // (button/link). Empty hero space → satisfying golden splash.
@@ -254,7 +254,7 @@ export function CapitalFlowBackground() {
     ctx.fillStyle = "rgba(2, 12, 14, 1)";
     ctx.fillRect(0, 0, w, h);
 
-    function frame(now: number) {
+    const frame = (now: number) => {
       if (destroyed) return;
       frameId = requestAnimationFrame(frame);
       const dt = Math.min(now - lastT, 50);
@@ -446,7 +446,7 @@ export function CapitalFlowBackground() {
         ctx.arc(mouse.x, mouse.y, auraR, 0, Math.PI * 2);
         ctx.fill();
       }
-    }
+    };
 
     if (!reduceMotion) {
       frameId = requestAnimationFrame(frame);
