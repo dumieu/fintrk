@@ -6,9 +6,12 @@ import { logServerError } from "@/lib/safe-error";
 import { eq, and, or } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
+// Receiving up to 100 PDFs in one multipart request + per-file dedupe checks
+// + DB inserts can easily exceed the default 10s. Pro plan ceiling is 300s.
+export const maxDuration = 300;
 
 const NO_STORE = { "Cache-Control": "no-store" } as const;
-const SERVER_BATCH_LIMIT = 50;
+const SERVER_BATCH_LIMIT = 100;
 
 async function isDuplicate(
   userId: string,

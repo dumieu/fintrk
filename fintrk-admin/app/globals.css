@@ -1,0 +1,82 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  --radius: 0.625rem;
+
+  /* FinTRK admin palette — deep navy chrome with electric mint/cyan accent. */
+  --background: #f6f8fb;
+  --foreground: #0a0f1f;
+  --card: #ffffff;
+  --card-foreground: #0a0f1f;
+  --popover: #ffffff;
+  --popover-foreground: #0a0f1f;
+  --primary: #0BC18D;            /* FinTRK mint */
+  --primary-foreground: #04140e;
+  --secondary: #eef2f8;
+  --secondary-foreground: #0a0f1f;
+  --muted: #eef2f8;
+  --muted-foreground: #5c6479;
+  --accent: #eaf6ff;
+  --accent-foreground: #0a0f1f;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #e3e8ef;
+  --input: #e3e8ef;
+  --ring: #0BC18D;
+  --sidebar: #060b1c;
+  --sidebar-foreground: #d6dbe8;
+  --sidebar-accent: #11182f;
+}
+
+@layer base {
+  * { @apply border-border; }
+  body { @apply bg-background text-foreground antialiased; }
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+/* Subtle moving-grid background used by the brand chrome. */
+@keyframes pulseGlow {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 1; }
+}
+.brand-glow {
+  background: radial-gradient(circle at 30% 30%, rgba(11, 193, 141, 0.6), transparent 60%),
+              radial-gradient(circle at 70% 80%, rgba(56, 189, 248, 0.45), transparent 60%);
+  animation: pulseGlow 7s ease-in-out infinite;
+}

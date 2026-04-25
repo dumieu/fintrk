@@ -5,6 +5,8 @@ import { fileUploadLog } from "@/lib/db/schema";
 import { and, eq, or, inArray } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
+// 100 hash lookups can take a few seconds; give ample headroom.
+export const maxDuration = 60;
 
 const NO_STORE = { "Cache-Control": "no-store" } as const;
 

@@ -184,14 +184,14 @@ export default async function Unauth1() {
                       <ArrowRight className="ml-2 h-4 w-4 shrink-0 transition-transform group-hover:translate-x-0.5" aria-hidden />
                     </Button>
                   </Link>
-                  <Link href={SIGN_UP_URL} className="block">
+                  <Link href="/demo" className="block">
                     <Button
                       size="lg"
                       variant="outline"
                       className="h-12 w-full border-emerald-300/30 bg-white/[0.04] px-6 text-base font-medium text-emerald-50 backdrop-blur-sm transition-all hover:border-emerald-300/60 hover:bg-white/[0.08] hover:text-white sm:w-auto"
                     >
                       <ChartLine className="mr-2 h-4 w-4 shrink-0" aria-hidden />
-                      See your money like never before
+                      Try the live demo · no signup
                     </Button>
                   </Link>
                 </div>

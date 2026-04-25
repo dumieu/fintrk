@@ -7,7 +7,9 @@ import { logServerError } from "@/lib/safe-error";
 import { eq, and } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 120;
+// AI extraction on a dense PDF + categorisation + bulk DB inserts can take
+// well over 2 minutes for big statements. Pro plan ceiling is 300s.
+export const maxDuration = 300;
 
 const NO_STORE = { "Cache-Control": "no-store" } as const;
 

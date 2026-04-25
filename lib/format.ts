@@ -28,6 +28,27 @@ export function formatCurrency(
   }
 }
 
+/** Currency with grouping, rounded to a whole number (no fraction digits). */
+export function formatCurrencyInteger(
+  amount: number | string,
+  currency: string,
+  locale = "en-US",
+): string {
+  const num = typeof amount === "string" ? parseFloat(amount) : amount;
+  if (isNaN(num)) return "—";
+  const rounded = Math.round(num);
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency: currency.toUpperCase(),
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(rounded);
+  } catch {
+    return `${currency} ${rounded.toLocaleString(locale)}`;
+  }
+}
+
 export function formatAmount(amount: number | string, currency: string): string {
   const num = typeof amount === "string" ? parseFloat(amount) : amount;
   if (isNaN(num)) return "—";

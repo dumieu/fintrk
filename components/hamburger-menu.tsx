@@ -31,6 +31,7 @@ import {
   Network,
   Waves,
   ScanSearch,
+  Sparkles,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { FintrkShortLogo } from "@/components/fintrk-short-logo";
@@ -70,6 +71,7 @@ export function HamburgerMenu() {
     { label: "Cashflow", href: `${basePath}/cashflow`, icon: Waves },
     { label: "Spend Analytics", href: `${basePath}/analytics`, icon: BarChart3 },
     { label: "Money X-Ray", href: `${basePath}/x-ray`, icon: ScanSearch, accent: true as const },
+    { label: "Net Worth Atlas", href: `${basePath}/net-worth`, icon: Sparkles, accent: true as const },
     { label: "Budget", href: `${basePath}/budget`, icon: PiggyBank },
     { label: "Goals", href: `${basePath}/goals`, icon: Target },
     { label: "Accounts", href: `${basePath}/accounts`, icon: Landmark },

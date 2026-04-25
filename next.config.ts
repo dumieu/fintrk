@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { NextConfig } from "next";
 
 const isDev = process.env.NODE_ENV === "development";
@@ -7,6 +8,8 @@ const nextConfig: NextConfig = {
   devIndicators: false,
   poweredByHeader: false,
   compress: true,
+  // Pin tracing to this app so the nested fintrk-admin lockfile doesn't confuse Next.js.
+  outputFileTracingRoot: path.join(__dirname),
   ...(isDev && {
     allowedDevOrigins: ["local.fintrk.io:3004", "local.fintrk.io"],
   }),
@@ -52,7 +55,11 @@ const nextConfig: NextConfig = {
       {
         source: "/_next/static/(.*)",
         headers: [
-          { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
+          {
+            key: "Cache-Control",
+            // Production: 1y immutable. Dev: never cache (HMR + chunk replacement).
+            value: isDev ? "no-store, no-cache, must-revalidate" : "public, max-age=31536000, immutable",
+          },
         ],
       },
       {

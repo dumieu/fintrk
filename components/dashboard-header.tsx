@@ -17,6 +17,7 @@ const PAGE_META: Array<{ match: (p: string) => boolean; title: string; subtitle:
   { match: (p) => p.startsWith("/dashboard/analytics"), title: "Spending Intelligence", subtitle: "Deep analysis of your financial patterns" },
   { match: (p) => p.startsWith("/dashboard/budget"), title: "Budget Manager", subtitle: "Set spending limits and track progress" },
   { match: (p) => p.startsWith("/dashboard/goals"), title: "Financial Goals", subtitle: "Track your savings targets and milestones" },
+  { match: (p) => p.startsWith("/dashboard/net-worth"), title: "Net Worth Atlas", subtitle: "Map your wealth today — then watch it compound 5, 10, 20, 30 years out" },
   { match: (p) => p.startsWith("/dashboard/accounts"), title: "Accounts", subtitle: "Linked bank, card, and investment accounts" },
   { match: (p) => p.startsWith("/dashboard/categories"), title: "Category Mapping", subtitle: "Curate how transactions roll up into categories and subcategories" },
   { match: (p) => p.startsWith("/dashboard/my-profile"), title: "My Profile", subtitle: "Personal preferences and account settings" },

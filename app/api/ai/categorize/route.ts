@@ -9,7 +9,7 @@ import { logServerError } from "@/lib/safe-error";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 30;
+export const maxDuration = 120;
 
 const NO_STORE = { "Cache-Control": "no-store" } as const;
 

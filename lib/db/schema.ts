@@ -404,6 +404,76 @@ export const aiCosts = pgTable(
   (t) => [index("ai_costs_user_idx").on(t.userId)],
 );
 
+// ─── Net Worth ───────────────────────────────────────────────────────────────
+// User-curated balance sheet + projection inputs. One row per asset/liability;
+// settings live in their own single-row-per-user table.
+
+export const netWorthKindEnum = pgEnum("net_worth_kind", ["asset", "liability"]);
+
+export const netWorthItems = pgTable(
+  "net_worth_items",
+  {
+    id: serial("id").primaryKey(),
+    userId: varchar("user_id", { length: 255 }).notNull(),
+    kind: netWorthKindEnum("kind").notNull(),
+    /** Free-form sub-bucket: cash, investments, real_estate, retirement, vehicles, business, other (assets) | mortgage, credit_card, student_loan, auto_loan, personal_loan, other (liabilities) */
+    category: varchar("category", { length: 32 }).notNull().default("other"),
+    label: varchar("label", { length: 128 }).notNull(),
+    amount: numeric("amount", { precision: 18, scale: 2 }).notNull().default("0"),
+    currency: varchar("currency", { length: 3 }).notNull().default("USD"),
+    /** Optional per-line override (decimal, e.g. 0.07 for 7%). When null, the
+     *  global default growth rate from net_worth_settings is used. Liabilities
+     *  use this as the interest rate (cost of debt). */
+    growthRate: numeric("growth_rate", { precision: 6, scale: 4 }),
+    notes: text("notes"),
+    displayOrder: integer("display_order").default(0).notNull(),
+    isActive: boolean("is_active").default(true).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("nw_items_user_idx").on(t.userId),
+    index("nw_items_user_kind_idx").on(t.userId, t.kind),
+  ],
+);
+
+export const netWorthSettings = pgTable("net_worth_settings", {
+  userId: varchar("user_id", { length: 255 }).primaryKey(),
+  currency: varchar("currency", { length: 3 }).notNull().default("USD"),
+  /** Default annual growth rate applied to assets without an override (decimal, default 0.10 = 10%). */
+  defaultGrowthRate: numeric("default_growth_rate", { precision: 6, scale: 4 })
+    .default("0.1000")
+    .notNull(),
+  /** Monthly contribution added to invested assets pre-retirement (positive). */
+  monthlyContribution: numeric("monthly_contribution", { precision: 15, scale: 2 })
+    .default("0")
+    .notNull(),
+  /** Optional monthly contribution that continues post-retirement (e.g. excess
+   *  social security being reinvested). Defaults to 0. */
+  monthlyContributionPost: numeric("monthly_contribution_post", { precision: 15, scale: 2 })
+    .default("0")
+    .notNull(),
+  inflationRate: numeric("inflation_rate", { precision: 6, scale: 4 })
+    .default("0.0300")
+    .notNull(),
+  currentAge: integer("current_age").default(35).notNull(),
+  retirementAge: integer("retirement_age").default(65).notNull(),
+  /** Date of birth (month + year only, intentionally low-friction). */
+  birthMonth: integer("birth_month"),
+  birthYear: integer("birth_year"),
+  /** Annual drawdown post-retirement (today's $). */
+  annualDrawdown: numeric("annual_drawdown", { precision: 15, scale: 2 })
+    .default("0")
+    .notNull(),
+  /** Optional annual withdrawal pre-retirement (e.g. kids' college, sabbatical). */
+  annualDrawdownPre: numeric("annual_drawdown_pre", { precision: 15, scale: 2 })
+    .default("0")
+    .notNull(),
+  /** "real" subtracts inflation from growth; "nominal" leaves it raw. */
+  showInflationAdjusted: boolean("show_inflation_adjusted").default(false).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 // ─── File Upload Log (append-only, survives statement deletion) ─────────────
 
 export const fileUploadLog = pgTable(

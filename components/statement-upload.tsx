@@ -25,7 +25,7 @@ const SESSION_KEY = "fintrk:upload-queue";
 
 type LocalStatus = "queued" | "deferred" | "parsing" | "checking" | "submitting" | "submitted" | "completed" | "failed" | "duplicate" | "error";
 
-const BATCH_LIMIT = 50;
+const BATCH_LIMIT = 100;
 
 interface QueuedFile {
   id: string;
@@ -179,8 +179,8 @@ export function StatementUpload() {
   }, [queue]);
 
   // Poll status + trigger AI processing one statement at a time.
-  // Each /api/ingest/process call gets its own 120s serverless invocation,
-  // so even 50 statements won't time out.
+  // Each /api/ingest/process call gets its own 300s serverless invocation,
+  // so even 100 statements won't time out.
   const pendingCount = queue.filter((f) => f.status === "submitted").length;
   const processingRef = useRef(false);
   useEffect(() => {
