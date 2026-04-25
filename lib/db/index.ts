@@ -9,11 +9,13 @@ if (!connectionString) {
   throw new Error("DATABASE_URL is not set");
 }
 
-const sql = neon(connectionString);
+/** Neon tagged-template client; also used by Drizzle. Re-exported for admin/raw SQL routes. */
+export const sql = neon(connectionString);
 
 export const db = drizzle({ client: sql, schema });
 
-export const rawSql = neon(connectionString);
+/** Alias for raw tagged-template queries (same Neon client as `sql`). */
+export const rawSql = sql;
 
 type RawSqlReturn = ReturnType<typeof rawSql>;
 
