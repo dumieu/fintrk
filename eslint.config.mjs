@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Nested app is not the root `app/` router; it keeps its own deps and is built separately.
+    "fintrk-admin/**",
   ]),
 ]);
 
