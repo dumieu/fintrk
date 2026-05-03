@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useId, useCallback, useEffect, useLayoutEffect, useRef } from "react";
+import type { MouseEvent as ReactMouseEvent } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 /** Integer-only currency formatter (no decimals anywhere on this page). */
@@ -24,11 +25,13 @@ function fmtInt(amount: number, currency: string, locale = "en-US"): string {
  * gradient-ribbon Sankey designed specifically for FinTRK.
  *
  *  Columns (left → right):
- *   0 Inflow categories      (+ optional "Deficit Funding" node)
- *   1 Total Income           (single trunk node)
- *   2 Allocation             (Spent · Saved & Invested · optional Surplus)
- *   3 Outflow / Savings categories
- *   4 Subcategories
+ *   0 Positive inflow labels (non-blank only)
+ *   1 Positive inflow subcategories
+ *   2 Positive inflow categories (+ optional "Deficit Funding" node)
+ *   3 Total Income           (single trunk node)
+ *   4 Allocation             (Spent · Saved & Invested · optional Surplus)
+ *   5 Outflow / Savings categories
+ *   6 Subcategories
  *
  * Hovering any node highlights every ribbon flowing through it AND
  * opens a breakdown tooltip that decomposes that node one level deeper
@@ -177,6 +180,26 @@ interface LayoutNode {
   statsKey?: string;
 }
 
+export interface CashflowSankeyCategorySelection {
+  name: string;
+  level: "category" | "subcategory" | "label";
+  flow: "inflow" | "outflow" | "savings";
+}
+
+function selectionForNode(node: LayoutNode): CashflowSankeyCategorySelection | null {
+  const level =
+    node.level === "category" || node.level === "inflow-cat"
+      ? "category"
+      : node.level === "sub"
+        ? "subcategory"
+        : node.level === "label"
+          ? "label"
+          : null;
+  if (!level || /^Other \(/.test(node.name)) return null;
+  if (node.flow !== "inflow" && node.flow !== "outflow" && node.flow !== "savings") return null;
+  return { name: node.name, level, flow: node.flow };
+}
+
 interface LayoutLink {
   id: string;
   sourceId: string;
@@ -228,8 +251,8 @@ const PAD_RIGHT_MIN = 56;
 const PAD_Y = 28;
 const MIN_NODE_H = 4;
 const NODE_W = 16;
-// Five columns now (Inflow Sources, Total Income, Allocation, Categories, Subcategories)
-const COL_GAPS = [240, 200, 220, 280];
+// Seven columns: inflow labels, inflow subcategories, inflow categories, total income, allocation, categories, subcategories.
+const COL_GAPS = [150, 170, 210, 190, 220, 260];
 /** Absolute minimum column gap before the chart turns into a tangle. */
 const MIN_GAP = 78;
 /** Natural diagram width — what the chart wants when there's plenty of room. */
@@ -328,14 +351,16 @@ function buildLayout(
 
   /* --- Build nodes per column --- */
 
-  // Column 0 — Inflow categories (sources). All shades of green so the
-  // Total Income trunk and feeding ribbons stay in the green family.
-  const c0Nodes: LayoutNode[] = inflowCats.map((c, i) => {
+  // Columns 0-2 — strictly positive inflow detail:
+  // non-blank Labels → Subcategories → Categories → Total Income.
+  // All shades of green so the Total Income trunk and feeding ribbons stay
+  // in the green family.
+  const c2Nodes: LayoutNode[] = inflowCats.map((c, i) => {
     const color = INFLOW_GREENS[i % INFLOW_GREENS.length];
     const isOther = /^Other \(/.test(c.name);
     return {
       id: `inflow-cat:${c.name}`,
-      col: 0,
+      col: 2,
       name: c.name,
       color,
       value: c.value,
@@ -346,10 +371,81 @@ function buildLayout(
       statsKey: isOther ? undefined : `cat:inflow:${c.name}`,
     };
   });
+
+  const inflowSubInfos: { catNodeId: string; catName: string; catColor: string; sub: SubSlice }[] = [];
+  inflowCats.forEach((cat, i) => {
+    const catNode = c2Nodes[i];
+    let subs = cat.subs.filter((s) => s.value > 0);
+    if (subs.length === 0) {
+      subs = [{
+        name: cat.name,
+        value: cat.value,
+        count: cat.count,
+        leaves: [],
+      }];
+    }
+    subs = consolidateSmall(
+      subs,
+      MAX_SUBS,
+      (rest) => ({
+        name: `Other (${rest.length})`,
+        value: rest.reduce((s, x) => s + x.value, 0),
+        count: rest.reduce((s, x) => s + x.count, 0),
+        leaves: rest.flatMap((x) => x.leaves),
+      }),
+    );
+    for (const sub of subs) {
+      inflowSubInfos.push({
+        catNodeId: catNode.id,
+        catName: cat.name,
+        catColor: catNode.color,
+        sub,
+      });
+    }
+  });
+
+  const c1Nodes: LayoutNode[] = inflowSubInfos.map((info, i) => {
+    const isOther = /^Other \(/.test(info.sub.name) || /^Other \(/.test(info.catName);
+    return {
+      id: `inflow-sub:${info.catNodeId}:${info.sub.name}:${i}`,
+      col: 1,
+      name: info.sub.name,
+      color: info.catColor,
+      value: info.sub.value,
+      count: info.sub.count,
+      level: "sub",
+      flow: "inflow",
+      y: 0, height: 0, emphasis: 2,
+      statsKey: isOther ? undefined : `sub:inflow:${info.catName}:${info.sub.name}`,
+    };
+  });
+
+  const inflowLabelInfos: { subNodeId: string; subColor: string; label: LeafSlice }[] = [];
+  inflowSubInfos.forEach((info, i) => {
+    const subNode = c1Nodes[i];
+    for (const label of info.sub.leaves ?? []) {
+      const labelName = label.name.trim();
+      if (!labelName || labelName.toLowerCase() === "unlabeled" || label.value <= 0) continue;
+      inflowLabelInfos.push({ subNodeId: subNode.id, subColor: info.catColor, label });
+    }
+  });
+
+  const c0Nodes: LayoutNode[] = inflowLabelInfos.map((info, i) => ({
+    id: `inflow-label:${info.subNodeId}:${info.label.name}:${i}`,
+    col: 0,
+    name: info.label.name,
+    color: info.subColor,
+    value: info.label.value,
+    count: info.label.count,
+    level: "label",
+    flow: "inflow",
+    y: 0, height: 0, emphasis: 2,
+  }));
+
   if (deficit > 0) {
-    c0Nodes.push({
+    c2Nodes.push({
       id: "inflow-deficit",
-      col: 0,
+      col: 2,
       name: "Deficit (Drawdown)",
       color: COL.deficit,
       value: deficit,
@@ -359,10 +455,10 @@ function buildLayout(
     });
   }
 
-  // Column 1 — Total Income trunk
+  // Column 3 — Total Income trunk
   const incomeNode: LayoutNode = {
     id: "income",
-    col: 1,
+    col: 3,
     name: "Total Income",
     color: COL.income,
     value: totalIncome,
@@ -372,12 +468,12 @@ function buildLayout(
     statsKey: "income:trunk",
   };
 
-  // Column 2 — Allocation: Spent · Saved · (optional Surplus)
+  // Column 4 — Allocation: Spent · Saved · (optional Surplus)
   const allocNodes: LayoutNode[] = [];
   if (totalOutflow > 0) {
     allocNodes.push({
       id: "alloc-outflow",
-      col: 2,
+      col: 4,
       name: "Spent",
       color: COL.outflow,
       value: totalOutflow,
@@ -390,7 +486,7 @@ function buildLayout(
   if (totalSavings > 0) {
     allocNodes.push({
       id: "alloc-savings",
-      col: 2,
+      col: 4,
       name: "Saved & Invested",
       color: COL.savings,
       value: totalSavings,
@@ -403,7 +499,7 @@ function buildLayout(
   if (surplus > 0) {
     allocNodes.push({
       id: "alloc-surplus",
-      col: 2,
+      col: 4,
       name: "Unallocated Surplus",
       color: COL.surplus,
       value: surplus,
@@ -413,7 +509,7 @@ function buildLayout(
     });
   }
 
-  // Column 3 — Categories (outflow + savings); Column 4 — Subcategories; Column 5 — Labels
+  // Column 5 — Categories (outflow + savings); Column 6 — Subcategories
   type CatNodeInfo = {
     flow: "outflow" | "savings";
     parent: CategorySlice;
@@ -445,7 +541,7 @@ function buildLayout(
     const isOther = /^Other \(/.test(info.parent.name);
     return {
       id: `cat:${info.flow}:${info.parent.name}:${i}`,
-      col: 3,
+      col: 5,
       name: info.parent.name,
       color: info.color,
       value: info.parent.value,
@@ -457,7 +553,7 @@ function buildLayout(
     };
   });
 
-  // Subcategories (col 4) — labels are now revealed via the hover tooltip,
+  // Subcategories (col 6) — labels are now revealed via the hover tooltip,
   // not as a separate column.
   const c4Nodes: LayoutNode[] = [];
 
@@ -495,7 +591,7 @@ function buildLayout(
     const isOther = /^Other \(/.test(info.sub.name) || /^Other \(/.test(parentName);
     return c4Nodes.push({
       id: `sub:${info.catNodeId}:${info.sub.name}:${i}`,
-      col: 4,
+      col: 6,
       name: info.sub.name,
       color: info.catColor,
       value: info.sub.value,
@@ -510,6 +606,8 @@ function buildLayout(
   /* --- Compute scale & node heights --- */
   const colTotals = [
     c0Nodes.reduce((s, n) => s + n.value, 0),
+    c1Nodes.reduce((s, n) => s + n.value, 0),
+    c2Nodes.reduce((s, n) => s + n.value, 0),
     incomeNode.value,
     allocNodes.reduce((s, n) => s + n.value, 0),
     c3Nodes.reduce((s, n) => s + n.value, 0),
@@ -517,7 +615,7 @@ function buildLayout(
   ];
   // Use the largest column total to fix the scale; this guarantees a column never exceeds the canvas.
   const maxColTotal = Math.max(...colTotals.filter((v) => v > 0), 1);
-  const allCols = [c0Nodes, [incomeNode], allocNodes, c3Nodes, c4Nodes];
+  const allCols = [c0Nodes, c1Nodes, c2Nodes, [incomeNode], allocNodes, c3Nodes, c4Nodes];
   const colNodeCounts = allCols.map((arr) => arr.length);
   const maxGapCount = Math.max(...colNodeCounts) - 1;
   const NODE_GAP = Math.max(2, Math.min(8, innerH / Math.max(40, maxGapCount * 2)));
@@ -540,13 +638,17 @@ function buildLayout(
     }
   };
 
-  // Sort col0 (sources) by inflow amount desc, deficit at the bottom
-  c0Nodes.sort((a, b) => {
+  // Sort inflow labels/subcategories/categories by amount desc, deficit at the bottom
+  c0Nodes.sort((a, b) => b.value - a.value);
+  c1Nodes.sort((a, b) => b.value - a.value);
+  c2Nodes.sort((a, b) => {
     if (a.level === "deficit") return 1;
     if (b.level === "deficit") return -1;
     return b.value - a.value;
   });
   positionColumn(c0Nodes);
+  positionColumn(c1Nodes);
+  positionColumn(c2Nodes);
   positionColumn([incomeNode]);
   // Allocation order: Spent (top), Saved, Surplus
   allocNodes.sort((a, b) => {
@@ -573,7 +675,7 @@ function buildLayout(
   const c4Sorted = c4Grouped.flat();
   positionColumn(c4Sorted);
 
-  nodes.push(...c0Nodes, incomeNode, ...allocNodes, ...c3Nodes, ...c4Sorted);
+  nodes.push(...c0Nodes, ...c1Nodes, ...c2Nodes, incomeNode, ...allocNodes, ...c3Nodes, ...c4Sorted);
 
   /* --- Compute links + ribbon offsets --- */
 
@@ -608,17 +710,37 @@ function buildLayout(
     });
   }
 
-  // Col 0 → Col 1 (Income trunk). Order links by source y so ribbons stack naturally.
-  for (const src of c0Nodes) {
+  // Col 0 → Col 1 (non-blank inflow labels → inflow subcategories)
+  inflowLabelInfos.forEach((info, i) => {
+    addLink(
+      `inflow-label:${info.subNodeId}:${info.label.name}:${i}`,
+      info.subNodeId,
+      info.label.value,
+      info.subColor,
+    );
+  });
+
+  // Col 1 → Col 2 (inflow subcategories → inflow categories)
+  inflowSubInfos.forEach((info, i) => {
+    addLink(
+      `inflow-sub:${info.catNodeId}:${info.sub.name}:${i}`,
+      info.catNodeId,
+      info.sub.value,
+      info.catColor,
+    );
+  });
+
+  // Col 2 → Col 3 (inflow categories + deficit → Income trunk).
+  for (const src of c2Nodes) {
     addLink(src.id, incomeNode.id, src.value, src.color);
   }
 
-  // Col 1 → Col 2 (allocation). Order: Spent first, then Saved, then Surplus
+  // Col 3 → Col 4 (allocation). Order: Spent first, then Saved, then Surplus
   for (const tgt of allocNodes) {
     addLink(incomeNode.id, tgt.id, tgt.value, tgt.color);
   }
 
-  // Col 2 → Col 3 (alloc → categories)
+  // Col 4 → Col 5 (alloc → categories)
   for (const cat of c3Nodes) {
     const allocId = cat.flow === "outflow" ? "alloc-outflow" : "alloc-savings";
     if (allocNodes.find((n) => n.id === allocId)) {
@@ -626,17 +748,12 @@ function buildLayout(
     }
   }
 
-  // Col 3 → Col 4 (cat → subs)
+  // Col 5 → Col 6 (cat → subs)
   subInfos.forEach((info, i) => {
     addLink(info.catNodeId, c4Nodes[i].id, info.sub.value, info.catColor);
   });
 
   /* --- Attach breakdown data for tooltips --- */
-  const inflowBreakdownItems: BreakdownItem[] = c0Nodes
-    .filter((n) => n.level === "inflow-cat")
-    .map((n) => ({ name: n.name, value: n.value, color: n.color }))
-    .sort((a, b) => b.value - a.value);
-
   const allocOutBreakdown: BreakdownItem[] = c3Nodes
     .filter((n) => n.flow === "outflow")
     .map((n) => ({ name: n.name, value: n.value, count: n.count, color: n.color }))
@@ -647,29 +764,50 @@ function buildLayout(
     .map((n) => ({ name: n.name, value: n.value, count: n.count, color: n.color }))
     .sort((a, b) => b.value - a.value);
 
-  // Inflow source → its labels (flatten all subs.leaves)
+  const inflowCategoryBreakdownItems: BreakdownItem[] = c2Nodes
+    .filter((n) => n.level === "inflow-cat")
+    .map((n) => ({ name: n.name, value: n.value, color: n.color }))
+    .sort((a, b) => b.value - a.value);
+
+  // Inflow category → subcategories
   inflowCats.forEach((c, i) => {
-    const node = c0Nodes.find((n) => n.id === `inflow-cat:${c.name}`);
+    const node = c2Nodes.find((n) => n.id === `inflow-cat:${c.name}`);
     if (!node) return;
-    const leaves: { name: string; value: number; count: number }[] = [];
-    for (const s of c.subs ?? []) {
-      for (const l of s.leaves ?? []) leaves.push({ name: l.name, value: l.value, count: l.count });
+    const subs = (c.subs ?? [])
+      .filter((s) => s.value > 0)
+      .sort((a, b) => b.value - a.value);
+    if (subs.length > 0) {
+      node.breakdown = subs.map((s) => ({
+        name: s.name,
+        value: s.value,
+        count: s.count,
+        color: INFLOW_GREENS[i % INFLOW_GREENS.length],
+      }));
+      node.breakdownKind = "Subcategories";
     }
-    leaves.sort((a, b) => b.value - a.value);
-    if (leaves.length > 0) {
-      node.breakdown = leaves.map((l) => ({
+  });
+
+  // Inflow subcategory → non-blank labels only
+  inflowSubInfos.forEach((info, i) => {
+    const node = c1Nodes.find((n) => n.id === `inflow-sub:${info.catNodeId}:${info.sub.name}:${i}`);
+    if (!node) return;
+    const labels = (info.sub.leaves ?? [])
+      .filter((l) => l.value > 0 && l.name.trim() && l.name.trim().toLowerCase() !== "unlabeled")
+      .sort((a, b) => b.value - a.value);
+    if (labels.length > 0) {
+      node.breakdown = labels.map((l) => ({
         name: l.name,
         value: l.value,
         count: l.count,
-        color: INFLOW_GREENS[i % INFLOW_GREENS.length],
+        color: info.catColor,
       }));
       node.breakdownKind = "Labels";
     }
   });
 
-  // Total Income → all inflow sources
-  incomeNode.breakdown = inflowBreakdownItems;
-  incomeNode.breakdownKind = "Inflow sources";
+  // Total Income → all inflow categories
+  incomeNode.breakdown = inflowCategoryBreakdownItems;
+  incomeNode.breakdownKind = "Inflow categories";
 
   // Allocation nodes → their categories
   for (const n of allocNodes) {
@@ -754,12 +892,16 @@ interface CashflowSankeyProps {
   height?: number;
   /** When true, renders animated particles flowing along ribbons (heavy). */
   showParticles?: boolean;
+  selectedCategory?: CashflowSankeyCategorySelection | null;
+  onCategorySelect?: (category: CashflowSankeyCategorySelection) => void;
 }
 
 export function CashflowSankey({
   data,
   height = 720,
   showParticles = false,
+  selectedCategory = null,
+  onCategorySelect,
 }: CashflowSankeyProps) {
   /** Measure the rendered container width so the layout (column gaps) can
    *  expand to fill horizontal whitespace without distorting glyph aspect
@@ -791,6 +933,19 @@ export function CashflowSankey({
   /** Live cursor position (viewport coords) used to anchor the tooltip. */
   const [hoverPoint, setHoverPoint] = useState<{ x: number; y: number } | null>(null);
   const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
+  const selectedNodeId = useMemo(() => {
+    if (!selectedCategory) return null;
+    const selected = layout.nodes.find((n) => {
+      const selection = selectionForNode(n);
+      return (
+        selection?.level === selectedCategory.level &&
+        selection.name === selectedCategory.name &&
+        selection.flow === selectedCategory.flow
+      );
+    });
+    return selected?.id ?? null;
+  }, [layout.nodes, selectedCategory]);
+  const activeNodeId = hoverNodeId ?? selectedNodeId;
 
   /* Build ancestor + descendant sets for highlight propagation. */
   const adj = useMemo(() => {
@@ -806,7 +961,7 @@ export function CashflowSankey({
   }, [layout.links]);
 
   const highlightedNodeIds = useMemo(() => {
-    if (!hoverNodeId) return new Set<string>();
+    if (!activeNodeId) return new Set<string>();
     const s = new Set<string>();
     const dfs = (id: string, dir: "fwd" | "back") => {
       if (s.has(id)) return;
@@ -814,14 +969,14 @@ export function CashflowSankey({
       const next = (dir === "fwd" ? adj.fwd : adj.back).get(id);
       if (next) for (const n of next) dfs(n, dir);
     };
-    dfs(hoverNodeId, "fwd");
-    dfs(hoverNodeId, "back");
+    dfs(activeNodeId, "fwd");
+    dfs(activeNodeId, "back");
     return s;
-  }, [hoverNodeId, adj]);
+  }, [activeNodeId, adj]);
 
   const highlightedLinkIds = useMemo(() => {
     if (hoverLinkId) return new Set([hoverLinkId]);
-    if (!hoverNodeId) return new Set<string>();
+    if (!activeNodeId) return new Set<string>();
     const s = new Set<string>();
     for (const l of layout.links) {
       if (highlightedNodeIds.has(l.sourceId) && highlightedNodeIds.has(l.targetId)) {
@@ -829,9 +984,9 @@ export function CashflowSankey({
       }
     }
     return s;
-  }, [hoverLinkId, hoverNodeId, layout.links, highlightedNodeIds]);
+  }, [hoverLinkId, activeNodeId, layout.links, highlightedNodeIds]);
 
-  const isAnyHover = !!hoverNodeId || !!hoverLinkId;
+  const isAnyHover = !!activeNodeId || !!hoverLinkId;
 
   const linkOpacity = useCallback((id: string) => {
     if (!isAnyHover) return 0.42;
@@ -841,10 +996,20 @@ export function CashflowSankey({
 
   const nodeOpacity = useCallback((id: string) => {
     if (!isAnyHover) return 1;
-    if (hoverNodeId === id) return 1;
+    if (activeNodeId === id) return 1;
     if (highlightedNodeIds.has(id)) return 0.95;
     return 0.18;
-  }, [isAnyHover, hoverNodeId, highlightedNodeIds]);
+  }, [isAnyHover, activeNodeId, highlightedNodeIds]);
+
+  const svgXFromEvent = useCallback((event: ReactMouseEvent<SVGElement>) => {
+    const svg = event.currentTarget.ownerSVGElement;
+    const matrix = svg?.getScreenCTM();
+    if (!svg || !matrix) return null;
+    const point = svg.createSVGPoint();
+    point.x = event.clientX;
+    point.y = event.clientY;
+    return point.matrixTransform(matrix.inverse()).x;
+  }, []);
 
   if (layout.nodes.length === 0 || layout.totalIncome === 0) {
     return (
@@ -941,10 +1106,25 @@ export function CashflowSankey({
           {layout.links.map((l) => {
             const src = layout.nodes.find((n) => n.id === l.sourceId)!;
             const tgt = layout.nodes.find((n) => n.id === l.targetId)!;
+            const targetSelection = selectionForNode(tgt);
+            const sourceSelection = selectionForNode(src);
             const sx = layout.colX[src.col] + NODE_W;
             const tx = layout.colX[tgt.col];
             const path = ribbonPath(sx, l.sy0, l.sy1, tx, l.ty0, l.ty1);
             const op = linkOpacity(l.id);
+            const linkIsSelectable = Boolean(targetSelection ?? sourceSelection);
+            const selectLink = (event: ReactMouseEvent<SVGElement>) => {
+              let selection = targetSelection ?? sourceSelection;
+              if (
+                sourceSelection?.level === "category" &&
+                targetSelection?.level === "subcategory"
+              ) {
+                const x = svgXFromEvent(event);
+                const categorySideCutoff = sx + (tx - sx) * 0.62;
+                selection = x != null && x > categorySideCutoff ? targetSelection : sourceSelection;
+              }
+              if (selection) onCategorySelect?.(selection);
+            };
             return (
               <motion.path
                 key={l.id}
@@ -957,6 +1137,8 @@ export function CashflowSankey({
                 transition={{ duration: 0.5, ease: "easeOut" }}
                 onMouseEnter={() => setHoverLinkId(l.id)}
                 onMouseLeave={() => setHoverLinkId(null)}
+                onClick={selectLink}
+                cursor={linkIsSelectable ? "pointer" : "default"}
               />
             );
           })}
@@ -992,15 +1174,51 @@ export function CashflowSankey({
             const x = layout.colX[n.col];
             const op = nodeOpacity(n.id);
             const isHover = hoverNodeId === n.id;
+            const selection = selectionForNode(n);
+            const isSelectableCategory = selection != null;
+            const isSelectedCategory =
+              isSelectableCategory &&
+              selectedCategory?.name === selection.name &&
+              selectedCategory.level === selection.level &&
+              selectedCategory.flow === selection.flow;
+            const selectNode = () => {
+              if (!selection) return;
+              onCategorySelect?.(selection);
+            };
+            const leftLabelHitWidth = Math.max(190, layout.colX[n.col] - 4);
+            const rightLabelHitWidth = Math.max(190, layout.width - (x + NODE_W) - 4);
+            const labelHitWidth = n.col === 3 ? 190 : n.col >= 5 ? rightLabelHitWidth : leftLabelHitWidth;
+            const hitY = Math.max(0, n.y - 12);
+            const hitH = Math.max(n.height, 14) + 24;
+            const hitX = n.col >= 5
+              ? x - 8
+              : n.col === 3
+                ? x - labelHitWidth / 2
+                : x - labelHitWidth;
+            const hitW = n.col === 3
+              ? NODE_W + labelHitWidth
+              : NODE_W + labelHitWidth + 16;
             return (
               <g
                 key={n.id}
                 onMouseEnter={() => setHoverNodeId(n.id)}
                 onMouseLeave={() => setHoverNodeId(null)}
-                style={{ cursor: "pointer", opacity: op, transition: "opacity 200ms" }}
+                onClick={selectNode}
+                style={{ cursor: isSelectableCategory ? "pointer" : "default", opacity: op, transition: "opacity 200ms" }}
               >
+                {isSelectableCategory && (
+                  <rect
+                    x={hitX}
+                    y={hitY}
+                    width={hitW}
+                    height={hitH}
+                    rx={10}
+                    fill="transparent"
+                    pointerEvents="all"
+                  />
+                )}
                 {/* Outer halo on hover */}
-                {isHover && (
+                {(isHover || isSelectedCategory) && (
                   <rect
                     x={x - 4}
                     y={n.y - 4}
@@ -1040,8 +1258,8 @@ export function CashflowSankey({
         <g pointerEvents="none">
           {layout.nodes.map((n) => {
             const op = nodeOpacity(n.id);
-            const right = n.col >= 3;
-            const center = n.col === 1;
+            const right = n.col >= 5;
+            const center = n.col === 3;
             const x = center
               ? layout.colX[n.col] + NODE_W / 2
               : right
@@ -1072,13 +1290,13 @@ export function CashflowSankey({
               const leftRoom = n.col === 0
                 ? layout.padLeft
                 : layout.colX[n.col] - (layout.colX[n.col - 1] + NODE_W);
-              const rightRoom = n.col === 4
+              const rightRoom = n.col === layout.colX.length - 1
                 ? layout.padRight
                 : layout.colX[n.col + 1] - (layout.colX[n.col] + NODE_W);
               gutterPx = 2 * Math.min(leftRoom, rightRoom) - 16;
             } else if (right) {
               // Anchored "start" — label extends to the right.
-              const rightLimit = n.col === 4
+              const rightLimit = n.col === layout.colX.length - 1
                 ? layout.width - 4
                 : layout.colX[n.col + 1];
               gutterPx = rightLimit - (layout.colX[n.col] + NODE_W) - 12;
@@ -1091,7 +1309,7 @@ export function CashflowSankey({
             }
             /** ~0.55em per glyph for a sans-serif label. */
             const charCap = Math.max(10, Math.floor(gutterPx / (fontSize * 0.55)));
-            const truncName = truncate(n.name, Math.min(n.col === 4 ? 26 : 32, charCap));
+            const truncName = truncate(n.name, Math.min(n.col === layout.colX.length - 1 ? 26 : 32, charCap));
 
             return (
               <g key={`lbl-${n.id}`} opacity={op} style={{ transition: "opacity 200ms" }}>
@@ -1165,7 +1383,9 @@ export function CashflowSankey({
 }
 
 const COL_HEADERS = [
-  "INFLOW SOURCES",
+  "LABELS",
+  "SUBCATEGORIES",
+  "INFLOW CATEGORIES",
   "TOTAL INCOME",
   "ALLOCATION",
   "CATEGORIES",

@@ -7,6 +7,7 @@ import {
   userCategories,
   recurringPatterns,
 } from "@/lib/db/schema";
+import { excludeCardPaymentsSql, excludeRecurringCardPaymentsSql } from "@/lib/db/excluded-transactions";
 import { eq, and, sql, desc } from "drizzle-orm";
 import { logServerError } from "@/lib/safe-error";
 
@@ -213,7 +214,7 @@ export async function GET() {
             lastDate: sql<string | null>`MAX(${transactions.postedDate})`,
           })
           .from(transactions)
-          .where(eq(transactions.userId, userId)),
+          .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql())),
       ),
 
       resilientQuery(() =>
@@ -224,7 +225,7 @@ export async function GET() {
             count: sql<number>`COUNT(*)::int`,
           })
           .from(transactions)
-          .where(and(eq(transactions.userId, userId), sql`CAST(${transactions.baseAmount} AS numeric) < 0`))
+          .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql(), sql`CAST(${transactions.baseAmount} AS numeric) < 0`))
           .groupBy(transactions.categoryId),
       ),
 
@@ -235,7 +236,7 @@ export async function GET() {
             total: sql<string>`SUM(ABS(CAST(${transactions.baseAmount} AS numeric)))`,
           })
           .from(transactions)
-          .where(and(eq(transactions.userId, userId), sql`CAST(${transactions.baseAmount} AS numeric) < 0`))
+          .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql(), sql`CAST(${transactions.baseAmount} AS numeric) < 0`))
           .groupBy(sql`TO_CHAR(${transactions.postedDate}, 'YYYY-MM')`)
           .orderBy(sql`TO_CHAR(${transactions.postedDate}, 'YYYY-MM')`),
       ),
@@ -248,7 +249,7 @@ export async function GET() {
             total: sql<string>`SUM(ABS(CAST(${transactions.baseAmount} AS numeric)))`,
           })
           .from(transactions)
-          .where(and(eq(transactions.userId, userId), sql`CAST(${transactions.baseAmount} AS numeric) < 0`))
+          .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql(), sql`CAST(${transactions.baseAmount} AS numeric) < 0`))
           .groupBy(sql`TO_CHAR(${transactions.postedDate}, 'YYYY-MM')`, transactions.categoryId),
       ),
 
@@ -259,7 +260,7 @@ export async function GET() {
             total: sql<string>`SUM(ABS(CAST(${transactions.baseAmount} AS numeric)))`,
           })
           .from(transactions)
-          .where(and(eq(transactions.userId, userId), sql`CAST(${transactions.baseAmount} AS numeric) < 0`))
+          .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql(), sql`CAST(${transactions.baseAmount} AS numeric) < 0`))
           .groupBy(sql`EXTRACT(HOUR FROM ${transactions.createdAt})`),
       ),
 
@@ -272,7 +273,7 @@ export async function GET() {
             prior: sql<string>`SUM(CASE WHEN ${transactions.postedDate} >= (CURRENT_DATE - INTERVAL '90 days') AND ${transactions.postedDate} < (CURRENT_DATE - INTERVAL '60 days') AND CAST(${transactions.baseAmount} AS numeric) < 0 THEN ABS(CAST(${transactions.baseAmount} AS numeric)) ELSE 0 END)`,
           })
           .from(transactions)
-          .where(eq(transactions.userId, userId))
+          .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql()))
           .groupBy(transactions.categoryId),
       ),
 
@@ -288,6 +289,7 @@ export async function GET() {
           .where(
             and(
               eq(transactions.userId, userId),
+              excludeCardPaymentsSql(),
               sql`CAST(${transactions.baseAmount} AS numeric) < 0`,
               sql`${transactions.merchantName} IS NOT NULL`,
             ),
@@ -324,7 +326,13 @@ export async function GET() {
             lastSeenDate: recurringPatterns.lastSeenDate,
           })
           .from(recurringPatterns)
-          .where(and(eq(recurringPatterns.userId, userId), eq(recurringPatterns.isActive, true))),
+          .where(
+            and(
+              eq(recurringPatterns.userId, userId),
+              excludeRecurringCardPaymentsSql(),
+              eq(recurringPatterns.isActive, true),
+            ),
+          ),
       ),
 
       resilientQuery(() =>
@@ -339,7 +347,7 @@ export async function GET() {
             foreignCurrency: transactions.foreignCurrency,
           })
           .from(transactions)
-          .where(and(eq(transactions.userId, userId), sql`${transactions.foreignCurrency} IS NOT NULL`)),
+          .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql(), sql`${transactions.foreignCurrency} IS NOT NULL`)),
       ),
 
       resilientQuery(() =>
@@ -349,7 +357,7 @@ export async function GET() {
             total: sql<string>`SUM(ABS(CAST(${transactions.baseAmount} AS numeric)))`,
           })
           .from(transactions)
-          .where(and(eq(transactions.userId, userId), sql`CAST(${transactions.baseAmount} AS numeric) < 0`))
+          .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql(), sql`CAST(${transactions.baseAmount} AS numeric) < 0`))
           .groupBy(sql`(EXTRACT(DOW FROM ${transactions.postedDate})::int IN (0, 6))`),
       ),
     ]);

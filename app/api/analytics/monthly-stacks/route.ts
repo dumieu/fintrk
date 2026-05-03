@@ -7,6 +7,7 @@ import {
   leafCategory,
   parentCategory,
 } from "@/lib/db/category-rollup";
+import { excludeCardPaymentsSql } from "@/lib/db/excluded-transactions";
 import { eq, and, sql } from "drizzle-orm";
 import { logServerError } from "@/lib/safe-error";
 
@@ -144,6 +145,7 @@ export async function GET(request: NextRequest) {
         .where(
           and(
             eq(transactions.userId, userId),
+            excludeCardPaymentsSql(),
             sql`CAST(${transactions.baseAmount} AS numeric) < 0`,
           ),
         ),
@@ -193,6 +195,7 @@ export async function GET(request: NextRequest) {
           .where(
             and(
               eq(transactions.userId, userId),
+              excludeCardPaymentsSql(),
               sql`CAST(${transactions.baseAmount} AS numeric) < 0`,
               sql`${transactions.postedDate}::date >= ${startDate}::date`,
               sql`${transactions.postedDate}::date < (${endDateExclusive}::date + interval '1 month')`,
@@ -223,6 +226,7 @@ export async function GET(request: NextRequest) {
           .where(
             and(
               eq(transactions.userId, userId),
+              excludeCardPaymentsSql(),
               sql`CAST(${transactions.baseAmount} AS numeric) > 0`,
             ),
           )

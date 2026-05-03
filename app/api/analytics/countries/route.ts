@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
 import { db, resilientQuery, resilientRawSql, rawSql } from "@/lib/db";
 import { transactions, accounts } from "@/lib/db/schema";
+import { excludeCardPaymentsSql } from "@/lib/db/excluded-transactions";
 import { eq, and, sql } from "drizzle-orm";
 import { logServerError } from "@/lib/safe-error";
 
@@ -33,6 +34,7 @@ export async function GET(request: NextRequest) {
 
     const countryWhere = and(
       eq(transactions.userId, userId),
+      excludeCardPaymentsSql(),
       sql`${transactions.countryIso} IS NOT NULL`,
       sql`CAST(${transactions.baseAmount} AS numeric) < 0`,
     );
@@ -78,6 +80,13 @@ export async function GET(request: NextRequest) {
             WHERE user_id = ${userId}
               AND country_iso IS NOT NULL
               AND CAST(base_amount AS numeric) < 0
+              AND NOT EXISTS (
+                SELECT 1
+                FROM user_categories card_payment_category
+                WHERE card_payment_category.id = transactions.category_id
+                  AND card_payment_category.user_id = transactions.user_id
+                  AND card_payment_category.slug = 'card-payments'
+              )
             GROUP BY country_iso
           ) s
         `,

@@ -13,6 +13,7 @@ export const transactionFiltersSchema = z.object({
   amountMax: z.coerce.number().optional(),
   countryIso: z.string().length(2).optional(),
   isRecurring: z.enum(["true", "false"]).optional(),
+  warningOnly: z.enum(["true", "false"]).optional(),
   search: z.string().max(200).optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(25),
@@ -41,7 +42,7 @@ export const deleteTransactionsSchema = z.object({
 
 export type DeleteTransactionsInput = z.infer<typeof deleteTransactionsSchema>;
 
-/** PATCH body: update `note`, `label`, `merchantName`, and/or `categoryId`. */
+/** PATCH body: update note, label, merchant name, category, and/or warning flag. */
 export const patchTransactionSchema = z
   .object({
     transactionId: z.string().uuid(),
@@ -71,14 +72,17 @@ export const patchTransactionSchema = z
     categoryMerchantName: z.string().max(255).optional(),
     /** Label value for bulk category reassignment by label. */
     categoryLabel: z.string().max(20).optional(),
+    /** User-controlled permanent warning marker for this transaction row. */
+    warningFlag: z.boolean().optional(),
   })
   .refine(
     (d) =>
       d.note !== undefined ||
       d.label !== undefined ||
       d.merchantName !== undefined ||
-      d.categoryId !== undefined,
-    { message: "Provide note, label, merchantName, and/or categoryId" },
+      d.categoryId !== undefined ||
+      d.warningFlag !== undefined,
+    { message: "Provide note, label, merchantName, categoryId, and/or warningFlag" },
   );
 
 export type PatchTransactionInput = z.infer<typeof patchTransactionSchema>;

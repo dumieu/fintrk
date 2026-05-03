@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
-import { transactions, accounts, statements, userCategories } from "@/lib/db/schema";
+import { transactions, accounts, statements, userCategories, merchantWarningRules, merchantLabelRules } from "@/lib/db/schema";
 import { eq, and, gte, lte, ilike, or, desc, asc, sql, count, isNull, isNotNull, ne, inArray } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { transactionFiltersSchema, updateCategorySchema, deleteTransactionsSchema, patchTransactionSchema } from "@/lib/validations/transaction";
 import { logServerError } from "@/lib/safe-error";
+import { ensureTransactionWarningFlagColumn } from "@/lib/ensure-transaction-warning-flag";
+import { excludeCardPaymentsSql } from "@/lib/db/excluded-transactions";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +17,7 @@ export async function GET(request: NextRequest) {
   try {
     const { userId } = await resilientAuth();
     if (!userId) return unauthorizedResponse();
+    await ensureTransactionWarningFlagColumn();
 
     const params = Object.fromEntries(request.nextUrl.searchParams);
     const parsed = transactionFiltersSchema.safeParse(params);
@@ -103,6 +106,7 @@ export async function GET(request: NextRequest) {
     if (f.amountMin !== undefined) conditions.push(gte(transactions.baseAmount, f.amountMin.toString()));
     if (f.amountMax !== undefined) conditions.push(lte(transactions.baseAmount, f.amountMax.toString()));
     if (f.isRecurring !== undefined) conditions.push(eq(transactions.isRecurring, f.isRecurring === "true"));
+    if (f.warningOnly === "true") conditions.push(eq(transactions.warningFlag, true));
     if (f.search) {
       conditions.push(
         or(
@@ -116,6 +120,7 @@ export async function GET(request: NextRequest) {
     }
 
     const where = and(...conditions);
+    const totalsWhere = and(...conditions, excludeCardPaymentsSql());
     const needsAccountJoin = Boolean(f.accountKind || acctDigits.length > 0);
 
     const txnCategory = alias(userCategories, "txn_category");
@@ -141,7 +146,7 @@ export async function GET(request: NextRequest) {
           })
           .from(transactions)
           .leftJoin(accounts, eq(transactions.accountId, accounts.id))
-          .where(where)
+          .where(totalsWhere)
           .groupBy(transactions.baseCurrency)
         : db
           .select({
@@ -150,7 +155,7 @@ export async function GET(request: NextRequest) {
             debitSum: sql<string>`coalesce(sum(case when cast(${transactions.baseAmount} as numeric) > 0 then cast(${transactions.baseAmount} as numeric) else 0 end), 0)::text`,
           })
           .from(transactions)
-          .where(where)
+          .where(totalsWhere)
           .groupBy(transactions.baseCurrency));
 
     const statementCountQuery = () =>
@@ -197,6 +202,7 @@ export async function GET(request: NextRequest) {
             `.as("subcategoryName"),
             countryIso: transactions.countryIso,
             isRecurring: transactions.isRecurring,
+            warningFlag: transactions.warningFlag,
             aiConfidence: transactions.aiConfidence,
             balanceAfter: transactions.balanceAfter,
             note: transactions.note,
@@ -263,6 +269,7 @@ export async function PATCH(request: NextRequest) {
   try {
     const { userId } = await resilientAuth();
     if (!userId) return unauthorizedResponse();
+    await ensureTransactionWarningFlagColumn();
 
     const body = await request.json();
     const parsed = patchTransactionSchema.safeParse(body);
@@ -270,9 +277,16 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "Invalid input" }, { status: 400, headers: NO_STORE });
     }
 
-    const setPayload: { updatedAt: Date; note?: string | null; label?: string | null; merchantName?: string | null } = { updatedAt: new Date() };
+    const setPayload: {
+      updatedAt: Date;
+      note?: string | null;
+      label?: string | null;
+      merchantName?: string | null;
+      warningFlag?: boolean;
+    } = { updatedAt: new Date() };
     let bulkNoteCount = 0;
     let bulkLabelCount = 0;
+    let bulkWarningCount = 0;
 
     if (parsed.data.note !== undefined) {
       const t = parsed.data.note.trim();
@@ -301,6 +315,27 @@ export async function PATCH(request: NextRequest) {
       if (parsed.data.labelApplyScope === "merchant" && parsed.data.labelMerchantName) {
         const mName = parsed.data.labelMerchantName.trim().toLowerCase();
         if (mName) {
+          if (setPayload.label) {
+            await resilientQuery(() =>
+              db
+                .insert(merchantLabelRules)
+                .values({ userId, merchantName: mName, label: setPayload.label! })
+                .onConflictDoUpdate({
+                  target: [merchantLabelRules.userId, merchantLabelRules.merchantName],
+                  set: { label: setPayload.label!, updatedAt: new Date() },
+                }),
+            );
+          } else {
+            await resilientQuery(() =>
+              db
+                .delete(merchantLabelRules)
+                .where(and(
+                  eq(merchantLabelRules.userId, userId),
+                  eq(merchantLabelRules.merchantName, mName),
+                )),
+            );
+          }
+
           const bulkResult = await resilientQuery(() =>
             db.update(transactions)
               .set({ label: setPayload.label, updatedAt: new Date() })
@@ -375,12 +410,75 @@ export async function PATCH(request: NextRequest) {
       }
     }
 
-    const updated = await resilientQuery(() =>
-      db.update(transactions)
-        .set(setPayload)
-        .where(and(eq(transactions.id, parsed.data.transactionId), eq(transactions.userId, userId)))
-        .returning({ id: transactions.id }),
-    );
+    if (parsed.data.warningFlag !== undefined) {
+      const [targetTxn] = await resilientQuery(() =>
+        db
+          .select({
+            id: transactions.id,
+            merchantName: transactions.merchantName,
+          })
+          .from(transactions)
+          .where(and(eq(transactions.id, parsed.data.transactionId), eq(transactions.userId, userId)))
+          .limit(1),
+      );
+      if (!targetTxn) {
+        return NextResponse.json({ error: "Transaction not found" }, { status: 404, headers: NO_STORE });
+      }
+
+      const merchantName = targetTxn.merchantName?.trim().toLowerCase() ?? "";
+      setPayload.warningFlag = parsed.data.warningFlag;
+
+      if (merchantName) {
+        if (parsed.data.warningFlag) {
+          await resilientQuery(() =>
+            db
+              .insert(merchantWarningRules)
+              .values({ userId, merchantName })
+              .onConflictDoNothing({
+                target: [merchantWarningRules.userId, merchantWarningRules.merchantName],
+              }),
+          );
+        } else {
+          await resilientQuery(() =>
+            db
+              .delete(merchantWarningRules)
+              .where(and(
+                eq(merchantWarningRules.userId, userId),
+                eq(merchantWarningRules.merchantName, merchantName),
+              )),
+          );
+        }
+
+        const bulkResult = await resilientQuery(() =>
+          db
+            .update(transactions)
+            .set({ warningFlag: parsed.data.warningFlag, updatedAt: new Date() })
+            .where(and(
+              eq(transactions.userId, userId),
+              sql`LOWER(TRIM(${transactions.merchantName})) = ${merchantName}`,
+            ))
+            .returning({ id: transactions.id }),
+        );
+        bulkWarningCount = bulkResult.length;
+      }
+    }
+
+    const onlyWarningUpdate =
+      parsed.data.warningFlag !== undefined &&
+      parsed.data.note === undefined &&
+      parsed.data.label === undefined &&
+      parsed.data.merchantName === undefined &&
+      parsed.data.categoryId === undefined;
+
+    const updated =
+      onlyWarningUpdate && bulkWarningCount > 0
+        ? [{ id: parsed.data.transactionId }]
+        : await resilientQuery(() =>
+          db.update(transactions)
+            .set(setPayload)
+            .where(and(eq(transactions.id, parsed.data.transactionId), eq(transactions.userId, userId)))
+            .returning({ id: transactions.id }),
+        );
 
     if (updated.length === 0) {
       return NextResponse.json({ error: "Transaction not found" }, { status: 404, headers: NO_STORE });
@@ -393,6 +491,7 @@ export async function PATCH(request: NextRequest) {
         ...(parsed.data.label !== undefined ? { label: setPayload.label ?? null, bulkLabelCount } : {}),
         ...(parsed.data.merchantName !== undefined ? { merchantName: setPayload.merchantName ?? null, bulkMerchantCount } : {}),
         ...(parsed.data.categoryId !== undefined ? { categoryId: parsed.data.categoryId, bulkCategoryCount } : {}),
+        ...(parsed.data.warningFlag !== undefined ? { warningFlag: setPayload.warningFlag ?? false, bulkWarningCount } : {}),
       },
       { headers: NO_STORE },
     );

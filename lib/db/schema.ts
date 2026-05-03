@@ -213,6 +213,7 @@ export const transactions = pgTable(
     implicitFxSpreadBps: numeric("implicit_fx_spread_bps", { precision: 8, scale: 2 }),
     countryIso: varchar("country_iso", { length: 2 }),
     isRecurring: boolean("is_recurring").default(false).notNull(),
+    warningFlag: boolean("warning_flag").default(false).notNull(),
     aiConfidence: numeric("ai_confidence", { precision: 3, scale: 2 }),
     balanceAfter: numeric("balance_after", { precision: 15, scale: 4 }),
     note: text("note"),
@@ -231,6 +232,40 @@ export const transactions = pgTable(
       t.baseAmount,
       t.rawDescription,
     ),
+  ],
+);
+
+// ─── Merchant Warning Rules (per-user persistent warning highlights) ─────────
+
+export const merchantWarningRules = pgTable(
+  "merchant_warning_rules",
+  {
+    id: serial("id").primaryKey(),
+    userId: varchar("user_id", { length: 255 }).notNull(),
+    merchantName: varchar("merchant_name", { length: 255 }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("merchant_warning_rules_user_merchant_idx").on(t.userId, t.merchantName),
+    index("merchant_warning_rules_user_idx").on(t.userId),
+  ],
+);
+
+// ─── Merchant Label Rules (per-user persistent labels for matching merchants)
+
+export const merchantLabelRules = pgTable(
+  "merchant_label_rules",
+  {
+    id: serial("id").primaryKey(),
+    userId: varchar("user_id", { length: 255 }).notNull(),
+    merchantName: varchar("merchant_name", { length: 255 }).notNull(),
+    label: varchar("label", { length: 20 }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("merchant_label_rules_user_merchant_idx").on(t.userId, t.merchantName),
+    index("merchant_label_rules_user_idx").on(t.userId),
   ],
 );
 

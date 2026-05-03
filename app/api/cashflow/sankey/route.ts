@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
 import { transactions, userCategories, users } from "@/lib/db/schema";
+import { excludeCardPaymentsSql } from "@/lib/db/excluded-transactions";
 import { alias } from "drizzle-orm/pg-core";
 import { eq, and, gte, lte, sql } from "drizzle-orm";
 import { logServerError } from "@/lib/safe-error";
@@ -89,6 +90,10 @@ export async function GET(request: NextRequest) {
     const dateFrom = request.nextUrl.searchParams.get("dateFrom") || undefined;
     const dateTo = request.nextUrl.searchParams.get("dateTo") || undefined;
     const currencyOverride = request.nextUrl.searchParams.get("currency")?.toUpperCase() || undefined;
+    const includeInvestmentInflows =
+      request.nextUrl.searchParams.get("includeInvestmentInflows") === "true";
+    const includeInvestmentOutflows =
+      request.nextUrl.searchParams.get("includeInvestmentOutflows") === "true";
 
     const [userRow] = await resilientQuery(() =>
       db.select({ mainCurrency: users.mainCurrency })
@@ -97,6 +102,46 @@ export async function GET(request: NextRequest) {
         .limit(1),
     );
 
+    const parent = alias(userCategories, "uc_parent");
+    const leaf = alias(userCategories, "uc_leaf");
+    const investmentCategoryFilter = sql`
+      (
+        lower(coalesce(${leaf.name}, '')) = 'investment'
+        OR lower(coalesce(${leaf.name}, '')) = 'investments'
+        OR lower(coalesce(${leaf.slug}, '')) = 'investment'
+        OR lower(coalesce(${leaf.slug}, '')) = 'investments'
+        OR lower(coalesce(${leaf.slug}, '')) LIKE 'investment-%'
+        OR lower(coalesce(${leaf.slug}, '')) LIKE '%-investment'
+        OR lower(coalesce(${parent.name}, '')) = 'investment'
+        OR lower(coalesce(${parent.name}, '')) = 'investments'
+        OR lower(coalesce(${parent.slug}, '')) = 'investment'
+        OR lower(coalesce(${parent.slug}, '')) = 'investments'
+        OR lower(coalesce(${parent.slug}, '')) LIKE 'investment-%'
+        OR lower(coalesce(${parent.slug}, '')) LIKE '%-investment'
+      )
+    `;
+    const shouldExcludeInvestmentInflows = !includeInvestmentInflows;
+    const shouldExcludeInvestmentOutflows = !includeInvestmentOutflows;
+    const investmentExclusionFilter = shouldExcludeInvestmentInflows || shouldExcludeInvestmentOutflows
+      ? sql`
+          NOT (
+            ${investmentCategoryFilter}
+            AND (
+              ${
+                shouldExcludeInvestmentInflows
+                  ? sql`(${transactions.baseAmount}::numeric > 0 OR coalesce(${leaf.flowType}, ${parent.flowType}) = 'inflow')`
+                  : sql`false`
+              }
+              OR ${
+                shouldExcludeInvestmentOutflows
+                  ? sql`(${transactions.baseAmount}::numeric < 0 OR coalesce(${leaf.flowType}, ${parent.flowType}) IN ('outflow', 'savings'))`
+                  : sql`false`
+              }
+            )
+          )
+        `
+      : undefined;
+
     const currencyTotals = await resilientQuery(() =>
       db
         .select({
@@ -104,11 +149,15 @@ export async function GET(request: NextRequest) {
           n: sql<number>`COUNT(*)::int`,
         })
         .from(transactions)
+        .leftJoin(leaf, eq(transactions.categoryId, leaf.id))
+        .leftJoin(parent, eq(leaf.parentId, parent.id))
         .where(
           and(
             eq(transactions.userId, userId),
+            excludeCardPaymentsSql(),
             ...(dateFrom ? [gte(transactions.postedDate, dateFrom)] : []),
             ...(dateTo ? [lte(transactions.postedDate, dateTo)] : []),
+            ...(investmentExclusionFilter ? [investmentExclusionFilter] : []),
           ),
         )
         .groupBy(transactions.baseCurrency)
@@ -122,9 +171,6 @@ export async function GET(request: NextRequest) {
         : userRow?.mainCurrency && availableCurrencies.includes(userRow.mainCurrency)
           ? userRow.mainCurrency
           : availableCurrencies[0] ?? "USD";
-
-    const parent = alias(userCategories, "uc_parent");
-    const leaf = alias(userCategories, "uc_leaf");
 
     const rows = await resilientQuery(() =>
       db
@@ -145,9 +191,11 @@ export async function GET(request: NextRequest) {
         .where(
           and(
             eq(transactions.userId, userId),
+            excludeCardPaymentsSql(),
             eq(transactions.baseCurrency, primaryCurrency),
             ...(dateFrom ? [gte(transactions.postedDate, dateFrom)] : []),
             ...(dateTo ? [lte(transactions.postedDate, dateTo)] : []),
+            ...(investmentExclusionFilter ? [investmentExclusionFilter] : []),
           ),
         ),
     );
@@ -184,10 +232,10 @@ export async function GET(request: NextRequest) {
         subName = NO_SUB;
       }
 
+      if (flow === "inflow" && amt <= 0) continue;
+
       const value = Math.abs(amt);
-      const labelRaw = (r.label?.trim() || "").length > 0
-        ? r.label!.trim()
-        : UNLABELED;
+      const labelRaw = r.label?.trim() || "";
 
       const fb = buckets[flow];
       fb.value += value;
@@ -209,13 +257,16 @@ export async function GET(request: NextRequest) {
       sb.value += value;
       sb.count += 1;
 
-      let lb = sb.leaves.get(labelRaw);
-      if (!lb) {
-        lb = { name: labelRaw, value: 0, count: 0 };
-        sb.leaves.set(labelRaw, lb);
+      const leafName = labelRaw || (flow === "inflow" ? "" : UNLABELED);
+      if (leafName) {
+        let lb = sb.leaves.get(leafName);
+        if (!lb) {
+          lb = { name: leafName, value: 0, count: 0 };
+          sb.leaves.set(leafName, lb);
+        }
+        lb.value += value;
+        lb.count += 1;
       }
-      lb.value += value;
-      lb.count += 1;
     }
 
     /* ───────── ALL-TIME MONTHLY STATS (ignore date filter) ─────────
@@ -232,6 +283,7 @@ export async function GET(request: NextRequest) {
           parentName: parent.name,
           parentFlow: parent.flowType,
           total: sql<string>`SUM(ABS(${transactions.baseAmount}::numeric))`,
+          positiveTotal: sql<string>`SUM(CASE WHEN ${transactions.baseAmount}::numeric > 0 THEN ${transactions.baseAmount}::numeric ELSE 0 END)`,
           cnt: sql<number>`COUNT(*)::int`,
         })
         .from(transactions)
@@ -240,7 +292,9 @@ export async function GET(request: NextRequest) {
         .where(
           and(
             eq(transactions.userId, userId),
+            excludeCardPaymentsSql(),
             eq(transactions.baseCurrency, primaryCurrency),
+            ...(investmentExclusionFilter ? [investmentExclusionFilter] : []),
           ),
         )
         .groupBy(
@@ -275,9 +329,11 @@ export async function GET(request: NextRequest) {
 
     for (const r of allTimeRows) {
       if (!r.leafFlow || r.leafFlow === "misc") continue; // skip uncategorized
-      const value = parseFloat(r.total ?? "0");
-      if (!isFinite(value) || value === 0) continue;
       const flow = r.leafFlow as Flow;
+      const value = flow === "inflow"
+        ? parseFloat(r.positiveTotal ?? "0")
+        : parseFloat(r.total ?? "0");
+      if (!isFinite(value) || value === 0) continue;
       const topName = r.parentName ?? r.leafName ?? UNCATEGORIZED;
       const subName = r.parentName ? (r.leafName ?? NO_SUB) : NO_SUB;
       const cnt = r.cnt ?? 0;

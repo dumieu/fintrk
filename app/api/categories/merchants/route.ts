@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import { sql, eq } from "drizzle-orm";
+import { and, sql, eq } from "drizzle-orm";
 import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
 import { transactions, userCategories } from "@/lib/db/schema";
+import { excludeCardPaymentsSql } from "@/lib/db/excluded-transactions";
 import { logServerError } from "@/lib/safe-error";
 
 export const dynamic = "force-dynamic";
@@ -28,9 +29,12 @@ export async function GET() {
         .from(transactions)
         .innerJoin(userCategories, eq(transactions.categoryId, userCategories.id))
         .where(
-          sql`${transactions.userId} = ${userId}
-            AND ${transactions.merchantName} IS NOT NULL
-            AND TRIM(${transactions.merchantName}) != ''`,
+          and(
+            eq(transactions.userId, userId),
+            excludeCardPaymentsSql(),
+            sql`${transactions.merchantName} IS NOT NULL`,
+            sql`TRIM(${transactions.merchantName}) != ''`,
+          ),
         )
         .groupBy(userCategories.name, transactions.merchantName),
     );

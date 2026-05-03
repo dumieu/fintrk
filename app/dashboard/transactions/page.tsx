@@ -16,6 +16,7 @@ import {
   Loader2,
   ChevronDown,
   SlidersHorizontal,
+  AlertTriangle,
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -64,6 +65,7 @@ interface Transaction {
   subcategoryName: string | null;
   countryIso: string | null;
   isRecurring: boolean;
+  warningFlag: boolean;
   aiConfidence: string | null;
   balanceAfter: string | null;
   accountId: string;
@@ -85,6 +87,7 @@ interface Filters {
   dateFrom: string;
   dateTo: string;
   isRecurring: string;
+  warningOnly: boolean;
   accountId: string;
   categoryId: string;
   /** Mind-map parent flow filter; empty = all. */
@@ -124,12 +127,17 @@ function dedupeTransactionsById(rows: Transaction[]): Transaction[] {
   return out;
 }
 
+function warningMerchantKey(value: string | null): string {
+  return value?.trim().toLowerCase() ?? "";
+}
+
 function buildTransactionQueryParams(f: Filters, page: number): URLSearchParams {
   const params = new URLSearchParams();
   if (f.search) params.set("search", f.search);
   if (f.dateFrom) params.set("dateFrom", f.dateFrom);
   if (f.dateTo) params.set("dateTo", f.dateTo);
   if (f.isRecurring) params.set("isRecurring", f.isRecurring);
+  if (f.warningOnly) params.set("warningOnly", "true");
   if (f.accountId) params.set("accountId", f.accountId);
   if (f.categoryId) params.set("categoryId", f.categoryId);
   if (f.flowTheme) params.set("flowTheme", f.flowTheme);
@@ -285,7 +293,10 @@ function TransactionLabelCell({
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value ?? "");
-  const [scope, setScope] = useState<"this" | "merchant">("this");
+  const hasMerchantName = Boolean(merchantName?.trim());
+  const defaultScope = hasMerchantName ? "merchant" : "this";
+  const [scope, setScope] = useState<"this" | "merchant">(defaultScope);
+  const effectiveScope = scope === "merchant" && !hasMerchantName ? "this" : scope;
   const inputRef = useRef<HTMLInputElement>(null);
   /** Stays in the table cell; used to position the portaled editor above all columns. */
   const anchorRef = useRef<HTMLDivElement>(null);
@@ -302,10 +313,10 @@ function TransactionLabelCell({
   useEffect(() => {
     if (!editing) {
       setDraft(value ?? "");
-      setScope("this");
+      setScope(defaultScope);
       setPanelRect(null);
     }
-  }, [value, editing]);
+  }, [value, editing, defaultScope]);
 
   const filteredSuggestions = useMemo(() => {
     const selfNorm = (value ?? "").trim().toLowerCase();
@@ -383,13 +394,13 @@ function TransactionLabelCell({
         body: JSON.stringify({
           transactionId,
           label: trimmed,
-          labelApplyScope: scope,
-          labelMerchantName: scope === "merchant" ? merchantName : undefined,
+          labelApplyScope: effectiveScope,
+          labelMerchantName: effectiveScope === "merchant" ? merchantName : undefined,
         }),
       });
       if (res.ok) {
         const json = (await res.json()) as { label?: string | null };
-        onSaved(transactionId, json.label ?? next, scope, merchantName);
+        onSaved(transactionId, json.label ?? next, effectiveScope, merchantName);
         dispatchTransactionsChanged();
       }
     } finally {
@@ -451,7 +462,7 @@ function TransactionLabelCell({
                   onClick={() => setScope("this")}
                   className={cn(
                     "rounded-full px-2 transition-colors whitespace-nowrap cursor-pointer",
-                    scope === "this"
+                    effectiveScope === "this"
                       ? "bg-[#0BC18D]/20 text-[#0BC18D]"
                       : "text-white/40 hover:text-white/60",
                   )}
@@ -461,13 +472,16 @@ function TransactionLabelCell({
                 <button
                   type="button"
                   onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => setScope("merchant")}
+              onClick={() => { if (hasMerchantName) setScope("merchant"); }}
                   className={cn(
-                    "rounded-full px-2 transition-colors whitespace-nowrap cursor-pointer",
-                    scope === "merchant"
-                      ? "bg-[#0BC18D]/20 text-[#0BC18D]"
-                      : "text-white/40 hover:text-white/60",
+                    "rounded-full px-2 transition-colors whitespace-nowrap",
+                    !hasMerchantName
+                      ? "text-white/15 cursor-not-allowed"
+                      : effectiveScope === "merchant"
+                        ? "bg-[#0BC18D]/20 text-[#0BC18D] cursor-pointer"
+                        : "text-white/40 hover:text-white/60 cursor-pointer",
                   )}
+                  title={hasMerchantName ? "Apply to matching merchant names" : "This transaction has no saved merchant name"}
                 >
                   All with this name
                 </button>
@@ -553,6 +567,8 @@ function TransactionNoteCell({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value ?? "");
   const [scope, setScope] = useState<"this" | "merchant">("this");
+  const hasMerchantName = Boolean(merchantName?.trim());
+  const effectiveScope = scope === "merchant" && !hasMerchantName ? "this" : scope;
 
   useEffect(() => {
     if (!editing) { setDraft(value ?? ""); setScope("this"); }
@@ -573,13 +589,13 @@ function TransactionNoteCell({
         body: JSON.stringify({
           transactionId,
           note: trimmed,
-          noteApplyScope: scope,
-          noteMerchantName: scope === "merchant" ? merchantName : undefined,
+          noteApplyScope: effectiveScope,
+          noteMerchantName: effectiveScope === "merchant" && merchantName ? merchantName : undefined,
         }),
       });
       if (res.ok) {
         const json = (await res.json()) as { note?: string | null };
-        onSaved(transactionId, json.note ?? next, scope, merchantName);
+        onSaved(transactionId, json.note ?? next, effectiveScope, merchantName);
         dispatchTransactionsChanged();
       }
     } finally {
@@ -632,13 +648,16 @@ function TransactionNoteCell({
               <button
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => setScope("merchant")}
+                onClick={() => { if (hasMerchantName) setScope("merchant"); }}
                 className={cn(
-                  "rounded-full px-2 transition-colors whitespace-nowrap cursor-pointer",
-                  scope === "merchant"
-                    ? "bg-[#0BC18D]/20 text-[#0BC18D]"
-                    : "text-white/40 hover:text-white/60",
+                  "rounded-full px-2 transition-colors whitespace-nowrap",
+                  !hasMerchantName
+                    ? "text-white/15 cursor-not-allowed"
+                    : effectiveScope === "merchant"
+                      ? "bg-[#0BC18D]/20 text-[#0BC18D] cursor-pointer"
+                      : "text-white/40 hover:text-white/60 cursor-pointer",
                 )}
+                title={hasMerchantName ? "Apply to matching merchant names" : "This transaction has no saved merchant name"}
               >
                 All with this name
               </button>
@@ -857,6 +876,12 @@ function CategoryCellEditor({
   }, [userCategories, q]);
 
   const hasLabel = Boolean(txn.label?.trim());
+  const hasMerchantName = Boolean(txn.merchantName?.trim());
+  const effectiveScope = scope === "merchant" && !hasMerchantName ? "this" : scope;
+
+  useEffect(() => {
+    if (open && scope === "merchant" && !hasMerchantName) setScope("this");
+  }, [hasMerchantName, open, scope]);
 
   const selectCategory = (subcatId: number) => {
     let resolvedCat: string | null = null;
@@ -866,7 +891,7 @@ function CategoryCellEditor({
       const sub = cat.subcategories.find((s) => s.id === subcatId);
       if (sub) { resolvedCat = cat.name; resolvedSub = sub.name; break; }
     }
-    onSaved(txn.id, subcatId, scope, txn.merchantName, txn.label, resolvedCat, resolvedSub);
+    onSaved(txn.id, subcatId, effectiveScope, txn.merchantName, txn.label, resolvedCat, resolvedSub);
     setOpen(false);
   };
 
@@ -972,7 +997,7 @@ function CategoryCellEditor({
                   "rounded-full px-2 transition-colors whitespace-nowrap",
                   !hasLabel
                     ? "text-white/15 cursor-not-allowed"
-                    : scope === "label"
+                    : effectiveScope === "label"
                       ? "bg-[#0BC18D]/20 text-[#0BC18D] cursor-pointer"
                       : "text-white/40 hover:text-white/60 cursor-pointer",
                 )}
@@ -986,7 +1011,7 @@ function CategoryCellEditor({
                 onClick={() => setScope("this")}
                 className={cn(
                   "rounded-full px-2 transition-colors whitespace-nowrap cursor-pointer",
-                  scope === "this"
+                  effectiveScope === "this"
                     ? "bg-[#0BC18D]/20 text-[#0BC18D]"
                     : "text-white/40 hover:text-white/60",
                 )}
@@ -1201,6 +1226,7 @@ export default function TransactionsPage() {
     dateFrom: "",
     dateTo: "",
     isRecurring: "",
+    warningOnly: false,
     accountId: "",
     categoryId: "",
     flowTheme: "",
@@ -1318,6 +1344,7 @@ export default function TransactionsPage() {
     filters.dateFrom,
     filters.dateTo,
     filters.isRecurring,
+    filters.warningOnly,
     filters.accountKind,
     filters.accountNumber,
     filters.amountMin,
@@ -1409,7 +1436,7 @@ export default function TransactionsPage() {
           transactionId: txnId,
           categoryId,
           categoryApplyScope: scope,
-          categoryMerchantName: scope === "merchant" ? merchantName : undefined,
+          categoryMerchantName: scope === "merchant" && merchantName ? merchantName : undefined,
           categoryLabel: scope === "label" ? label : undefined,
         }),
       });
@@ -1435,6 +1462,37 @@ export default function TransactionsPage() {
       }
     } catch { /* keep existing */ }
   }, []);
+
+  const toggleWarningFlag = useCallback(async (id: string, nextWarningFlag: boolean) => {
+    const target = txns.find((t) => t.id === id);
+    const targetMerchantKey = warningMerchantKey(target?.merchantName ?? null);
+    const matchesTarget = (txn: Transaction) =>
+      targetMerchantKey ? warningMerchantKey(txn.merchantName) === targetMerchantKey : txn.id === id;
+
+    setTxns((prev) => prev.map((t) => (matchesTarget(t) ? { ...t, warningFlag: nextWarningFlag } : t)));
+    try {
+      const res = await fetch("/api/transactions", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          transactionId: id,
+          warningFlag: nextWarningFlag,
+        }),
+      });
+      if (!res.ok) {
+        setTxns((prev) => prev.map((t) => (matchesTarget(t) ? { ...t, warningFlag: !nextWarningFlag } : t)));
+        return;
+      }
+      if (filters.warningOnly && !nextWarningFlag) {
+        const visibleRemovedCount = txns.filter(matchesTarget).length;
+        setTxns((prev) => prev.filter((t) => !matchesTarget(t)));
+        setTotal((prev) => Math.max(0, prev - visibleRemovedCount));
+      }
+      dispatchTransactionsChanged();
+    } catch {
+      setTxns((prev) => prev.map((t) => (matchesTarget(t) ? { ...t, warningFlag: !nextWarningFlag } : t)));
+    }
+  }, [filters.warningOnly, txns]);
 
   const handleTimePreset = useCallback((preset: TimePresetId) => {
     setFilters((f) => {
@@ -1774,7 +1832,33 @@ export default function TransactionsPage() {
                 onChange={(lo, hi) => setFilters((f) => ({ ...f, amountMin: lo, amountMax: hi }))}
               />
             </div>
-            <div className="flex w-full shrink-0 justify-stretch sm:w-auto sm:justify-start">
+            <div className="flex w-full shrink-0 justify-stretch gap-2 sm:w-auto sm:justify-start">
+              <button
+                type="button"
+                onClick={() => setFilters((f) => ({ ...f, warningOnly: !f.warningOnly }))}
+                aria-pressed={filters.warningOnly}
+                aria-label={filters.warningOnly ? "Showing highlighted transactions only" : "Show highlighted transactions only"}
+                title={filters.warningOnly ? "Showing highlighted transactions only" : "Show highlighted transactions only"}
+                className={cn(
+                  "inline-flex min-h-[2.5rem] w-12 shrink-0 items-center justify-center rounded-xl border px-3 py-2.5 transition-all sm:w-auto",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ECAA0B]/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#08051a]",
+                  filters.warningOnly
+                    ? "border-[#ECAA0B]/80 bg-[#ECAA0B]/15 text-[#ECAA0B] shadow-[0_0_24px_-8px_rgba(236,170,11,0.75)]"
+                    : "border-white/15 bg-white/[0.045] text-white/25 hover:border-[#ECAA0B]/45 hover:bg-[#ECAA0B]/10 hover:text-[#ECAA0B]/75",
+                )}
+              >
+                <AlertTriangle
+                  className={cn(
+                    "h-4 w-4",
+                    filters.warningOnly && "drop-shadow-[0_0_7px_rgba(236,170,11,0.95)]",
+                  )}
+                  fill={filters.warningOnly ? "currentColor" : "none"}
+                  fillOpacity={filters.warningOnly ? 0.22 : undefined}
+                  strokeWidth={2.4}
+                  aria-hidden
+                />
+                <span className="sr-only">Highlighted only</span>
+              </button>
               <button
                 type="button"
                 onClick={() => setFiltersSheetOpen((o) => !o)}
@@ -1876,7 +1960,7 @@ export default function TransactionsPage() {
                 className="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-auto overscroll-y-contain [scrollbar-gutter:stable]"
               >
                 {/* Desktop header — sticky within scroll area */}
-                <div className="sticky top-0 z-10 hidden sm:grid sm:grid-cols-[auto_minmax(0,1.65fr)_minmax(4.5rem,6.5rem)_minmax(0,12rem)_minmax(7.5rem,10rem)_80px_minmax(7rem,1.25fr)_36px] sm:items-center sm:justify-items-stretch gap-2 border-b border-white/10 bg-[#10082a]/95 px-3 py-2.5 backdrop-blur-md sm:px-4 sm:py-3">
+                <div className="sticky top-0 z-10 hidden sm:grid sm:grid-cols-[auto_minmax(0,1.65fr)_minmax(4.5rem,6.5rem)_minmax(0,12rem)_minmax(7.5rem,10rem)_80px_minmax(7rem,1.25fr)_64px] sm:items-center sm:justify-items-stretch gap-2 border-b border-white/10 bg-[#10082a]/95 px-3 py-2.5 backdrop-blur-md sm:px-4 sm:py-3">
                   <div className="flex min-w-0 items-center justify-center gap-1">
                     <span className="inline-flex h-7 w-7 shrink-0" aria-hidden />
                     <button
@@ -1901,7 +1985,7 @@ export default function TransactionsPage() {
                   </button>
                   <span className="block w-full text-center text-[10px] font-medium tracking-wide text-white/50">Flags</span>
                   <span className="block w-full min-w-0 text-center text-[10px] font-medium tracking-wide text-white/50">Note</span>
-                  <span className="sr-only">Select</span>
+                  <span className="sr-only">Select and warning</span>
                 </div>
 
                 <div className="min-w-0 divide-y divide-white/10">
@@ -1917,7 +2001,10 @@ export default function TransactionsPage() {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         transition={{ delay: Math.min(i, 24) * 0.015 }}
-                        className="relative grid grid-cols-[auto_1fr] gap-1.5 px-2.5 py-2.5 pr-10 transition-colors hover:bg-white/[0.06] sm:grid-cols-[auto_minmax(0,1.65fr)_minmax(4.5rem,6.5rem)_minmax(0,12rem)_minmax(7.5rem,10rem)_80px_minmax(7rem,1.25fr)_36px] sm:justify-items-stretch sm:gap-2 sm:px-4 sm:py-3 sm:pr-4"
+                        className={cn(
+                          "relative grid grid-cols-[auto_1fr] gap-1.5 border border-transparent px-2.5 py-2.5 pr-16 transition-colors hover:bg-white/[0.06] sm:grid-cols-[auto_minmax(0,1.65fr)_minmax(4.5rem,6.5rem)_minmax(0,12rem)_minmax(7.5rem,10rem)_80px_minmax(7rem,1.25fr)_64px] sm:justify-items-stretch sm:gap-2 sm:px-4 sm:py-3 sm:pr-4",
+                          txn.warningFlag && "border-dotted border-[#ECAA0B]/80 bg-[#ECAA0B]/[0.035] shadow-[inset_0_0_0_1px_rgba(236,170,11,0.12)]",
+                        )}
                       >
                         <TransactionInsightHover txn={txn}>
                           <div className="flex min-w-0 items-center gap-0.5 sm:gap-1">
@@ -1995,7 +2082,7 @@ export default function TransactionsPage() {
                             onSaved={saveTransactionNote}
                           />
                         </div>
-                        <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center justify-center sm:static sm:right-auto sm:top-auto sm:flex sm:h-full sm:translate-y-0 sm:items-center sm:justify-center sm:pr-0">
+                        <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center justify-center gap-1.5 sm:static sm:right-auto sm:top-auto sm:flex sm:h-full sm:translate-y-0 sm:items-center sm:justify-center sm:pr-0">
                           <input
                             type="checkbox"
                             checked={selectedIds.has(txn.id)}
@@ -2003,6 +2090,29 @@ export default function TransactionsPage() {
                             aria-label={`Select transaction ${txn.merchantName ?? txn.rawDescription}`}
                             className="h-3.5 w-3.5 cursor-pointer rounded border-white/35 bg-white/[0.06] text-[#0BC18D] focus:ring-1 focus:ring-[#0BC18D]/50"
                           />
+                          <button
+                            type="button"
+                            onClick={() => void toggleWarningFlag(txn.id, !txn.warningFlag)}
+                            aria-pressed={txn.warningFlag}
+                            aria-label={`${txn.warningFlag ? "Remove warning from" : "Mark warning on"} transaction ${txn.merchantName ?? txn.rawDescription}`}
+                            className={cn(
+                              "inline-flex h-6 w-6 items-center justify-center rounded-md transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#ECAA0B]/70",
+                              txn.warningFlag
+                                ? "bg-[#ECAA0B]/15 text-[#ECAA0B] shadow-[0_0_14px_rgba(236,170,11,0.45)]"
+                                : "text-white/20 hover:bg-[#ECAA0B]/10 hover:text-[#ECAA0B]/75",
+                            )}
+                            title={txn.warningFlag ? "Warning on — click to turn off" : "Warning off — click to turn on"}
+                          >
+                            <AlertTriangle
+                              className={cn(
+                                "h-3.5 w-3.5",
+                                txn.warningFlag && "drop-shadow-[0_0_6px_rgba(236,170,11,0.95)]",
+                              )}
+                              fill={txn.warningFlag ? "currentColor" : "none"}
+                              fillOpacity={txn.warningFlag ? 0.22 : undefined}
+                              strokeWidth={2.4}
+                            />
+                          </button>
                         </div>
                       </motion.div>
                     );

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
 import { budgets, transactions } from "@/lib/db/schema";
+import { excludeCardPaymentsSql } from "@/lib/db/excluded-transactions";
 import { eq, and, gte, lte, sql } from "drizzle-orm";
 import { createBudgetSchema } from "@/lib/validations/budget";
 import { logServerError } from "@/lib/safe-error";
@@ -57,6 +58,7 @@ export async function GET() {
         const range = currentPeriodRange(budget.period);
         const conditions = [
           eq(transactions.userId, userId),
+          excludeCardPaymentsSql(),
           gte(transactions.postedDate, range.start),
           lte(transactions.postedDate, range.end),
           sql`CAST(${transactions.baseAmount} AS numeric) < 0`,

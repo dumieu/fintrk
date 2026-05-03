@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
 import { transactions } from "@/lib/db/schema";
+import { excludeCardPaymentsSql } from "@/lib/db/excluded-transactions";
 import { eq, and, sql } from "drizzle-orm";
 import { logServerError } from "@/lib/safe-error";
 
@@ -40,7 +41,7 @@ export async function GET(request: NextRequest) {
           currency: transactions.baseCurrency,
         })
         .from(transactions)
-        .where(and(eq(transactions.userId, userId), sql`${transactions.merchantName} IS NOT NULL`))
+        .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql(), sql`${transactions.merchantName} IS NOT NULL`))
         .groupBy(transactions.merchantName, transactions.baseCurrency)
         .orderBy(sql`SUM(ABS(CAST(${transactions.baseAmount} AS numeric))) DESC`)
         .limit(fetchLimit)

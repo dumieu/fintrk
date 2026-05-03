@@ -1,7 +1,9 @@
 import "server-only";
 import { db, resilientQuery } from "@/lib/db";
-import { accounts, transactions, statements, userCategories, merchants, fileUploadLog, users } from "@/lib/db/schema";
+import { accounts, transactions, statements, userCategories, merchants, fileUploadLog, users, merchantWarningRules, merchantLabelRules } from "@/lib/db/schema";
 import { ensureUserCategories } from "@/lib/ensure-user-categories";
+import { ensureTransactionWarningFlagColumn } from "@/lib/ensure-transaction-warning-flag";
+import { excludeCardPaymentsSql } from "@/lib/db/excluded-transactions";
 import { ai, GEMINI_MODEL } from "@/lib/gemini";
 import { logAiCost } from "@/lib/ai-cost";
 import { logServerError } from "@/lib/safe-error";
@@ -36,9 +38,12 @@ async function buildUserContext(userId: string) {
         .from(transactions)
         .innerJoin(userCategories, eq(transactions.categoryId, userCategories.id))
         .where(
-          sql`${transactions.userId} = ${userId}
-            AND ${transactions.merchantName} IS NOT NULL
-            AND TRIM(${transactions.merchantName}) != ''`,
+          and(
+            eq(transactions.userId, userId),
+            excludeCardPaymentsSql(),
+            sql`${transactions.merchantName} IS NOT NULL`,
+            sql`TRIM(${transactions.merchantName}) != ''`,
+          ),
         )
         .groupBy(userCategories.name, transactions.merchantName),
     ),
@@ -514,7 +519,7 @@ async function updateUserMainCurrency(userId: string) {
           txCount: sql<number>`count(distinct ${transactions.id})::int`,
         })
         .from(transactions)
-        .where(eq(transactions.userId, userId))
+        .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql()))
         .groupBy(transactions.baseCurrency)
         .orderBy(
           desc(sql`count(distinct ${transactions.id})`),
@@ -528,7 +533,7 @@ async function updateUserMainCurrency(userId: string) {
           txCount: sql<number>`count(distinct ${transactions.id})::int`,
         })
         .from(transactions)
-        .where(eq(transactions.userId, userId)),
+        .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql())),
     ),
   ]);
 
@@ -926,15 +931,42 @@ export async function processStatement(statementId: number) {
   let imported = 0;
   let duplicates = 0;
 
+  await ensureTransactionWarningFlagColumn();
+  const warningRuleRows = await resilientQuery(() =>
+    db
+      .select({ merchantName: merchantWarningRules.merchantName })
+      .from(merchantWarningRules)
+      .where(eq(merchantWarningRules.userId, userId)),
+  );
+  const warnedMerchants = new Set(
+    warningRuleRows.map((row) => row.merchantName.trim().toLowerCase()).filter(Boolean),
+  );
+  const labelRuleRows = await resilientQuery(() =>
+    db
+      .select({
+        merchantName: merchantLabelRules.merchantName,
+        label: merchantLabelRules.label,
+      })
+      .from(merchantLabelRules)
+      .where(eq(merchantLabelRules.userId, userId)),
+  );
+  const labelsByMerchant = new Map(
+    labelRuleRows
+      .map((row) => [row.merchantName.trim().toLowerCase(), row.label.trim().slice(0, 20)] as const)
+      .filter(([merchantName, label]) => merchantName && label),
+  );
+
   const txnRows = aiResult.transactions.map((txn) => {
     const catId = resolveExistingCategoryId(txn.category_suggestion);
+    const merchantName = txn.merchant_name?.toLowerCase();
+    const normalizedMerchantName = merchantName?.trim().toLowerCase() ?? "";
     const merchantId = txn.merchant_name ? merchantIdCache.get(canonicalizeMerchant(txn.merchant_name).toLowerCase()) : undefined;
     return {
       userId, accountId, statementId,
       postedDate: txn.posted_date,
       rawDescription: txn.raw_description,
       referenceId: sanitizeAiReferenceId(txn.reference_id, txn.merchant_name ?? null, txn.raw_description),
-      merchantName: txn.merchant_name?.toLowerCase() ?? undefined, merchantId: merchantId ?? undefined,
+      merchantName: merchantName ?? undefined, merchantId: merchantId ?? undefined,
       categoryId: catId,
       categoryConfidence: txn.confidence?.toString(),
       baseAmount: txn.base_amount.toString(), baseCurrency: txn.base_currency,
@@ -942,7 +974,10 @@ export async function processStatement(statementId: number) {
       foreignCurrency: txn.foreign_currency ?? undefined,
       implicitFxRate: txn.implicit_fx_rate?.toString() ?? undefined,
       countryIso: txn.country_iso ?? undefined,
-      isRecurring: txn.is_recurring, aiConfidence: txn.confidence?.toString(),
+      isRecurring: txn.is_recurring,
+      warningFlag: normalizedMerchantName ? warnedMerchants.has(normalizedMerchantName) : false,
+      label: normalizedMerchantName ? labelsByMerchant.get(normalizedMerchantName) : undefined,
+      aiConfidence: txn.confidence?.toString(),
     };
   });
 

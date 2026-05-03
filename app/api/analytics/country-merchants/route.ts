@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
 import { transactions } from "@/lib/db/schema";
+import { excludeCardPaymentsSql } from "@/lib/db/excluded-transactions";
 import { eq, and, sql } from "drizzle-orm";
 import { logServerError } from "@/lib/safe-error";
 
@@ -47,6 +48,7 @@ export async function GET(request: NextRequest) {
         .where(
           and(
             eq(transactions.userId, userId),
+            excludeCardPaymentsSql(),
             eq(transactions.countryIso, country),
             sql`${transactions.merchantName} IS NOT NULL`,
           ),

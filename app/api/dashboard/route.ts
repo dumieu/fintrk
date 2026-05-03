@@ -7,6 +7,7 @@ import {
   leafCategory,
   parentCategory,
 } from "@/lib/db/category-rollup";
+import { excludeCardPaymentsSql, excludeRecurringCardPaymentsSql } from "@/lib/db/excluded-transactions";
 import { eq, and, gte, lte, sql, desc, ne } from "drizzle-orm";
 import { logServerError } from "@/lib/safe-error";
 
@@ -53,6 +54,7 @@ export async function GET() {
           .where(
             and(
               eq(transactions.userId, userId),
+              excludeCardPaymentsSql(),
               gte(transactions.postedDate, thisMonth.start),
               lte(transactions.postedDate, thisMonth.end),
             ),
@@ -65,6 +67,7 @@ export async function GET() {
           .where(
             and(
               eq(transactions.userId, userId),
+              excludeCardPaymentsSql(),
               gte(transactions.postedDate, lastMonth.start),
               lte(transactions.postedDate, lastMonth.end),
             ),
@@ -84,13 +87,17 @@ export async function GET() {
             isRecurring: transactions.isRecurring,
           })
           .from(transactions)
-          .where(eq(transactions.userId, userId))
+          .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql()))
           .orderBy(desc(transactions.postedDate))
           .limit(8),
       ),
       resilientQuery(() =>
         db.select().from(recurringPatterns).where(
-          and(eq(recurringPatterns.userId, userId), eq(recurringPatterns.isActive, true)),
+          and(
+            eq(recurringPatterns.userId, userId),
+            excludeRecurringCardPaymentsSql(),
+            eq(recurringPatterns.isActive, true),
+          ),
         ),
       ),
       resilientQuery(() =>
@@ -115,6 +122,7 @@ export async function GET() {
           .where(
             and(
               eq(transactions.userId, userId),
+              excludeCardPaymentsSql(),
               gte(transactions.postedDate, thisMonth.start),
               lte(transactions.postedDate, thisMonth.end),
               sql`CAST(${transactions.baseAmount} AS numeric) < 0`,

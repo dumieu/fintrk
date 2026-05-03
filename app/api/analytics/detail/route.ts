@@ -7,6 +7,7 @@ import {
   leafCategory,
   parentCategory,
 } from "@/lib/db/category-rollup";
+import { excludeCardPaymentsSql } from "@/lib/db/excluded-transactions";
 import { eq, and, sql, desc } from "drizzle-orm";
 import { logServerError } from "@/lib/safe-error";
 
@@ -240,6 +241,7 @@ export async function GET(request: NextRequest) {
     /** Common base WHERE without the month filter — used for the 12-mo trend so it shows context. */
     const baseWhere = and(
       eq(transactions.userId, userId),
+      excludeCardPaymentsSql(),
       sql`CAST(${transactions.baseAmount} AS numeric) < 0`,
       entityFilter,
     );
@@ -260,6 +262,7 @@ export async function GET(request: NextRequest) {
         .where(
           and(
             eq(transactions.userId, userId),
+            excludeCardPaymentsSql(),
             sql`CAST(${transactions.baseAmount} AS numeric) < 0`,
           ),
         ),
@@ -348,6 +351,7 @@ export async function GET(request: NextRequest) {
         .where(
           and(
             eq(transactions.userId, userId),
+            excludeCardPaymentsSql(),
             sql`CAST(${transactions.baseAmount} AS numeric) < 0`,
           ),
         ),
