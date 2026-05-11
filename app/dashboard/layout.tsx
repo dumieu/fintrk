@@ -2,16 +2,21 @@ import { redirect } from "next/navigation";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { DashboardHeader } from "@/components/dashboard-header";
 import { ProcessingBanner } from "@/components/processing-banner";
+import { resilientAuth } from "@/lib/auth-resilient";
+
+const CLERK_CONFIGURED = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
 export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  if (process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) {
-    const { auth } = await import("@clerk/nextjs/server");
-    const { userId } = await auth();
-    if (!userId) redirect("/unauth1");
+  if (!CLERK_CONFIGURED) {
+    redirect("/unauth1");
+  }
+  const { userId } = await resilientAuth();
+  if (!userId) {
+    redirect("/unauth1");
   }
 
   return (
