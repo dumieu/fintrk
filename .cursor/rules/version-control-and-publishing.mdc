@@ -1,0 +1,8 @@
+---
+description: Agents must not commit or publish without explicit user request
+alwaysApply: true
+---
+
+# Version control and publishing
+
+- Never run `git commit`, `git push`, tagging, or deployment or publish commands unless the user explicitly asked for that exact action in this conversation. Do not commit or publish automatically after edits.

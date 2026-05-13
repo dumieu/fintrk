@@ -172,7 +172,7 @@ export default async function Unauth1() {
                 forward. No bank linking. No data brokers. Just answers.
               </p>
 
-              <div className="mt-9 flex flex-col items-center gap-4">
+              <div className="mt-9 flex justify-center">
                 <div className="flex w-full flex-col items-stretch gap-3 sm:w-auto sm:flex-row sm:justify-center">
                   <Link href={SIGN_UP_URL} className="block">
                     <Button
@@ -184,20 +184,7 @@ export default async function Unauth1() {
                       <ArrowRight className="ml-2 h-4 w-4 shrink-0 transition-transform group-hover:translate-x-0.5" aria-hidden />
                     </Button>
                   </Link>
-                  <Link href="/demo" className="block">
-                    <Button
-                      size="lg"
-                      variant="outline"
-                      className="h-12 w-full border-emerald-300/30 bg-white/[0.04] px-6 text-base font-medium text-emerald-50 backdrop-blur-sm transition-all hover:border-emerald-300/60 hover:bg-white/[0.08] hover:text-white sm:w-auto"
-                    >
-                      <ChartLine className="mr-2 h-4 w-4 shrink-0" aria-hidden />
-                      Try the live demo · no signup
-                    </Button>
-                  </Link>
                 </div>
-                <p className="text-[11px] uppercase tracking-widest text-emerald-100/45">
-                  Free forever · No credit card · Bank-grade encryption
-                </p>
               </div>
 
               <div className="mt-12 grid grid-cols-3 gap-3 sm:gap-8">
