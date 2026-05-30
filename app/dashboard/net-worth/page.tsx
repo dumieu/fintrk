@@ -181,7 +181,7 @@ export default function NetWorthPage() {
   // ─── Loading ─────────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="min-h-[80vh] bg-gradient-to-b from-[#08051a] via-[#10082a] to-[#160e35]">
+      <div className="min-h-[80vh] bg-app-canvas">
         <div className="mx-auto flex min-h-[60vh] max-w-7xl items-center justify-center px-4">
           <Loader2 className="h-6 w-6 animate-spin text-white/50" />
         </div>
@@ -194,7 +194,7 @@ export default function NetWorthPage() {
     // scroll container (`overflow-y-auto` from the dashboard layout) can
     // freely scroll the full content. The aurora glow lives inside its own
     // `absolute inset-0 overflow-hidden` wrapper so it stays contained.
-    <div className="relative isolate min-h-[80vh] bg-gradient-to-b from-[#08051a] via-[#10082a] to-[#160e35]">
+    <div className="relative isolate min-h-[80vh] bg-app-canvas">
       <Aurora />
 
       <div className="relative mx-auto max-w-7xl px-4 pb-24 pt-8">

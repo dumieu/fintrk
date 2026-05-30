@@ -7,7 +7,10 @@ import {
   leafCategory,
   parentCategory,
 } from "@/lib/db/category-rollup";
-import { excludeCardPaymentsSql } from "@/lib/db/excluded-transactions";
+import {
+  excludeCardPaymentsSql,
+  spendingIntelligenceOutflowSql,
+} from "@/lib/db/excluded-transactions";
 import { eq, and, sql } from "drizzle-orm";
 import { logServerError } from "@/lib/safe-error";
 
@@ -55,7 +58,7 @@ export async function GET() {
                 eq(parentCategory.userId, userId),
               ),
             )
-            .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql(), sql`CAST(${transactions.baseAmount} AS numeric) < 0`))
+            .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql(), spendingIntelligenceOutflowSql()))
             .groupBy(categoryRollupLabelSql)
             .orderBy(sql`SUM(ABS(CAST(${transactions.baseAmount} AS numeric))) DESC`)
             .limit(10),
@@ -68,7 +71,7 @@ export async function GET() {
               total: sql<string>`SUM(ABS(CAST(${transactions.baseAmount} AS numeric)))`,
             })
             .from(transactions)
-            .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql(), sql`CAST(${transactions.baseAmount} AS numeric) < 0`))
+            .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql(), spendingIntelligenceOutflowSql()))
             .groupBy(sql`EXTRACT(DOW FROM ${transactions.postedDate}::date)`)
             .orderBy(sql`EXTRACT(DOW FROM ${transactions.postedDate}::date)`),
         ),
@@ -92,7 +95,7 @@ export async function GET() {
                 eq(parentCategory.userId, userId),
               ),
             )
-            .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql(), sql`CAST(${transactions.baseAmount} AS numeric) < 0`))
+            .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql(), spendingIntelligenceOutflowSql()))
             .groupBy(categoryRollupLabelSql, sql`EXTRACT(DOW FROM ${transactions.postedDate}::date)`),
         ),
 
@@ -104,7 +107,7 @@ export async function GET() {
               count: sql<number>`COUNT(*)::int`,
             })
             .from(transactions)
-            .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql(), sql`${transactions.countryIso} IS NOT NULL`))
+            .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql(), spendingIntelligenceOutflowSql(), sql`${transactions.countryIso} IS NOT NULL`))
             .groupBy(transactions.countryIso)
             .orderBy(sql`SUM(ABS(CAST(${transactions.baseAmount} AS numeric))) DESC`)
             .limit(10),
@@ -118,7 +121,7 @@ export async function GET() {
             })
             .from(transactions)
             .where(
-              and(eq(transactions.userId, userId), excludeCardPaymentsSql(), sql`${transactions.foreignCurrency} IS NOT NULL`),
+              and(eq(transactions.userId, userId), excludeCardPaymentsSql(), spendingIntelligenceOutflowSql(), sql`${transactions.foreignCurrency} IS NOT NULL`),
             ),
         ),
 

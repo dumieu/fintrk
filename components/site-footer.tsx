@@ -1,6 +1,12 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 export function SiteFooter() {
+  const pathname = usePathname() ?? "";
+  if (pathname.startsWith("/dashboard/cashflow")) return null;
+
   return (
     <footer className="shrink-0 border-t border-border/40 bg-background/80 backdrop-blur-sm">
       <div className="mx-auto flex max-w-7xl flex-col items-center gap-3 px-4 py-4 text-xs text-muted-foreground sm:py-3">

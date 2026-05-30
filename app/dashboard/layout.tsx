@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { DashboardShell } from "@/components/dashboard-shell";
-import { DashboardHeader } from "@/components/dashboard-header";
+import { DashboardLayoutChrome } from "@/components/dashboard-layout-chrome";
 import { ProcessingBanner } from "@/components/processing-banner";
 import { resilientAuth } from "@/lib/auth-resilient";
 
@@ -21,12 +21,7 @@ export default async function DashboardLayout({
 
   return (
     <DashboardShell>
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <DashboardHeader />
-        <div className="flex min-h-0 flex-1 flex-col overflow-x-clip overflow-y-auto overscroll-y-contain [scrollbar-gutter:stable]">
-          {children}
-        </div>
-      </div>
+      <DashboardLayoutChrome>{children}</DashboardLayoutChrome>
       <ProcessingBanner />
     </DashboardShell>
   );

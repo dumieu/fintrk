@@ -27,7 +27,7 @@ export function DemoFooter() {
         <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
           <Link
             href="/auth/sign-up"
-            className="inline-flex items-center gap-1.5 rounded-xl bg-white px-5 py-2.5 text-sm font-bold text-[#08051a] shadow-2xl shadow-[#0BC18D]/30 transition hover:scale-105"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-white px-5 py-2.5 text-sm font-bold text-[#0a0a0a] shadow-2xl shadow-[#0BC18D]/30 transition hover:scale-105"
           >
             Create your account <ArrowRight className="h-4 w-4" />
           </Link>

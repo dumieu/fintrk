@@ -8,7 +8,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { formatCurrency } from "@/lib/format";
-import { AnalyticsDetailTooltip } from "@/components/analytics-detail-tooltip";
+import { AnalyticsDetailTooltip, detailTipAnchorFromEvent } from "@/components/analytics-detail-tooltip";
 import { useAnalyticsDetail } from "@/components/use-analytics-detail";
 import { currencyMeta, type CurrencyMeta } from "@/components/currency-meta";
 
@@ -205,7 +205,7 @@ export function CurrencySpendingList() {
                     className="group relative shrink-0 cursor-default rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 backdrop-blur-sm transition-colors hover:border-white/20 hover:bg-white/[0.07]"
                     onMouseEnter={(e) =>
                       void open({
-                        rect: e.currentTarget.getBoundingClientRect(),
+                        ...detailTipAnchorFromEvent(e),
                         entity: "currency",
                         value: meta.code,
                         label: `${meta.code} · ${meta.name}`,
@@ -270,6 +270,9 @@ export function CurrencySpendingList() {
         createPortal(
           <AnalyticsDetailTooltip
             rect={tip.rect}
+            clientX={tip.clientX}
+            clientY={tip.clientY}
+            avoidRect={tip.avoidRect}
             entity={tip.entity}
             label={tip.label}
             accentColor={tip.accent}

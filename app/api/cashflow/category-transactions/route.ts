@@ -4,7 +4,7 @@ import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
 import { accounts, statements, transactions, userCategories } from "@/lib/db/schema";
-import { excludeCardPaymentsSql } from "@/lib/db/excluded-transactions";
+import { excludeCardPaymentsSql, spendingIntelligenceOutflowSql } from "@/lib/db/excluded-transactions";
 import { logServerError } from "@/lib/safe-error";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +19,7 @@ export async function GET(request: NextRequest) {
     if (!userId) return unauthorizedResponse();
 
     const category = request.nextUrl.searchParams.get("category")?.trim() ?? "";
+    const merchant = request.nextUrl.searchParams.get("merchant")?.trim() ?? "";
     const levelRaw = request.nextUrl.searchParams.get("level");
     const level = levelRaw === "category" || levelRaw === "subcategory" || levelRaw === "label"
       ? levelRaw
@@ -28,13 +29,20 @@ export async function GET(request: NextRequest) {
       ? flowRaw
       : null;
 
-    if (!category || !level || !flow) {
+    const merchantMode = merchant.length > 0;
+    if (merchantMode) {
+      if (!flow) {
+        return NextResponse.json({ error: "Invalid merchant selection" }, { status: 400, headers: NO_STORE });
+      }
+    } else if (!category || !level || !flow) {
       return NextResponse.json({ error: "Invalid category selection" }, { status: 400, headers: NO_STORE });
     }
 
     const dateFrom = request.nextUrl.searchParams.get("dateFrom") || undefined;
     const dateTo = request.nextUrl.searchParams.get("dateTo") || undefined;
     const currency = request.nextUrl.searchParams.get("currency")?.toUpperCase() || undefined;
+    const scope = request.nextUrl.searchParams.get("scope")?.trim() ?? "";
+    const spendingIntelligence = scope === "spending-intelligence";
     const includeInvestmentInflows =
       request.nextUrl.searchParams.get("includeInvestmentInflows") === "true";
     const includeInvestmentOutflows =
@@ -50,11 +58,13 @@ export async function GET(request: NextRequest) {
         ELSE 'outflow'
       END
     `;
-    const selectionFilter = level === "category"
-      ? eq(categoryLabel, category)
-      : level === "subcategory"
-        ? eq(leaf.name, category)
-        : sql`trim(coalesce(${transactions.label}, '')) = ${category}`;
+    const selectionFilter = merchantMode
+      ? eq(transactions.merchantName, merchant)
+      : level === "category"
+        ? eq(categoryLabel, category)
+        : level === "subcategory"
+          ? eq(leaf.name, category)
+          : sql`trim(coalesce(${transactions.label}, '')) = ${category}`;
 
     const shouldExcludeInvestmentInflows = !includeInvestmentInflows;
     const shouldExcludeInvestmentOutflows = !includeInvestmentOutflows;
@@ -149,6 +159,7 @@ export async function GET(request: NextRequest) {
             ...(dateFrom ? [gte(transactions.postedDate, dateFrom)] : []),
             ...(dateTo ? [lte(transactions.postedDate, dateTo)] : []),
             ...(investmentExclusionFilter ? [investmentExclusionFilter] : []),
+            ...(spendingIntelligence ? [spendingIntelligenceOutflowSql()] : []),
           ),
         )
         .orderBy(desc(transactions.postedDate), desc(transactions.id))

@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
 import { transactions, accounts, userCategories } from "@/lib/db/schema";
-import { excludeCardPaymentsSql } from "@/lib/db/excluded-transactions";
+import {
+  excludeCardPaymentsSql,
+  spendingIntelligenceOutflowSql,
+} from "@/lib/db/excluded-transactions";
 import { eq, and, sql } from "drizzle-orm";
 import { logServerError } from "@/lib/safe-error";
 
@@ -92,7 +95,7 @@ export async function GET(request: NextRequest) {
           and(
             eq(transactions.userId, userId),
             excludeCardPaymentsSql(),
-            sql`CAST(${transactions.baseAmount} AS numeric) < 0`,
+            spendingIntelligenceOutflowSql(),
           ),
         ),
     );
@@ -132,7 +135,7 @@ export async function GET(request: NextRequest) {
             and(
               eq(transactions.userId, userId),
               excludeCardPaymentsSql(),
-              sql`CAST(${transactions.baseAmount} AS numeric) < 0`,
+              spendingIntelligenceOutflowSql(),
               sql`${userCategories.subcategoryType} IS NOT NULL`,
               sql`${transactions.postedDate}::date >= ${windowStart}`,
               sql`${transactions.postedDate}::date < ${windowEnd}`,
@@ -151,7 +154,7 @@ export async function GET(request: NextRequest) {
             and(
               eq(transactions.userId, userId),
               excludeCardPaymentsSql(),
-              sql`CAST(${transactions.baseAmount} AS numeric) < 0`,
+              spendingIntelligenceOutflowSql(),
               sql`${transactions.postedDate}::date >= ${windowStart}`,
               sql`${transactions.postedDate}::date < ${windowEnd}`,
             ),

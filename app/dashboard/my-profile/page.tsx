@@ -70,7 +70,7 @@ export default function MyProfilePage() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-gradient-to-b from-[#08051a] via-[#10082a] to-[#160e35]">
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-app-canvas">
       <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col px-4 py-5 sm:px-6 sm:py-6">
         <div className="mb-4 flex items-center justify-end">
           <Link href="/dashboard/transactions">
@@ -116,7 +116,7 @@ export default function MyProfilePage() {
                   id="detect-travel"
                   value={detectTravel}
                   onChange={(e) => setDetectTravel((e.target.value === "No" ? "No" : "Yes"))}
-                  className="w-full rounded-md border border-white/15 bg-[#10082a] px-3 py-2 text-sm text-white outline-none focus:border-[#0BC18D]/50 focus:ring-1 focus:ring-[#0BC18D]/30"
+                  className="w-full rounded-md border border-white/15 bg-[#121212] px-3 py-2 text-sm text-white outline-none focus:border-[#0BC18D]/50 focus:ring-1 focus:ring-[#0BC18D]/30"
                 >
                   <option value="Yes">Yes</option>
                   <option value="No">No</option>

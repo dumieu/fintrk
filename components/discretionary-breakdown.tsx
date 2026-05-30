@@ -7,8 +7,9 @@ import type {
   DiscretionaryResponse,
 } from "@/app/api/analytics/discretionary/route";
 import { formatCurrency } from "@/lib/format";
-import { AnalyticsDetailTooltip } from "@/components/analytics-detail-tooltip";
+import { AnalyticsDetailTooltip, detailTipAnchorFromEvent } from "@/components/analytics-detail-tooltip";
 import { useAnalyticsDetail } from "@/components/use-analytics-detail";
+import { CategoryTransactionsModal } from "@/components/category-transactions-modal";
 
 const DEFAULT_MONTHS = 12;
 
@@ -24,6 +25,7 @@ export function DiscretionaryBreakdown({ months = DEFAULT_MONTHS }: { months?: n
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { tip, open, scheduleClose, clearLeave } = useAnalyticsDetail();
+  const [leafModal, setLeafModal] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -88,6 +90,7 @@ export function DiscretionaryBreakdown({ months = DEFAULT_MONTHS }: { months?: n
             monthsCovered={data.monthsCovered}
             open={open}
             scheduleClose={scheduleClose}
+            onLeafClick={setLeafModal}
           />
         ))}
       </div>
@@ -97,6 +100,9 @@ export function DiscretionaryBreakdown({ months = DEFAULT_MONTHS }: { months?: n
         createPortal(
           <AnalyticsDetailTooltip
             rect={tip.rect}
+            clientX={tip.clientX}
+            clientY={tip.clientY}
+            avoidRect={tip.avoidRect}
             entity={tip.entity}
             label={tip.label}
             accentColor={tip.accent}
@@ -105,6 +111,17 @@ export function DiscretionaryBreakdown({ months = DEFAULT_MONTHS }: { months?: n
             errorMessage={tip.error}
             onMouseEnter={clearLeave}
             onMouseLeave={scheduleClose}
+          />,
+          document.body,
+        )}
+
+      {leafModal &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <CategoryTransactionsModal
+            filter={{ mode: "category", name: leafModal, level: "subcategory" }}
+            currency={data.primaryCurrency}
+            onClose={() => setLeafModal(null)}
           />,
           document.body,
         )}
@@ -118,12 +135,14 @@ function BucketCard({
   monthsCovered,
   open,
   scheduleClose,
+  onLeafClick,
 }: {
   bucket: DiscretionaryBucket;
   currency: string;
   monthsCovered: number;
   open: ReturnType<typeof useAnalyticsDetail>["open"];
   scheduleClose: ReturnType<typeof useAnalyticsDetail>["scheduleClose"];
+  onLeafClick: (leafName: string) => void;
 }) {
   const accent = bucket.accent;
 
@@ -165,14 +184,15 @@ function BucketCard({
             No spending in this bucket.
           </div>
         ) : (
-          <ul className="h-full divide-y divide-white/5 overflow-y-auto overscroll-contain px-2 py-1 [scrollbar-gutter:stable]">
+          <ul className="scrollbar-slim-dark h-full divide-y divide-white/5 overflow-y-auto overscroll-contain px-2 py-1 [scrollbar-gutter:stable]">
             {bucket.leaves.map((leaf) => (
               <li
                 key={leaf.name}
                 className="group flex cursor-pointer flex-col items-center gap-0.5 py-1.5 transition-colors hover:bg-white/[0.04]"
+                onClick={() => onLeafClick(leaf.name)}
                 onMouseEnter={(e) =>
                   void open({
-                    rect: e.currentTarget.getBoundingClientRect(),
+                    ...detailTipAnchorFromEvent(e),
                     entity: "category",
                     value: leaf.name,
                     label: leaf.name,

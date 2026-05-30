@@ -21,8 +21,8 @@ function fmtInt(amount: number, currency: string, locale = "en-US"): string {
 }
 
 /* ════════════════════════════════════════════════════════════════════
- * CASHFLOW SANKEY — a custom-built, animated, particle-flowing,
- * gradient-ribbon Sankey designed specifically for FinTRK.
+ * CASHFLOW SANKEY — a custom-built, animated gradient-ribbon Sankey
+ * designed specifically for FinTRK.
  *
  *  Columns (left → right):
  *   0 Positive inflow labels (non-blank only)
@@ -248,7 +248,7 @@ const PAD_LEFT_BASE = 120;
 const PAD_RIGHT_BASE = 120;
 const PAD_LEFT_MIN = 56;
 const PAD_RIGHT_MIN = 56;
-const PAD_Y = 28;
+const PAD_Y = 12;
 const MIN_NODE_H = 4;
 const NODE_W = 16;
 // Seven columns: inflow labels, inflow subcategories, inflow categories, total income, allocation, categories, subcategories.
@@ -874,24 +874,11 @@ function ribbonPath(
   ].join(" ");
 }
 
-/** Center curve for particle motion. */
-function centerPath(
-  sx: number, sy0: number, sy1: number,
-  tx: number, ty0: number, ty1: number,
-): string {
-  const mx = (sx + tx) / 2;
-  const sy = (sy0 + sy1) / 2;
-  const ty = (ty0 + ty1) / 2;
-  return `M ${sx},${sy} C ${mx},${sy} ${mx},${ty} ${tx},${ty}`;
-}
-
 /* ──────────────────────────  COMPONENT  ───────────────────────────── */
 
 interface CashflowSankeyProps {
   data: CashflowSankeyData;
   height?: number;
-  /** When true, renders animated particles flowing along ribbons (heavy). */
-  showParticles?: boolean;
   selectedCategory?: CashflowSankeyCategorySelection | null;
   onCategorySelect?: (category: CashflowSankeyCategorySelection) => void;
 }
@@ -899,7 +886,6 @@ interface CashflowSankeyProps {
 export function CashflowSankey({
   data,
   height = 720,
-  showParticles = false,
   selectedCategory = null,
   onCategorySelect,
 }: CashflowSankeyProps) {
@@ -1013,7 +999,7 @@ export function CashflowSankey({
 
   if (layout.nodes.length === 0 || layout.totalIncome === 0) {
     return (
-      <div className="flex h-[420px] items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03]">
+      <div className="flex h-full min-h-[280px] items-center justify-center">
         <div className="text-center">
           <p className="text-lg font-semibold text-white/85">No cash flow data yet</p>
           <p className="mt-1 text-sm text-white/55">
@@ -1025,24 +1011,17 @@ export function CashflowSankey({
   }
 
   return (
-    <div ref={wrapRef} className="relative w-full">
+    <div ref={wrapRef} className="relative h-full w-full">
       <svg
         viewBox={`0 0 ${layout.width} ${layout.height}`}
         width="100%"
         height={layout.height}
-        style={{ display: "block" }}
+        className="block w-full"
         preserveAspectRatio="xMidYMid meet"
         onMouseMove={(e) => setHoverPoint({ x: e.clientX, y: e.clientY })}
         onMouseLeave={() => { setHoverNodeId(null); setHoverLinkId(null); setHoverPoint(null); }}
       >
         <defs>
-          {/* Background subtle radial */}
-          <radialGradient id={`${uid}-bg`} cx="50%" cy="40%" r="80%">
-            <stop offset="0%" stopColor="#1a0f3d" stopOpacity="0.6" />
-            <stop offset="60%" stopColor="#0a061a" stopOpacity="0.4" />
-            <stop offset="100%" stopColor="#000000" stopOpacity="0.0" />
-          </radialGradient>
-
           {/* Per-link gradient: source color → target color */}
           {layout.links.map((l) => {
             const src = layout.nodes.find((n) => n.id === l.sourceId)!;
@@ -1067,25 +1046,7 @@ export function CashflowSankey({
               <feMergeNode in="SourceGraphic" />
             </feMerge>
           </filter>
-
-          {/* Hidden particle motion paths */}
-          {showParticles && layout.links.map((l) => (
-            <path
-              key={`pp-${l.id}`}
-              id={`${uid}-pp-${cleanId(l.id)}`}
-              d={centerPath(
-                layout.colX[layoutColX(l, layout, "src")] + NODE_W,
-                l.sy0, l.sy1,
-                layout.colX[layoutColX(l, layout, "tgt")],
-                l.ty0, l.ty1,
-              )}
-              fill="none"
-            />
-          ))}
         </defs>
-
-        {/* Background */}
-        <rect x={0} y={0} width={layout.width} height={layout.height} fill={`url(#${uid}-bg)`} />
 
         {/* Faint vertical column guides for visual rhythm */}
         {layout.colX.map((x, i) => (
@@ -1143,30 +1104,6 @@ export function CashflowSankey({
             );
           })}
         </g>
-
-        {/* PARTICLES — small dots traveling along center curves */}
-        {showParticles && (
-          <g pointerEvents="none">
-            {layout.links.map((l) => {
-              const op = linkOpacity(l.id);
-              const ribbonH = Math.max(2, Math.min(20, (l.sy1 - l.sy0)));
-              // Particle count proportional to ribbon thickness, capped low for performance
-              const nParticles = Math.max(1, Math.min(3, Math.round(ribbonH / 6)));
-              const dur = 4 + (1 / Math.max(0.5, ribbonH)) * 18; // thicker = faster
-              return Array.from({ length: nParticles }).map((_, i) => (
-                <circle key={`${l.id}-p${i}`} r={1.4} fill="white" opacity={op * 0.85}>
-                  <animateMotion
-                    dur={`${dur}s`}
-                    begin={`-${(dur / nParticles) * i}s`}
-                    repeatCount="indefinite"
-                  >
-                    <mpath xlinkHref={`#${uid}-pp-${cleanId(l.id)}`} />
-                  </animateMotion>
-                </circle>
-              ));
-            })}
-          </g>
-        )}
 
         {/* NODES (rectangles + glow + outer halo) */}
         <g>
@@ -1349,24 +1286,6 @@ export function CashflowSankey({
             );
           })}
         </g>
-
-        {/* COLUMN HEADERS */}
-        <g pointerEvents="none">
-          {COL_HEADERS.map((h, i) => (
-            <text
-              key={`h-${i}`}
-              x={layout.colX[i] + NODE_W / 2}
-              y={10}
-              textAnchor="middle"
-              fontSize={9}
-              letterSpacing="0.12em"
-              fill="rgba(255,255,255,0.35)"
-              fontWeight={600}
-            >
-              {h}
-            </text>
-          ))}
-        </g>
       </svg>
 
       {/* HOVER TOOLTIP for ribbons */}
@@ -1381,16 +1300,6 @@ export function CashflowSankey({
     </div>
   );
 }
-
-const COL_HEADERS = [
-  "LABELS",
-  "SUBCATEGORIES",
-  "INFLOW CATEGORIES",
-  "TOTAL INCOME",
-  "ALLOCATION",
-  "CATEGORIES",
-  "SUBCATEGORIES",
-];
 
 function truncate(s: string, max: number): string {
   if (s.length <= max) return s;
@@ -1515,7 +1424,7 @@ function BreakdownTooltip({
         initial={{ opacity: 0, scale: 0.98 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.14, ease: "easeOut" }}
-        className="overflow-hidden rounded-2xl border border-white/12 bg-gradient-to-br from-[#120935]/97 via-[#0a061a]/97 to-[#0a061a]/97 p-3.5 text-white/90 shadow-2xl backdrop-blur-xl"
+        className="overflow-hidden rounded-2xl border border-white/12 bg-gradient-to-br from-[#141414]/97 via-[#0a0a0a]/97 to-[#0a0a0a]/97 p-3.5 text-white/90 shadow-2xl backdrop-blur-xl"
         style={{
           boxShadow:
             "0 20px 60px -15px rgba(0,0,0,0.75), 0 0 0 1px rgba(255,255,255,0.04), inset 0 1px 0 rgba(255,255,255,0.06)",

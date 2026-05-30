@@ -67,7 +67,7 @@ export default function AccountsPage() {
   };
 
   return (
-    <div className="min-h-[80vh] bg-gradient-to-b from-[#08051a] via-[#10082a] to-[#160e35]">
+    <div className="min-h-[80vh] bg-app-canvas">
       <div className="mx-auto max-w-7xl px-4 py-8">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-white/70">

@@ -232,9 +232,9 @@ const SAMPLE: CashflowSankeyData = {
 
 export default function CashflowPreviewPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#08051a] via-[#10082a] to-[#160e35] p-6">
+    <div className="min-h-screen bg-app-canvas p-6">
       <h1 className="mb-4 text-2xl font-bold text-white">Cashflow Sankey · Preview (sample data)</h1>
-      <CashflowSankey data={SAMPLE} height={760} showParticles={true} />
+      <CashflowSankey data={SAMPLE} height={760} />
     </div>
   );
 }

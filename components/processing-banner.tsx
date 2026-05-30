@@ -66,7 +66,7 @@ export function ProcessingBanner() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -10, scale: 0.95 }}
             layout
-            className="pointer-events-auto rounded-xl border border-[#AD74FF]/30 bg-[#160e35]/95 backdrop-blur-md shadow-lg shadow-[#AD74FF]/10 p-3 flex items-center gap-3"
+            className="pointer-events-auto rounded-xl border border-[#AD74FF]/30 bg-[#111111]/95 backdrop-blur-md shadow-lg shadow-[#AD74FF]/10 p-3 flex items-center gap-3"
           >
             <div className="w-8 h-8 rounded-lg bg-[#AD74FF]/10 flex items-center justify-center shrink-0">
               <Loader2 className="w-4 h-4 text-[#AD74FF] animate-spin" />
@@ -94,8 +94,8 @@ export function ProcessingBanner() {
             layout
             className={`pointer-events-auto rounded-xl border p-3 flex items-center gap-3 backdrop-blur-md shadow-lg cursor-pointer ${
               stmt.status === "completed"
-                ? "border-[#0BC18D]/30 bg-[#160e35]/95 shadow-[#0BC18D]/10"
-                : "border-[#FF6F69]/30 bg-[#160e35]/95 shadow-[#FF6F69]/10"
+                ? "border-[#0BC18D]/30 bg-[#111111]/95 shadow-[#0BC18D]/10"
+                : "border-[#FF6F69]/30 bg-[#111111]/95 shadow-[#FF6F69]/10"
             }`}
             onClick={() => {
               if (stmt.status === "completed") {

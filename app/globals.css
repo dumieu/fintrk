@@ -44,6 +44,11 @@
   --radius-2xl: calc(var(--radius) + 8px);
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
+  /** +25% vs default Tailwind container scale — more useful width on large screens. */
+  --max-width-4xl: 70rem;
+  --max-width-5xl: 80rem;
+  --max-width-6xl: 90rem;
+  --max-width-7xl: 100rem;
 }
 
 :root {
@@ -79,45 +84,71 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  /** Layout — keep Sankey breakout in sync with max-w-7xl (+25%). */
+  --app-page-max: 100rem;
+  --app-sankey-breakout-at: 1850px;
+  --app-sankey-breakout-side: 400px;
 }
 
 .dark {
-  --background: oklch(0.16 0.005 260);
+  --background: #0a0a0a;
   --foreground: oklch(0.93 0 0);
-  --card: oklch(0.21 0.006 260);
+  --card: #141414;
   --card-foreground: oklch(0.93 0 0);
-  --popover: oklch(0.22 0.008 260);
+  --popover: #171717;
   --popover-foreground: oklch(0.93 0 0);
   --primary: oklch(0.90 0 0);
-  --primary-foreground: oklch(0.18 0.005 260);
-  --secondary: oklch(0.26 0.008 260);
+  --primary-foreground: #0a0a0a;
+  --secondary: #1a1a1a;
   --secondary-foreground: oklch(0.90 0 0);
-  --muted: oklch(0.26 0.008 260);
-  --muted-foreground: oklch(0.68 0.01 260);
-  --accent: oklch(0.28 0.01 260);
+  --muted: #1a1a1a;
+  --muted-foreground: oklch(0.62 0 0);
+  --accent: #1f1f1f;
   --accent-foreground: oklch(0.93 0 0);
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 12%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.55 0.02 260);
+  --ring: oklch(0.55 0 0);
   --chart-1: oklch(0.70 0.18 250);
   --chart-2: oklch(0.72 0.15 165);
   --chart-3: oklch(0.78 0.16 80);
   --chart-4: oklch(0.68 0.20 300);
   --chart-5: oklch(0.72 0.18 25);
-  --sidebar: oklch(0.19 0.006 260);
+  --sidebar: #0f0f0f;
   --sidebar-foreground: oklch(0.93 0 0);
   --sidebar-primary: oklch(0.70 0.18 250);
   --sidebar-primary-foreground: oklch(0.93 0 0);
-  --sidebar-accent: oklch(0.28 0.01 260);
+  --sidebar-accent: #1f1f1f;
   --sidebar-accent-foreground: oklch(0.93 0 0);
   --sidebar-border: oklch(1 0 0 / 12%);
-  --sidebar-ring: oklch(0.55 0.02 260);
+  --sidebar-ring: oklch(0.55 0 0);
+  --app-canvas-from: #0b0b0b;
+  --app-canvas-via: #0a0a0a;
+  --app-canvas-to: #080808;
+  --app-surface: #141414;
+  --app-surface-muted: #121212;
+  --app-overlay: #111111;
+  --app-popover: #171717;
 }
 
 @layer utilities {
   .font-aldhabi {
     font-family: "Aldhabi", ui-serif, Georgia, serif;
+  }
+
+  /** Full-page dashboard canvas — neutral dark gray, almost black. */
+  .bg-app-canvas {
+    background: linear-gradient(
+      to bottom,
+      var(--app-canvas-from),
+      var(--app-canvas-via),
+      var(--app-canvas-to)
+    );
+  }
+
+  /** Standard page content column — scales with theme max-w-7xl (100rem / 1600px). */
+  .app-container {
+    @apply mx-auto w-full max-w-7xl px-4 sm:px-6;
   }
 }
 
@@ -161,6 +192,25 @@
     background-color: oklch(0.7 0 0 / 0.2);
     border-radius: 9999px;
   }
+  /** Analytics cards — barely-there dark gray scrollbars */
+  .scrollbar-slim-dark {
+    scrollbar-width: thin;
+    scrollbar-color: #3a3a3a transparent;
+  }
+  .scrollbar-slim-dark::-webkit-scrollbar {
+    width: 3px;
+    height: 3px;
+  }
+  .scrollbar-slim-dark::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-slim-dark::-webkit-scrollbar-thumb {
+    background-color: #3a3a3a;
+    border-radius: 9999px;
+  }
+  .scrollbar-slim-dark::-webkit-scrollbar-thumb:hover {
+    background-color: #4a4a4a;
+  }
 }
 
 /* ── Amount range slider thumbs ──────────────────────────── */
@@ -189,7 +239,7 @@
   border: 2px solid rgba(126,87,194,.7);
   background:
     radial-gradient(circle at 50% 40%, rgba(167,243,208,.35), transparent 60%),
-    linear-gradient(135deg, #1e1142, #120a28);
+    linear-gradient(135deg, #1a1a1a, #121212);
   box-shadow:
     0 0 6px 1px rgba(126,87,194,.4),
     0 0 14px rgba(126,87,194,.15);
@@ -204,7 +254,7 @@
   border: 2px solid rgba(126,87,194,.7);
   background:
     radial-gradient(circle at 50% 40%, rgba(167,243,208,.35), transparent 60%),
-    linear-gradient(135deg, #1e1142, #120a28);
+    linear-gradient(135deg, #1a1a1a, #121212);
   box-shadow:
     0 0 6px 1px rgba(126,87,194,.4),
     0 0 14px rgba(126,87,194,.15);

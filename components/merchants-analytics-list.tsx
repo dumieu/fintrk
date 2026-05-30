@@ -1,16 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
 import { formatCurrency } from "@/lib/format";
-import { AnalyticsDetailTooltip } from "@/components/analytics-detail-tooltip";
+import {
+  AnalyticsDetailDialog,
+  AnalyticsDetailTooltip,
+  detailTipAnchorFromEvent,
+} from "@/components/analytics-detail-tooltip";
 import { useAnalyticsDetail } from "@/components/use-analytics-detail";
+import { CategoryTransactionsModal } from "@/components/category-transactions-modal";
 
 export interface MerchantRow {
   name: string;
   total: number;
   count: number;
   currency: string;
+  subcategory: string | null;
+  subcategoryColor: string | null;
 }
 
 const PAGE = 50;
@@ -18,13 +25,19 @@ const PAGE = 50;
 /** Fixed height (~4 rows, room for two-line rows) so the card stays stable when filtering. */
 /** Fills the parent flex container (set via `flex-1` on CardContent). */
 const LIST_HEIGHT = "h-full min-h-[200px] w-full";
-const LIST_SCROLL = `${LIST_HEIGHT} min-h-0 flex-1 flex flex-col overflow-y-auto overscroll-contain pr-1 [scrollbar-gutter:stable]`;
+const LIST_SCROLL = `${LIST_HEIGHT} scrollbar-slim-dark min-h-0 flex-1 flex flex-col overflow-y-auto overscroll-contain pr-1 [scrollbar-gutter:stable]`;
 
 function merchantKey(m: MerchantRow) {
   return `${m.name}\0${m.currency}`;
 }
 
-export function MerchantsAnalyticsList({ filterQuery = "" }: { filterQuery?: string }) {
+export function MerchantsAnalyticsList({
+  filterQuery = "",
+  onDateRangeLabel,
+}: {
+  filterQuery?: string;
+  onDateRangeLabel?: (label: string | null) => void;
+}) {
   const [merchants, setMerchants] = useState<MerchantRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(true);
@@ -32,7 +45,9 @@ export function MerchantsAnalyticsList({ filterQuery = "" }: { filterQuery?: str
   const scrollRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
-  const { tip, open, scheduleClose, clearLeave } = useAnalyticsDetail();
+  const { tip, open, scheduleClose, clearLeave, close } = useAnalyticsDetail();
+  const [merchantModal, setMerchantModal] = useState<MerchantRow | null>(null);
+  const [detailDialog, setDetailDialog] = useState<MerchantRow | null>(null);
 
   const nextOffsetRef = useRef(0);
   const hasMoreRef = useRef(true);
@@ -66,6 +81,12 @@ export function MerchantsAnalyticsList({ filterQuery = "" }: { filterQuery?: str
         return;
       }
 
+      if (reset && onDateRangeLabel) {
+        onDateRangeLabel(
+          typeof j.dateRangeLabel === "string" ? j.dateRangeLabel : null,
+        );
+      }
+
       const rows: MerchantRow[] = j.merchants ?? [];
       hasMoreRef.current = j.hasMore === true;
       setHasMore(j.hasMore === true);
@@ -81,7 +102,7 @@ export function MerchantsAnalyticsList({ filterQuery = "" }: { filterQuery?: str
         setLoading(false);
       }
     }
-  }, []);
+  }, [onDateRangeLabel]);
 
   useEffect(() => {
     void loadPage(true);
@@ -164,27 +185,28 @@ export function MerchantsAnalyticsList({ filterQuery = "" }: { filterQuery?: str
               return (
                 <li
                   key={merchantKey(m)}
-                  className="flex cursor-default items-center gap-3 rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 py-2 transition-colors hover:border-white/12 hover:bg-white/[0.05]"
-                  onMouseEnter={(e) =>
-                    void open({
-                      rect: e.currentTarget.getBoundingClientRect(),
-                      entity: "merchant",
-                      value: m.name,
-                      label: m.name,
-                      accent: "#0BC18D",
-                      currency: m.currency,
-                    })
-                  }
-                  onMouseLeave={scheduleClose}
+                  className="flex cursor-pointer items-center gap-3 rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 py-2 transition-colors hover:border-white/12 hover:bg-white/[0.05]"
+                  onClick={() => setMerchantModal(m)}
                 >
                   <span className="w-5 shrink-0 text-right text-[10px] font-medium tabular-nums text-white/40">
                     {rank}
                   </span>
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#0BC18D]/12 text-xs font-bold uppercase text-[#0BC18D]">
-                    {(m.name || "?").charAt(0)}
-                  </div>
+                  <MerchantDetailHelpButton
+                    merchant={m}
+                    onHoverOpen={open}
+                    onHoverClose={scheduleClose}
+                    onPin={() => {
+                      close();
+                      setDetailDialog(m);
+                    }}
+                  />
                   <div className="min-w-0 flex-1">
-                    <p className="break-words text-xs font-medium leading-snug text-white/90">{m.name}</p>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <p className="break-words text-xs font-medium leading-snug text-white/90">{m.name}</p>
+                      {m.subcategory ? (
+                        <SubcategoryPill label={m.subcategory} color={m.subcategoryColor} />
+                      ) : null}
+                    </div>
                     <p className="text-[10px] text-white/45">
                       {m.count} {m.count === 1 ? "transaction" : "transactions"}
                     </p>
@@ -210,9 +232,13 @@ export function MerchantsAnalyticsList({ filterQuery = "" }: { filterQuery?: str
 
       {typeof document !== "undefined" &&
         tip &&
+        !detailDialog &&
         createPortal(
           <AnalyticsDetailTooltip
             rect={tip.rect}
+            clientX={tip.clientX}
+            clientY={tip.clientY}
+            avoidRect={tip.avoidRect}
             entity={tip.entity}
             label={tip.label}
             accentColor={tip.accent}
@@ -224,6 +250,86 @@ export function MerchantsAnalyticsList({ filterQuery = "" }: { filterQuery?: str
           />,
           document.body,
         )}
+
+      {detailDialog &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <AnalyticsDetailDialog
+            entity="merchant"
+            value={detailDialog.name}
+            label={detailDialog.name}
+            accentColor="#0BC18D"
+            currency={detailDialog.currency}
+            onClose={() => setDetailDialog(null)}
+          />,
+          document.body,
+        )}
+
+      {merchantModal &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <CategoryTransactionsModal
+            filter={{ mode: "merchant", name: merchantModal.name }}
+            currency={merchantModal.currency}
+            onClose={() => setMerchantModal(null)}
+          />,
+          document.body,
+        )}
     </div>
+  );
+}
+
+function MerchantDetailHelpButton({
+  merchant,
+  onHoverOpen,
+  onHoverClose,
+  onPin,
+}: {
+  merchant: MerchantRow;
+  onHoverOpen: ReturnType<typeof useAnalyticsDetail>["open"];
+  onHoverClose: ReturnType<typeof useAnalyticsDetail>["scheduleClose"];
+  onPin: () => void;
+}) {
+  const showTip = (e: MouseEvent<HTMLButtonElement>) => {
+    void onHoverOpen({
+      ...detailTipAnchorFromEvent(e),
+      entity: "merchant",
+      value: merchant.name,
+      label: merchant.name,
+      accent: "#0BC18D",
+      currency: merchant.currency,
+    });
+  };
+
+  return (
+    <button
+      type="button"
+      className="grid h-6 w-6 shrink-0 place-items-center rounded-full border border-white/20 bg-white/[0.04] text-[10px] font-bold leading-none text-white/55 transition-colors hover:border-white/40 hover:bg-white/[0.08] hover:text-white/85"
+      aria-label={`Details for ${merchant.name}`}
+      onMouseEnter={showTip}
+      onMouseLeave={onHoverClose}
+      onClick={(e) => {
+        e.stopPropagation();
+        onPin();
+      }}
+    >
+      ?
+    </button>
+  );
+}
+
+function SubcategoryPill({ label, color }: { label: string; color: string | null }) {
+  const accent = color && /^#[0-9A-Fa-f]{6}$/.test(color) ? color : "#808080";
+  return (
+    <span
+      className="inline-flex max-w-[9rem] shrink-0 items-center truncate rounded-full border px-1.5 py-0.5 text-[9px] font-semibold leading-none"
+      style={{
+        color: accent,
+        borderColor: `${accent}55`,
+        backgroundColor: `${accent}18`,
+      }}
+    >
+      {label}
+    </span>
   );
 }

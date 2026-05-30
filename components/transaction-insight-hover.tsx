@@ -92,7 +92,7 @@ function TransactionInsightPanel({ txn }: { txn: TransactionInsightData }) {
         "bg-gradient-to-br from-[#0BC18D]/35 via-[#2CA2FF]/25 to-[#AD74FF]/35",
       )}
     >
-      <div className="rounded-[0.9rem] bg-[#120a28] px-3.5 py-3 backdrop-blur-xl overflow-hidden">
+      <div className="rounded-[0.9rem] bg-[#161616] px-3.5 py-3 backdrop-blur-xl overflow-hidden">
         <section className="mb-1">
           <Row label="As on statement" icon={Receipt}>
             <span className="whitespace-pre-wrap break-words font-mono text-[10px] text-white/70">

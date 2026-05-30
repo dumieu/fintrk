@@ -8,8 +8,6 @@ import { DemoCategoriesSection } from "./sections/categories";
 import { DemoAccountsSection } from "./sections/accounts";
 import { DemoTransactionsSection } from "./sections/transactions";
 import { DemoRecurringSection } from "./sections/recurring";
-import { DemoGoalsSection } from "./sections/goals";
-import { DemoBudgetsSection } from "./sections/budgets";
 import { DemoInsightsSection } from "./sections/insights";
 import { DemoFooter } from "./sections/footer";
 
@@ -41,11 +39,7 @@ export default function DemoPage() {
           </div>
           <DemoAccountsSection />
           <DemoTransactionsSection />
-          <div className="grid gap-6 lg:grid-cols-2">
-            <DemoRecurringSection />
-            <DemoBudgetsSection />
-          </div>
-          <DemoGoalsSection />
+          <DemoRecurringSection />
           <DemoFooter />
         </div>
       </div>

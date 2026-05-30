@@ -101,7 +101,7 @@ export default function XRayPage() {
 
   if (loading) {
     return (
-      <div className="min-h-[80vh] bg-gradient-to-b from-[#04060d] via-[#06091a] to-[#0a0f24]">
+      <div className="min-h-[80vh] bg-app-canvas">
         <div className="mx-auto max-w-7xl px-4 py-16 text-center">
           <Loader2 className="mx-auto h-8 w-8 animate-spin text-emerald-400" />
           <p className="mt-3 text-sm text-white/60">Decoding your spending DNA…</p>
@@ -112,7 +112,7 @@ export default function XRayPage() {
 
   if (error || !data) {
     return (
-      <div className="min-h-[80vh] bg-gradient-to-b from-[#04060d] via-[#06091a] to-[#0a0f24]">
+      <div className="min-h-[80vh] bg-app-canvas">
         <div className="mx-auto max-w-3xl px-4 py-16 text-center">
           <AlertOctagon className="mx-auto h-8 w-8 text-rose-400" />
           <h2 className="mt-3 text-xl font-bold text-white">X-Ray unavailable</h2>
@@ -120,7 +120,7 @@ export default function XRayPage() {
             {error ?? "We couldn't load your spending data right now."}
           </p>
           <Link
-            href="/dashboard"
+            href="/dashboard/cashflow"
             className="mt-6 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm text-white hover:bg-white/10"
           >
             Back to dashboard
@@ -134,7 +134,7 @@ export default function XRayPage() {
   const noData = data.totals.txCount === 0;
   if (noData) {
     return (
-      <div className="min-h-[80vh] bg-gradient-to-b from-[#04060d] via-[#06091a] to-[#0a0f24]">
+      <div className="min-h-[80vh] bg-app-canvas">
         <div className="mx-auto max-w-3xl px-4 py-16 text-center">
           <ScanSearch className="mx-auto h-10 w-10 text-emerald-400" />
           <h2 className="mt-3 text-2xl font-bold text-white">Nothing to X-ray yet</h2>
@@ -154,7 +154,7 @@ export default function XRayPage() {
   }
 
   return (
-    <div className="relative min-h-full bg-gradient-to-b from-[#04060d] via-[#06091a] to-[#0a0f24] pb-12">
+    <div className="relative min-h-full bg-app-canvas pb-12">
       <Aurora />
 
       <div className="relative mx-auto max-w-7xl px-4 py-8">

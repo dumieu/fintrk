@@ -1,7 +1,10 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import type { ReactNode } from "react";
 import { HamburgerMenu } from "@/components/hamburger-menu";
+import { CashflowSummary } from "@/components/cashflow-summary";
+import { CashflowLegendHelpButton } from "@/components/cashflow-legend-help";
 
 /**
  * Static title + subtitle for each top-level dashboard page. The header swaps
@@ -10,13 +13,10 @@ import { HamburgerMenu } from "@/components/hamburger-menu";
  */
 const PAGE_META: Array<{ match: (p: string) => boolean; title: string; subtitle: string }> = [
   // Order matters — most specific matches first.
-  { match: (p) => p === "/dashboard", title: "Financial Command Center", subtitle: "Your money at a glance" },
   { match: (p) => p.startsWith("/dashboard/upload"), title: "Upload Statement", subtitle: "Import your bank statements — AI extracts, classifies, and analyzes every transaction" },
   { match: (p) => p.startsWith("/dashboard/transactions"), title: "Transactions", subtitle: "Browse, edit, and manage every line of your financial history" },
   { match: (p) => p.startsWith("/dashboard/cashflow"), title: "Cashflow", subtitle: "Watch every dollar move through your life — from income, into spending and savings" },
   { match: (p) => p.startsWith("/dashboard/analytics"), title: "Spending Intelligence", subtitle: "Deep analysis of your financial patterns" },
-  { match: (p) => p.startsWith("/dashboard/budget"), title: "Budget Manager", subtitle: "Set spending limits and track progress" },
-  { match: (p) => p.startsWith("/dashboard/goals"), title: "Financial Goals", subtitle: "Track your savings targets and milestones" },
   { match: (p) => p.startsWith("/dashboard/net-worth"), title: "Net Worth Atlas", subtitle: "Map your wealth today — then watch it compound 5, 10, 20, 30 years out" },
   { match: (p) => p.startsWith("/dashboard/accounts"), title: "Accounts", subtitle: "Linked bank, card, and investment accounts" },
   { match: (p) => p.startsWith("/dashboard/categories"), title: "Category Mapping", subtitle: "Curate how transactions roll up into categories and subcategories" },
@@ -28,24 +28,31 @@ const PAGE_META: Array<{ match: (p: string) => boolean; title: string; subtitle:
 
 const FALLBACK = { title: "Dashboard", subtitle: "" };
 
-export function DashboardHeader() {
+export function DashboardHeader({ ribbon = null }: { ribbon?: ReactNode }) {
   const pathname = usePathname() ?? "";
   const meta = PAGE_META.find((m) => m.match(pathname)) ?? FALLBACK;
+  const showCashflowSummary = pathname.startsWith("/dashboard/analytics");
+  const showCashflowLegend = pathname.startsWith("/dashboard/cashflow");
+  const trailing = ribbon ?? (showCashflowSummary ? <CashflowSummary months={12} variant="ribbon" /> : null);
 
   return (
     <header className="sticky top-0 z-40 shrink-0 border-b border-border/40 bg-background/80 backdrop-blur-md">
-      <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-4">
+      <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2 sm:min-h-14 sm:flex-nowrap sm:py-2">
         <HamburgerMenu />
-        <div className="flex min-w-0 flex-1 flex-col leading-tight">
-          <h1 className="truncate text-sm font-bold tracking-tight text-foreground sm:text-base">
-            {meta.title}
-          </h1>
+        <div className="flex min-w-0 flex-1 flex-col justify-center leading-tight">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <h1 className="truncate text-sm font-bold tracking-tight text-foreground sm:text-base">
+              {meta.title}
+            </h1>
+            {showCashflowLegend ? <CashflowLegendHelpButton /> : null}
+          </div>
           {meta.subtitle && (
             <p className="hidden truncate text-[11px] text-muted-foreground sm:block">
               {meta.subtitle}
             </p>
           )}
         </div>
+        {trailing ? <div className="flex min-w-0 shrink-0 items-center">{trailing}</div> : null}
       </div>
     </header>
   );

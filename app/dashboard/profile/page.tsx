@@ -55,7 +55,7 @@ export default function ProfilePage() {
   const handleOpenChange = useCallback((open: boolean) => {
     setDialogOpen(open);
     if (!open) {
-      if (state === "done") window.location.href = "/dashboard";
+      if (state === "done") window.location.href = "/dashboard/cashflow";
       setState("idle");
       setConfirmText("");
       setErrorMsg("");
@@ -238,7 +238,7 @@ export default function ProfilePage() {
                     </DialogTitle>
                     <DialogDescription>
                       This will permanently delete <strong>all</strong> your transactions,
-                      statements, accounts, upload history, budgets, goals, and AI insights.
+                      statements, accounts, upload history, and AI insights.
                       You cannot undo this.
                     </DialogDescription>
                   </DialogHeader>

@@ -7,7 +7,11 @@ import {
   leafCategory,
   parentCategory,
 } from "@/lib/db/category-rollup";
-import { excludeCardPaymentsSql } from "@/lib/db/excluded-transactions";
+import {
+  excludeCardPaymentsSql,
+  spendingIntelligenceInflowSql,
+  spendingIntelligenceOutflowSql,
+} from "@/lib/db/excluded-transactions";
 import { eq, and, sql } from "drizzle-orm";
 import { logServerError } from "@/lib/safe-error";
 
@@ -113,6 +117,8 @@ export interface MonthlyStacksResponse {
   avgMonthlyIncomeLast6: number | null;
   /** Count of income-bearing months actually used for the average. */
   incomeMonthsCount: number;
+  /** Mean monthly spend across the rightmost 6 bars in the chart window. */
+  avgMonthlySpendLast6: number | null;
   primaryCurrency: string;
   monthsRequested: number;
 }
@@ -146,7 +152,7 @@ export async function GET(request: NextRequest) {
           and(
             eq(transactions.userId, userId),
             excludeCardPaymentsSql(),
-            sql`CAST(${transactions.baseAmount} AS numeric) < 0`,
+            spendingIntelligenceOutflowSql(),
           ),
         ),
     );
@@ -196,7 +202,7 @@ export async function GET(request: NextRequest) {
             and(
               eq(transactions.userId, userId),
               excludeCardPaymentsSql(),
-              sql`CAST(${transactions.baseAmount} AS numeric) < 0`,
+              spendingIntelligenceOutflowSql(),
               sql`${transactions.postedDate}::date >= ${startDate}::date`,
               sql`${transactions.postedDate}::date < (${endDateExclusive}::date + interval '1 month')`,
             ),
@@ -227,7 +233,7 @@ export async function GET(request: NextRequest) {
             and(
               eq(transactions.userId, userId),
               excludeCardPaymentsSql(),
-              sql`CAST(${transactions.baseAmount} AS numeric) > 0`,
+              spendingIntelligenceInflowSql(),
             ),
           )
           .groupBy(sql`date_trunc('month', ${transactions.postedDate}::date)`)
@@ -295,6 +301,13 @@ export async function GET(request: NextRequest) {
         ? Math.round((incomeSum / incomeMonthsCount) * 100) / 100
         : null;
 
+    const spendLast6 = monthsOut.slice(-Math.min(6, monthsOut.length));
+    const spendLast6Sum = spendLast6.reduce((s, m) => s + m.total, 0);
+    const avgMonthlySpendLast6 =
+      spendLast6.length > 0
+        ? Math.round((spendLast6Sum / spendLast6.length) * 100) / 100
+        : null;
+
     const payload: MonthlyStacksResponse = {
       months: monthsOut,
       categories,
@@ -302,6 +315,7 @@ export async function GET(request: NextRequest) {
       grandTotal: Math.round(grandTotal * 100) / 100,
       avgMonthlyIncomeLast6,
       incomeMonthsCount,
+      avgMonthlySpendLast6,
       primaryCurrency,
       monthsRequested: months,
     };

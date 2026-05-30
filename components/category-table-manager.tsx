@@ -711,14 +711,14 @@ export function CategoryTableManager() {
 
   if (loading) {
     return (
-      <div className="min-h-[60vh] bg-gradient-to-b from-[#08051a] via-[#10082a] to-[#160e35] flex items-center justify-center">
+      <div className="min-h-[60vh] bg-app-canvas flex items-center justify-center">
         <Loader2 className="w-5 h-5 text-white/20 animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-[80vh] bg-gradient-to-b from-[#08051a] via-[#10082a] to-[#160e35]">
+    <div className="min-h-[80vh] bg-app-canvas">
       <div className="mx-auto max-w-4xl px-4 py-8">
         {/* Flow + expense type slicers — side by side (single row) */}
         <div className="mb-4 flex w-full min-w-0 flex-row flex-wrap items-stretch gap-3">

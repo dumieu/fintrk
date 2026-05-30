@@ -1,11 +1,13 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   AnalyticsDetailTooltip,
+  detailTipAnchorFromEvent,
 } from "@/components/analytics-detail-tooltip";
 import { useAnalyticsDetail } from "@/components/use-analytics-detail";
+import { CategoryTransactionsModal } from "@/components/category-transactions-modal";
 
 interface SpendingBar {
   label: string;
@@ -27,6 +29,7 @@ export function SpendingChart({ bars, currency, maxAmount }: SpendingChartProps)
   );
 
   const { tip, open, scheduleClose, clearLeave } = useAnalyticsDetail();
+  const [categoryModal, setCategoryModal] = useState<string | null>(null);
 
   if (bars.length === 0) {
     return (
@@ -38,7 +41,7 @@ export function SpendingChart({ bars, currency, maxAmount }: SpendingChartProps)
 
   return (
     <>
-      <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto overscroll-contain pr-1 [scrollbar-gutter:stable]">
+      <div className="scrollbar-slim-dark min-h-0 flex-1 space-y-2.5 overflow-y-auto overscroll-contain pr-1 [scrollbar-gutter:stable]">
         {bars.map((bar, i) => {
           const pct = (Math.abs(bar.amount) / max) * 100;
           const amt = Math.abs(bar.amount);
@@ -53,10 +56,11 @@ export function SpendingChart({ bars, currency, maxAmount }: SpendingChartProps)
           return (
             <div
               key={`${bar.label}-${i}`}
-              className="group cursor-default"
+              className="group cursor-pointer"
+              onClick={() => setCategoryModal(bar.label)}
               onMouseEnter={(e) =>
                 void open({
-                  rect: e.currentTarget.getBoundingClientRect(),
+                  ...detailTipAnchorFromEvent(e),
                   entity: "category",
                   value: bar.label,
                   label: bar.label,
@@ -101,6 +105,9 @@ export function SpendingChart({ bars, currency, maxAmount }: SpendingChartProps)
         createPortal(
           <AnalyticsDetailTooltip
             rect={tip.rect}
+            clientX={tip.clientX}
+            clientY={tip.clientY}
+            avoidRect={tip.avoidRect}
             entity={tip.entity}
             label={tip.label}
             accentColor={tip.accent}
@@ -109,6 +116,17 @@ export function SpendingChart({ bars, currency, maxAmount }: SpendingChartProps)
             errorMessage={tip.error}
             onMouseEnter={clearLeave}
             onMouseLeave={scheduleClose}
+          />,
+          document.body,
+        )}
+
+      {categoryModal &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <CategoryTransactionsModal
+            filter={{ mode: "category", name: categoryModal, level: "category" }}
+            currency={currency}
+            onClose={() => setCategoryModal(null)}
           />,
           document.body,
         )}

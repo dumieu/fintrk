@@ -6,7 +6,7 @@ import { motion } from "framer-motion";
 
 export default function UploadPage() {
   return (
-    <div className="min-h-[80vh] bg-gradient-to-b from-[#08051a] via-[#10082a] to-[#160e35]">
+    <div className="min-h-[80vh] bg-app-canvas">
       <div className="mx-auto max-w-7xl px-4 py-8">
         <StatementUpload />
         <div className="mx-auto max-w-3xl">

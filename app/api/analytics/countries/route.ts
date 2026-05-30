@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
 import { db, resilientQuery, resilientRawSql, rawSql } from "@/lib/db";
 import { transactions, accounts } from "@/lib/db/schema";
-import { excludeCardPaymentsSql } from "@/lib/db/excluded-transactions";
+import {
+  excludeCardPaymentsSql,
+  spendingIntelligenceOutflowSql,
+  SPENDING_INTELLIGENCE_OUTFLOW_RAW,
+} from "@/lib/db/excluded-transactions";
 import { eq, and, sql } from "drizzle-orm";
 import { logServerError } from "@/lib/safe-error";
 
@@ -36,7 +40,7 @@ export async function GET(request: NextRequest) {
       eq(transactions.userId, userId),
       excludeCardPaymentsSql(),
       sql`${transactions.countryIso} IS NOT NULL`,
-      sql`CAST(${transactions.baseAmount} AS numeric) < 0`,
+      spendingIntelligenceOutflowSql(),
     );
 
     const [rows, grandRow, userAccounts, maxRows] = await Promise.all([
@@ -79,7 +83,7 @@ export async function GET(request: NextRequest) {
             FROM transactions
             WHERE user_id = ${userId}
               AND country_iso IS NOT NULL
-              AND CAST(base_amount AS numeric) < 0
+              AND ${SPENDING_INTELLIGENCE_OUTFLOW_RAW}
               AND NOT EXISTS (
                 SELECT 1
                 FROM user_categories card_payment_category

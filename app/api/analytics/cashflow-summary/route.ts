@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
 import { transactions, accounts } from "@/lib/db/schema";
-import { excludeCardPaymentsSql } from "@/lib/db/excluded-transactions";
+import {
+  excludeCardPaymentsSql,
+  spendingIntelligenceInflowSql,
+  spendingIntelligenceOutflowSql,
+} from "@/lib/db/excluded-transactions";
 import { eq, and, sql } from "drizzle-orm";
 import { logServerError } from "@/lib/safe-error";
 
@@ -68,15 +72,18 @@ export async function GET(request: NextRequest) {
         db
           .select({
             month: sql<string>`to_char(date_trunc('month', ${transactions.postedDate}::date), 'YYYY-MM')`,
-            income: sql<string>`COALESCE(SUM(CASE WHEN CAST(${transactions.baseAmount} AS numeric) > 0 THEN CAST(${transactions.baseAmount} AS numeric) END), 0)`,
-            expenses: sql<string>`COALESCE(SUM(CASE WHEN CAST(${transactions.baseAmount} AS numeric) < 0 THEN -CAST(${transactions.baseAmount} AS numeric) END), 0)`,
+            income: sql<string>`COALESCE(SUM(CASE WHEN ${spendingIntelligenceInflowSql()} THEN CAST(${transactions.baseAmount} AS numeric) END), 0)`,
+            expenses: sql<string>`COALESCE(SUM(CASE WHEN ${spendingIntelligenceOutflowSql()} THEN -CAST(${transactions.baseAmount} AS numeric) END), 0)`,
           })
           .from(transactions)
           .where(
             and(
               eq(transactions.userId, userId),
               excludeCardPaymentsSql(),
-              sql`CAST(${transactions.baseAmount} AS numeric) <> 0`,
+              sql`(
+                ${spendingIntelligenceInflowSql()}
+                OR ${spendingIntelligenceOutflowSql()}
+              )`,
             ),
           )
           .groupBy(sql`date_trunc('month', ${transactions.postedDate}::date)`)

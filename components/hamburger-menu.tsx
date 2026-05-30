@@ -15,12 +15,9 @@ import {
 import { Button } from "@/components/ui/button";
 import {
   Menu,
-  LayoutDashboard,
   User,
   Upload,
   ArrowLeftRight,
-  PiggyBank,
-  Target,
   BarChart3,
   Landmark,
   Mail,
@@ -72,8 +69,6 @@ export function HamburgerMenu() {
     { label: "Spend Analytics", href: `${basePath}/analytics`, icon: BarChart3 },
     { label: "Money X-Ray", href: `${basePath}/x-ray`, icon: ScanSearch, accent: true as const },
     { label: "Net Worth Atlas", href: `${basePath}/net-worth`, icon: Sparkles, accent: true as const },
-    { label: "Budget", href: `${basePath}/budget`, icon: PiggyBank },
-    { label: "Goals", href: `${basePath}/goals`, icon: Target },
     { label: "Accounts", href: `${basePath}/accounts`, icon: Landmark },
     { label: "Category Mapping", href: `${basePath}/categories`, icon: Network },
   ];
@@ -103,42 +98,6 @@ export function HamburgerMenu() {
         </SheetHeader>
 
         <nav className="flex-1 px-3 py-3">
-          <div className="mb-2">
-            <SheetClose
-              nativeButton={false}
-              render={
-                <Link
-                  href={basePath}
-                  className="group block rounded-xl p-3 transition-all duration-300 hover:shadow-md"
-                  style={{
-                    background: pathname === basePath
-                      ? `linear-gradient(135deg, rgba(${ACCENT_RGB},0.12) 0%, rgba(${ACCENT_RGB},0.04) 100%)`
-                      : undefined,
-                    border: `1px solid rgba(${ACCENT_RGB},${pathname === basePath ? 0.25 : 0.1})`,
-                  }}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <div
-                      className="w-6 h-6 rounded-md flex items-center justify-center shrink-0"
-                      style={{
-                        backgroundColor: `rgba(${ACCENT_RGB},0.12)`,
-                        boxShadow: `0 0 8px rgba(${ACCENT_RGB},0.1)`,
-                      }}
-                    >
-                      <LayoutDashboard className="w-3.5 h-3.5" style={{ color: ACCENT_HEX }} />
-                    </div>
-                    <span
-                      className="text-sm font-semibold"
-                      style={{ color: pathname === basePath ? ACCENT_HEX : undefined }}
-                    >
-                      My Dashboard
-                    </span>
-                  </div>
-                </Link>
-              }
-            />
-          </div>
-
           <ul className="space-y-1">
             <li>
               <SheetClose

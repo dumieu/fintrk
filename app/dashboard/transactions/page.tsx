@@ -262,7 +262,7 @@ function FlagsCell({
         {hasFx && <Globe className="h-3 w-3 shrink-0 text-[#AD74FF]/70" aria-hidden />}
 
         <div className="pointer-events-none absolute bottom-[calc(100%+8px)] left-1/2 z-50 w-max max-w-[min(240px,calc(100vw-2rem))] -translate-x-1/2 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
-          <div className="rounded-lg border border-white/15 bg-[#1a1230]/98 px-2.5 py-2 text-left text-[10px] leading-snug text-white/90 shadow-xl backdrop-blur-md">
+          <div className="rounded-lg border border-white/15 bg-[#1a1a1a]/98 px-2.5 py-2 text-left text-[10px] leading-snug text-white/90 shadow-xl backdrop-blur-md">
             {countryLine && <p className="font-medium text-white">{countryLine}</p>}
             <p className={cn("text-white/75", countryLine && "mt-1")}>
               <span className="text-white/50">Type: </span>
@@ -415,7 +415,7 @@ function TransactionLabelCell({
       ? createPortal(
           <div
             data-label-editor-floating
-            className="flex flex-col gap-1.5 overflow-y-auto rounded-lg border border-white/20 bg-[#120a28] p-2 shadow-2xl shadow-black/70 ring-1 ring-black/50"
+            className="flex flex-col gap-1.5 overflow-y-auto rounded-lg border border-white/20 bg-[#161616] p-2 shadow-2xl shadow-black/70 ring-1 ring-black/50"
             style={{
               position: "fixed",
               top: panelRect.top,
@@ -423,7 +423,7 @@ function TransactionLabelCell({
               width: panelRect.width,
               maxHeight: panelRect.maxHeight,
               zIndex: LABEL_EDITOR_Z,
-              backgroundColor: "#120a28",
+              backgroundColor: "#161616",
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -954,7 +954,7 @@ function CategoryCellEditor({
       {/* Dropdown */}
       <div
         ref={dropdownRef}
-        className="absolute left-0 top-[calc(100%+4px)] z-50 w-[280px] max-h-[340px] flex flex-col rounded-xl border border-white/15 bg-[#120a28]/98 shadow-2xl backdrop-blur-lg overflow-hidden"
+        className="absolute left-0 top-[calc(100%+4px)] z-50 w-[280px] max-h-[340px] flex flex-col rounded-xl border border-white/15 bg-[#161616]/98 shadow-2xl backdrop-blur-lg overflow-hidden"
       >
         {/* Search */}
         <div className="shrink-0 px-2.5 pt-2 pb-1.5">
@@ -1638,7 +1638,7 @@ export default function TransactionsPage() {
   const selectedCount = selectedIds.size;
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-gradient-to-b from-[#08051a] via-[#10082a] to-[#160e35]">
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-app-canvas">
       <div className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col px-2.5 py-3 sm:px-4 sm:py-4">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -1763,7 +1763,7 @@ export default function TransactionsPage() {
             }}
           >
             <div
-              className="w-full max-w-md rounded-xl border border-white/15 bg-[#120a28] p-6 shadow-2xl"
+              className="w-full max-w-md rounded-xl border border-white/15 bg-[#161616] p-6 shadow-2xl"
               onClick={(e) => e.stopPropagation()}
             >
               <h2 id="txn-delete-title" className="text-lg font-semibold text-white">
@@ -1841,7 +1841,7 @@ export default function TransactionsPage() {
                 title={filters.warningOnly ? "Showing highlighted transactions only" : "Show highlighted transactions only"}
                 className={cn(
                   "inline-flex min-h-[2.5rem] w-12 shrink-0 items-center justify-center rounded-xl border px-3 py-2.5 transition-all sm:w-auto",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ECAA0B]/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#08051a]",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ECAA0B]/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0a]",
                   filters.warningOnly
                     ? "border-[#ECAA0B]/80 bg-[#ECAA0B]/15 text-[#ECAA0B] shadow-[0_0_24px_-8px_rgba(236,170,11,0.75)]"
                     : "border-white/15 bg-white/[0.045] text-white/25 hover:border-[#ECAA0B]/45 hover:bg-[#ECAA0B]/10 hover:text-[#ECAA0B]/75",
@@ -1865,7 +1865,7 @@ export default function TransactionsPage() {
                 className={cn(
                   "group relative flex w-full min-w-0 items-center justify-center gap-2 overflow-hidden rounded-xl border border-[#0BC18D]/45 bg-gradient-to-br from-[#0BC18D]/18 via-[#6D28D9]/12 to-[#2CA2FF]/15 px-4 py-2.5 text-sm font-semibold text-white shadow-[0_0_28px_-10px_rgba(11,193,141,0.55)] transition-[border-color,box-shadow,transform] sm:w-auto sm:min-w-[8.5rem]",
                   "hover:border-[#0BC18D]/80 hover:shadow-[0_0_36px_-8px_rgba(11,193,141,0.65)] active:scale-[0.98]",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0BC18D]/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#08051a]",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0BC18D]/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0a]",
                 )}
                 aria-expanded={filtersSheetOpen}
                 aria-controls="txn-filters-panel"
@@ -1960,7 +1960,7 @@ export default function TransactionsPage() {
                 className="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-auto overscroll-y-contain [scrollbar-gutter:stable]"
               >
                 {/* Desktop header — sticky within scroll area */}
-                <div className="sticky top-0 z-10 hidden sm:grid sm:grid-cols-[auto_minmax(0,1.65fr)_minmax(4.5rem,6.5rem)_minmax(0,12rem)_minmax(7.5rem,10rem)_80px_minmax(7rem,1.25fr)_64px] sm:items-center sm:justify-items-stretch gap-2 border-b border-white/10 bg-[#10082a]/95 px-3 py-2.5 backdrop-blur-md sm:px-4 sm:py-3">
+                <div className="sticky top-0 z-10 hidden sm:grid sm:grid-cols-[auto_minmax(0,1.65fr)_minmax(4.5rem,6.5rem)_minmax(0,12rem)_minmax(7.5rem,10rem)_80px_minmax(7rem,1.25fr)_64px] sm:items-center sm:justify-items-stretch gap-2 border-b border-white/10 bg-[#121212]/95 px-3 py-2.5 backdrop-blur-md sm:px-4 sm:py-3">
                   <div className="flex min-w-0 items-center justify-center gap-1">
                     <span className="inline-flex h-7 w-7 shrink-0" aria-hidden />
                     <button

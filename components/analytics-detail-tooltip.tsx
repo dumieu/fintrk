@@ -8,18 +8,32 @@ import {
   useState,
   type CSSProperties,
 } from "react";
+import { createPortal } from "react-dom";
+import { X } from "lucide-react";
 import { formatCurrency } from "@/lib/format";
 import type {
   AnalyticsDetailMonth,
   AnalyticsDetailResponse,
   AnalyticsDetailRow,
-  AnalyticsDetailTxn,
 } from "@/app/api/analytics/detail/route";
 import { currencyMeta } from "@/components/currency-meta";
-
-const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+import { computeSmartTooltipPlacement } from "@/lib/smart-tooltip-position";
+import { loadAnalyticsDetail } from "@/components/use-analytics-detail";
 
 export type DetailEntity = "category" | "merchant" | "country" | "dow" | "currency";
+
+/** Build tooltip anchor from a hover target — cursor position + card rect to avoid. */
+export function detailTipAnchorFromEvent(
+  e: { currentTarget: EventTarget & Element; clientX: number; clientY: number },
+) {
+  const el = e.currentTarget;
+  return {
+    rect: el.getBoundingClientRect(),
+    clientX: e.clientX,
+    clientY: e.clientY,
+    avoidRect: el.closest('[data-slot="card"]')?.getBoundingClientRect() ?? null,
+  };
+}
 
 const ENTITY_TYPE_LABEL: Record<DetailEntity, string> = {
   category: "Category",
@@ -94,6 +108,9 @@ function relativeFromMonths(monthly: AnalyticsDetailMonth[]): {
   };
 }
 
+const TOOLTIP_MAX_WIDTH = 520;
+const TOOLTIP_VIEWPORT_MARGIN = 10;
+
 function MonthlyTrendChart({
   monthly,
   median,
@@ -133,12 +150,12 @@ function MonthlyTrendChart({
   const avgY = padTop + ((max - avg) / max) * innerH;
 
   return (
-    <div className="rounded-xl border border-white/[0.08] bg-white/[0.025] p-2.5">
-      <div className="mb-1.5 flex items-baseline justify-between">
-        <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-white/40">
+    <div className="min-w-0 max-w-full overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.025] p-2.5">
+      <div className="mb-1.5 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
+        <p className="shrink-0 text-[9px] font-semibold uppercase tracking-[0.18em] text-white/40">
           Monthly trend · 12 mo
         </p>
-        <div className="flex items-center gap-2 text-[9px] tabular-nums text-white/45">
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-x-2 gap-y-0.5 text-[9px] tabular-nums text-white/45">
           <span className="flex items-center gap-1">
             <span className="inline-block h-1.5 w-2.5 rounded-full" style={{ background: accent }} />
             month
@@ -157,7 +174,7 @@ function MonthlyTrendChart({
           )}
         </div>
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="block h-auto w-full" role="img" aria-label="Monthly spend">
+      <svg viewBox={`0 0 ${W} ${H}`} className="block h-auto w-full max-w-full" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Monthly spend">
         <defs>
           <linearGradient id="mtc-bar" x1="0%" y1="0%" x2="0%" y2="100%">
             <stop offset="0%" stopColor={accent} stopOpacity={0.95} />
@@ -224,61 +241,6 @@ function MonthlyTrendChart({
           );
         })}
       </svg>
-    </div>
-  );
-}
-
-function DowStrip({
-  values,
-  accent,
-  busiest,
-}: {
-  values: number[];
-  accent: string;
-  busiest: number | null;
-}) {
-  const max = Math.max(...values, 1);
-  return (
-    <div className="rounded-xl border border-white/[0.08] bg-white/[0.025] p-2.5">
-      <p className="mb-1.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-white/40">
-        By day of week
-      </p>
-      <div className="flex items-end justify-between gap-1">
-        {values.map((v, i) => {
-          const h = (v / max) * 32;
-          const isBusiest = i === busiest && v > 0;
-          return (
-            <div key={i} className="flex min-w-0 flex-1 flex-col items-center gap-1">
-              <span className="text-[8px] tabular-nums text-white/45">
-                {v > 0 ? compactNumber(v) : "—"}
-              </span>
-              <div className="relative flex h-[32px] w-full items-end justify-center">
-                <div
-                  className="w-full rounded-t-[3px]"
-                  style={{
-                    height: `${Math.max(h, v > 0 ? 2 : 0)}px`,
-                    background: isBusiest
-                      ? accent
-                      : v > 0
-                        ? "rgba(255,255,255,0.18)"
-                        : "transparent",
-                    boxShadow: isBusiest ? `0 0 8px ${accent}55` : undefined,
-                  }}
-                />
-              </div>
-              <span
-                className={
-                  isBusiest
-                    ? "text-[9px] font-semibold text-white"
-                    : "text-[9px] text-white/45"
-                }
-              >
-                {DAY_LABELS[i]}
-              </span>
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }
@@ -352,42 +314,6 @@ function HorizontalBars({
   );
 }
 
-function TopTransactionList({
-  txns,
-  currency,
-}: {
-  txns: AnalyticsDetailTxn[];
-  currency: string;
-}) {
-  if (!txns || txns.length === 0) {
-    return (
-      <p className="px-2 py-3 text-center text-[10.5px] text-white/40">No transactions in this slice.</p>
-    );
-  }
-  return (
-    <ul className="space-y-1">
-      {txns.map((t, i) => (
-        <li
-          key={`${t.date}-${i}`}
-          className="flex items-baseline justify-between gap-2 rounded-md border border-white/[0.05] bg-white/[0.02] px-2 py-1.5"
-        >
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[11px] font-medium leading-snug text-white/88" title={t.description}>
-              {t.description || "—"}
-            </p>
-            <p className="text-[9px] leading-none text-white/40 tabular-nums">
-              {formatDateShort(t.date)}
-            </p>
-          </div>
-          <span className="shrink-0 text-[11px] font-semibold tabular-nums text-white/95">
-            {formatCurrency(t.amount, t.currency || currency)}
-          </span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
 function KpiTile({
   label,
   value,
@@ -398,14 +324,18 @@ function KpiTile({
   hint?: string;
 }) {
   return (
-    <div className="rounded-lg border border-white/[0.07] bg-white/[0.025] px-2 py-1.5">
-      <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/40">
+    <div className="min-w-0 rounded-lg border border-white/[0.07] bg-white/[0.025] px-2 py-1.5">
+      <p className="truncate text-[9px] font-semibold uppercase tracking-[0.16em] text-white/40">
         {label}
       </p>
-      <p className="mt-0.5 text-[12.5px] font-semibold tabular-nums tracking-tight text-white/95">
+      <p className="mt-0.5 truncate text-[12.5px] font-semibold tabular-nums tracking-tight text-white/95" title={value}>
         {value}
       </p>
-      {hint && <p className="text-[9px] leading-tight text-white/45 tabular-nums">{hint}</p>}
+      {hint && (
+        <p className="truncate text-[9px] leading-tight text-white/45 tabular-nums" title={hint}>
+          {hint}
+        </p>
+      )}
     </div>
   );
 }
@@ -433,6 +363,9 @@ function DeltaPill({ delta }: { delta: number | null }) {
 
 interface DetailTooltipProps {
   rect: DOMRect;
+  clientX: number;
+  clientY: number;
+  avoidRect?: DOMRect | null;
   entity: DetailEntity;
   label: string;
   accentColor: string;
@@ -445,6 +378,9 @@ interface DetailTooltipProps {
 
 export function AnalyticsDetailTooltip({
   rect,
+  clientX,
+  clientY,
+  avoidRect = null,
   entity,
   label,
   accentColor,
@@ -457,64 +393,53 @@ export function AnalyticsDetailTooltip({
   const ref = useRef<HTMLDivElement | null>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
 
-  /** Smart placement: measure tooltip after first paint, then choose the side that fits without clipping. */
+  /** Cursor-anchored placement: one tooltip corner on the pointer, growing away from the host card. */
   useLayoutEffect(() => {
     const node = ref.current;
     if (!node) return;
-    const margin = 10;
-    const winW = window.innerWidth;
-    const winH = window.innerHeight;
     const r = node.getBoundingClientRect();
-    const tw = r.width;
-    const th = r.height;
-
-    /** Anchor point: row right edge for list rows; row centre when row is wide (bars). */
-    const wide = rect.width > 220;
-    const anchorX = wide ? rect.left + rect.width / 2 : rect.right;
-    let left = wide ? anchorX - tw / 2 : anchorX + 12;
-    let top = rect.top + rect.height / 2 - th / 2;
-
-    /** Horizontal clamp; if the right-of-row layout would clip, flip to left of row. */
-    if (!wide && left + tw + margin > winW) {
-      left = rect.left - tw - 12;
-    }
-    left = Math.min(winW - margin - tw, Math.max(margin, left));
-
-    /** Vertical clamp; if vertical centring clips, anchor to top edge of row, then clamp. */
-    if (top + th + margin > winH) top = winH - margin - th;
-    if (top < margin) top = margin;
-
-    setPos({ left, top });
-  }, [rect, data, loading, errorMessage]);
+    setPos(
+      computeSmartTooltipPlacement({
+        clientX,
+        clientY,
+        tooltipWidth: r.width,
+        tooltipHeight: r.height,
+        avoidRect,
+      }),
+    );
+  }, [clientX, clientY, avoidRect, data, loading, errorMessage, rect]);
 
   useEffect(() => {
     const onResize = () => {
       const node = ref.current;
       if (!node) return;
-      // trigger remount of layout effect by clearing pos to recompute on next paint
-      setPos(null);
+      const r = node.getBoundingClientRect();
+      setPos(
+        computeSmartTooltipPlacement({
+          clientX,
+          clientY,
+          tooltipWidth: r.width,
+          tooltipHeight: r.height,
+          avoidRect,
+        }),
+      );
     };
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
-  }, []);
-
-  /** Re-measure when data settles. */
-  useLayoutEffect(() => {
-    if (!data && !loading) return;
-  }, [data, loading]);
+  }, [clientX, clientY, avoidRect]);
 
   const style: CSSProperties = {
     left: pos?.left ?? -9999,
     top: pos?.top ?? -9999,
-    width: "min(420px, calc(100vw - 20px))",
-    maxWidth: 420,
+    width: `min(${TOOLTIP_MAX_WIDTH}px, calc(100vw - ${TOOLTIP_VIEWPORT_MARGIN * 2}px))`,
+    maxWidth: TOOLTIP_MAX_WIDTH,
     visibility: pos ? "visible" : "hidden",
   };
 
   return (
     <div
       ref={ref}
-      className="pointer-events-auto fixed z-[9999] rounded-2xl border border-white/[0.12] bg-[#0a0814]/[0.97] shadow-[0_24px_64px_-12px_rgba(0,0,0,0.85),inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-xl"
+      className="pointer-events-auto fixed z-[9999] box-border overflow-x-hidden overflow-y-visible rounded-2xl border border-white/[0.12] bg-[#111111]/[0.97] shadow-[0_24px_64px_-12px_rgba(0,0,0,0.85),inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-xl"
       style={style}
       role="tooltip"
       onMouseEnter={onMouseEnter}
@@ -556,7 +481,7 @@ function DetailContent({
   const metrics = useMemo(() => (data ? relativeFromMonths(data.monthly) : null), [data]);
 
   return (
-    <div className="relative max-h-[min(560px,calc(100vh-40px))] overflow-y-auto overscroll-contain rounded-2xl">
+    <div className="relative min-w-0 overflow-x-hidden overflow-y-visible rounded-2xl">
       <div
         className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent"
         aria-hidden
@@ -566,7 +491,7 @@ function DetailContent({
         style={{ background: `radial-gradient(circle at center, ${accentColor}88 0%, transparent 65%)` }}
         aria-hidden
       />
-      <div className="relative space-y-3 px-3 pb-3 pt-3">
+      <div className="relative min-w-0 space-y-3 px-3 pb-3 pt-3">
         {/* Header */}
         <header className="flex items-start gap-2.5 border-b border-white/[0.08] pb-2.5">
           {ccyMeta ? (
@@ -656,9 +581,9 @@ function Body({
       : null;
 
   return (
-    <div className="space-y-2.5">
+    <div className="min-w-0 space-y-2.5">
       {/* KPI strip */}
-      <div className="grid grid-cols-4 gap-1.5">
+      <div className="grid min-w-0 grid-cols-4 gap-1.5">
         <KpiTile label="Total" value={formatCurrency(data.total, currency)} />
         <KpiTile
           label="Txns"
@@ -671,7 +596,7 @@ function Body({
 
       {/* This-month vs prev */}
       {(metrics.thisMonth > 0 || metrics.prevMonth > 0) && (
-        <div className="grid grid-cols-3 gap-1.5">
+        <div className="grid min-w-0 grid-cols-3 gap-1.5">
           <KpiTile
             label="This mo."
             value={formatCurrency(metrics.thisMonth, currency)}
@@ -700,14 +625,9 @@ function Body({
         accent={accent}
         highlightMonth={data.selectedMonth}
       />
-      <DowStrip
-        values={data.dowDistribution}
-        accent={accent}
-        busiest={data.busiestDow}
-      />
 
       {/* Breakdowns */}
-      <div className="space-y-2">
+      <div className="min-w-0 space-y-2">
         {entity !== "merchant" && data.topMerchants.length > 0 && (
           <Section title="Top merchants" badge={`${data.topMerchants.length}`}>
             <HorizontalBars
@@ -730,27 +650,10 @@ function Body({
             />
           </Section>
         )}
-        {entity !== "country" && data.topCountries.length > 0 && (
-          <Section title="Top countries" badge={`${data.topCountries.length}`}>
-            <HorizontalBars
-              rows={data.topCountries}
-              totalForShare={data.total}
-              currency={currency}
-              accent={accent}
-              iconRender={(r) => countryFlag(r.name.toUpperCase())}
-              emptyMsg="No country data"
-            />
-          </Section>
-        )}
-        {data.topTransactions.length > 0 && (
-          <Section title="Biggest transactions" badge={`${data.topTransactions.length}`}>
-            <TopTransactionList txns={data.topTransactions} currency={currency} />
-          </Section>
-        )}
       </div>
 
       {dateRange && (
-        <p className="border-t border-white/[0.06] pt-2 text-center text-[9px] uppercase tracking-[0.18em] text-white/35">
+        <p className="border-t border-white/[0.06] pt-2 text-center text-[9px] uppercase tracking-[0.18em] text-white/35 break-words">
           {dateRange}
         </p>
       )}
@@ -777,5 +680,96 @@ function Section({
       </div>
       {children}
     </section>
+  );
+}
+
+/** Centered popup with the same content as AnalyticsDetailTooltip. */
+export function AnalyticsDetailDialog({
+  entity,
+  label,
+  value,
+  accentColor,
+  currency,
+  onClose,
+}: {
+  entity: DetailEntity;
+  label: string;
+  value: string;
+  accentColor: string;
+  currency?: string;
+  onClose: () => void;
+}) {
+  const [data, setData] = useState<AnalyticsDetailResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setErrorMessage(null);
+    void loadAnalyticsDetail(entity, value, currency)
+      .then(({ data: nextData, error }) => {
+        if (cancelled) return;
+        setData(nextData);
+        setErrorMessage(error);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [entity, value, currency]);
+
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[230] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm sm:p-6"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${label} details`}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        className="relative w-full max-w-[520px]"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute right-3 top-3 z-10 grid h-8 w-8 place-items-center rounded-lg border border-white/10 bg-[#121212]/90 text-white/60 backdrop-blur-sm transition-colors hover:bg-white/[0.12] hover:text-white"
+          aria-label="Close details"
+        >
+          <X className="h-4 w-4" />
+        </button>
+        <div className="overflow-hidden rounded-2xl border border-white/[0.12] bg-[#111111]/[0.97] shadow-[0_24px_64px_-12px_rgba(0,0,0,0.85),inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-xl">
+          <DetailContent
+            entity={entity}
+            label={label}
+            accentColor={accentColor}
+            data={data}
+            loading={loading}
+            errorMessage={errorMessage}
+          />
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }

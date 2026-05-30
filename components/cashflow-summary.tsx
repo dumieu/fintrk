@@ -20,7 +20,13 @@ function compact(n: number): string {
  * - Expenses     = avg monthly expenses (|negative flows|)
  * - Result       = FCF − Expenses: green + "Surplus Monthly" if non-negative, red + "Gap Monthly" if negative
  */
-export function CashflowSummary({ months = 12 }: { months?: number }) {
+export function CashflowSummary({
+  months = 12,
+  variant = "default",
+}: {
+  months?: number;
+  variant?: "default" | "ribbon";
+}) {
   const [data, setData] = useState<CashflowSummaryResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -42,11 +48,17 @@ export function CashflowSummary({ months = 12 }: { months?: number }) {
     };
   }, [months]);
 
+  const ribbon = variant === "ribbon";
+
   if (loading && !data) {
     return (
       <div
         aria-hidden
-        className="h-[58px] w-[280px] animate-pulse rounded-xl border border-white/10 bg-white/[0.03]"
+        className={
+          ribbon
+            ? "h-[46px] w-[240px] animate-pulse rounded-lg border border-white/10 bg-white/[0.03] sm:w-[280px]"
+            : "h-[58px] w-[280px] animate-pulse rounded-xl border border-white/10 bg-white/[0.03]"
+        }
       />
     );
   }
@@ -60,24 +72,33 @@ export function CashflowSummary({ months = 12 }: { months?: number }) {
   const resultLabel = isSurplus ? "Surplus" : "Gap";
 
   return (
-    <div className="relative flex shrink-0 items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 pr-7 shadow-[0_4px_20px_rgba(0,0,0,0.35)] backdrop-blur-md">
+    <div
+      className={
+        ribbon
+          ? "relative flex shrink-0 items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 pr-6 shadow-[0_2px_12px_rgba(0,0,0,0.3)] backdrop-blur-md sm:gap-2.5 sm:px-3.5"
+          : "relative flex shrink-0 items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 pr-7 shadow-[0_4px_20px_rgba(0,0,0,0.35)] backdrop-blur-md"
+      }
+    >
       <Stat
         label="Income"
         value={compact(data.avgMonthlyIncome)}
         valueClass="text-white"
+        compact={ribbon}
       />
-      <Op>−</Op>
+      <Op compact={ribbon}>−</Op>
       <Stat
         label="Expenses"
         value={compact(data.avgMonthlyExpenses)}
         valueClass="text-white/80"
+        compact={ribbon}
       />
-      <Op>=</Op>
+      <Op compact={ribbon}>=</Op>
       <Stat
         label={resultLabel}
         value={compact(data.gap)}
         valueClass={gapColor}
         valueStyle={{ textShadow: gapShadow }}
+        compact={ribbon}
       />
       <InfoBadge
         text={`Rolling average across the last ${data.monthsUsed} active month${data.monthsUsed === 1 ? "" : "s"} (max ${data.maxMonthsConsidered}). Months whose expenses are below 20% of the average are excluded.`}
@@ -99,7 +120,7 @@ function InfoBadge({ text }: { text: string }) {
       </button>
       <span
         role="tooltip"
-        className="pointer-events-none absolute right-0 top-full z-20 mt-1.5 hidden w-56 rounded-md border border-white/10 bg-[#0d0922] px-2.5 py-1.5 text-[11px] leading-snug text-white/80 shadow-xl group-hover:block"
+        className="pointer-events-none absolute right-0 top-full z-20 mt-1.5 hidden w-56 rounded-md border border-white/10 bg-[#171717] px-2.5 py-1.5 text-[11px] leading-snug text-white/80 shadow-xl group-hover:block"
       >
         {text}
       </span>
@@ -112,30 +133,34 @@ function Stat({
   value,
   valueClass,
   valueStyle,
+  compact = false,
 }: {
   label: string;
   value: string;
   valueClass: string;
   valueStyle?: React.CSSProperties;
+  compact?: boolean;
 }) {
   return (
     <div className="flex flex-col items-center leading-tight">
       <span
-        className={`text-lg font-extrabold tabular-nums sm:text-xl ${valueClass}`}
+        className={`font-extrabold tabular-nums ${compact ? "text-base sm:text-lg" : "text-lg sm:text-xl"} ${valueClass}`}
         style={{ letterSpacing: "0.01em", ...valueStyle }}
       >
         {value}
       </span>
-      <span className="text-[10px] font-medium uppercase tracking-wide text-white/45">
+      <span className={`font-medium uppercase tracking-wide text-white/45 ${compact ? "text-[9px]" : "text-[10px]"}`}>
         {label}
       </span>
     </div>
   );
 }
 
-function Op({ children }: { children: React.ReactNode }) {
+function Op({ children, compact = false }: { children: React.ReactNode; compact?: boolean }) {
   return (
-    <span className="select-none text-xl font-light text-white/35 sm:text-2xl">
+    <span
+      className={`select-none font-light text-white/35 ${compact ? "text-lg sm:text-xl" : "text-xl sm:text-2xl"}`}
+    >
       {children}
     </span>
   );

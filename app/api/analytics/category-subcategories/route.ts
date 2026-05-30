@@ -7,7 +7,10 @@ import {
   leafCategory,
   parentCategory,
 } from "@/lib/db/category-rollup";
-import { excludeCardPaymentsSql } from "@/lib/db/excluded-transactions";
+import {
+  excludeCardPaymentsSql,
+  spendingIntelligenceOutflowSql,
+} from "@/lib/db/excluded-transactions";
 import { eq, and, sql } from "drizzle-orm";
 import { logServerError } from "@/lib/safe-error";
 
@@ -56,7 +59,7 @@ export async function GET(request: NextRequest) {
           and(
             eq(transactions.userId, userId),
             excludeCardPaymentsSql(),
-            sql`CAST(${transactions.baseAmount} AS numeric) < 0`,
+            spendingIntelligenceOutflowSql(),
             sql`${categoryRollupLabelSql} = ${raw}`,
           ),
         )

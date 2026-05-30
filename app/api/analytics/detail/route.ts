@@ -7,8 +7,11 @@ import {
   leafCategory,
   parentCategory,
 } from "@/lib/db/category-rollup";
-import { excludeCardPaymentsSql } from "@/lib/db/excluded-transactions";
-import { eq, and, sql, desc } from "drizzle-orm";
+import {
+  excludeCardPaymentsSql,
+  spendingIntelligenceOutflowSql,
+} from "@/lib/db/excluded-transactions";
+import { eq, and, sql } from "drizzle-orm";
 import { logServerError } from "@/lib/safe-error";
 
 export const dynamic = "force-dynamic";
@@ -30,13 +33,6 @@ export interface AnalyticsDetailRow {
   count: number;
 }
 
-export interface AnalyticsDetailTxn {
-  date: string;
-  description: string;
-  amount: number;
-  currency: string;
-}
-
 export interface AnalyticsDetailResponse {
   entity: Entity;
   value: string;
@@ -50,15 +46,11 @@ export interface AnalyticsDetailResponse {
   firstSeen: string | null;
   lastSeen: string | null;
   monthly: AnalyticsDetailMonth[];
-  dowDistribution: number[];
   topMerchants: AnalyticsDetailRow[];
   topCategories: AnalyticsDetailRow[];
-  topCountries: AnalyticsDetailRow[];
-  topTransactions: AnalyticsDetailTxn[];
   monthlyAvg: number;
   monthlyMedian: number;
   busiestMonth: { month: string; total: number } | null;
-  busiestDow: number | null;
   /** Echo of the `month=YYYY-MM` filter when set — lets the client highlight that bar in the 12-mo trend. */
   selectedMonth: string | null;
 }
@@ -83,15 +75,11 @@ function emptyResp(
     firstSeen: null,
     lastSeen: null,
     monthly: [],
-    dowDistribution: [0, 0, 0, 0, 0, 0, 0],
     topMerchants: [],
     topCategories: [],
-    topCountries: [],
-    topTransactions: [],
     monthlyAvg: 0,
     monthlyMedian: 0,
     busiestMonth: null,
-    busiestDow: null,
     selectedMonth,
   };
 }
@@ -142,9 +130,6 @@ function padMonthly(
 function uiDowToPgDow(i: number): number {
   return (i + 1) % 7;
 }
-function pgDowToUiDow(d: number): number {
-  return (d + 6) % 7;
-}
 
 export async function GET(request: NextRequest) {
   try {
@@ -154,7 +139,7 @@ export async function GET(request: NextRequest) {
     const entityRaw = (request.nextUrl.searchParams.get("entity") ?? "").trim();
     const value = (request.nextUrl.searchParams.get("value") ?? "").trim();
     const currencyParam = (request.nextUrl.searchParams.get("currency") ?? "").trim();
-    /** Optional `YYYY-MM` filter — when set, all aggregates (top X / headline / dow / biggest)
+    /** Optional `YYYY-MM` filter — when set, all aggregates (top X / headline / dow)
      *  are scoped to that calendar month. The 12-month trend chart is intentionally NOT month-filtered
      *  so it always shows context (the selected month is highlighted client-side). */
     const monthParam = (request.nextUrl.searchParams.get("month") ?? "").trim();
@@ -242,7 +227,7 @@ export async function GET(request: NextRequest) {
     const baseWhere = and(
       eq(transactions.userId, userId),
       excludeCardPaymentsSql(),
-      sql`CAST(${transactions.baseAmount} AS numeric) < 0`,
+      spendingIntelligenceOutflowSql(),
       entityFilter,
     );
 
@@ -263,7 +248,7 @@ export async function GET(request: NextRequest) {
           and(
             eq(transactions.userId, userId),
             excludeCardPaymentsSql(),
-            sql`CAST(${transactions.baseAmount} AS numeric) < 0`,
+            spendingIntelligenceOutflowSql(),
           ),
         ),
     );
@@ -321,26 +306,6 @@ export async function GET(request: NextRequest) {
         .groupBy(sql`date_trunc('month', ${transactions.postedDate}::date)`),
     );
 
-    /** Day-of-week distribution (always 7 buckets, padded). */
-    const dowP = resilientQuery(() =>
-      db
-        .select({
-          dow: sql<number>`EXTRACT(DOW FROM ${transactions.postedDate}::date)::int`,
-          total: sql<string>`SUM(ABS(CAST(${transactions.baseAmount} AS numeric)))`,
-        })
-        .from(transactions)
-        .leftJoin(
-          leafCategory,
-          and(eq(transactions.categoryId, leafCategory.id), eq(leafCategory.userId, userId)),
-        )
-        .leftJoin(
-          parentCategory,
-          and(eq(leafCategory.parentId, parentCategory.id), eq(parentCategory.userId, userId)),
-        )
-        .where(aggWhere)
-        .groupBy(sql`EXTRACT(DOW FROM ${transactions.postedDate}::date)`),
-    );
-
     /** Grand total of outflows (for share %). */
     const grandP = resilientQuery(() =>
       db
@@ -352,7 +317,7 @@ export async function GET(request: NextRequest) {
           and(
             eq(transactions.userId, userId),
             excludeCardPaymentsSql(),
-            sql`CAST(${transactions.baseAmount} AS numeric) < 0`,
+            spendingIntelligenceOutflowSql(),
           ),
         ),
     );
@@ -415,76 +380,18 @@ export async function GET(request: NextRequest) {
               .limit(6),
           );
 
-    /** Top countries within this slice (skip for country entity itself). */
-    const topCountriesP =
-      entity === "country"
-        ? Promise.resolve([] as { name: string | null; total: string; count: number }[])
-        : resilientQuery(() =>
-            db
-              .select({
-                name: transactions.countryIso,
-                total: sql<string>`SUM(ABS(CAST(${transactions.baseAmount} AS numeric)))`,
-                count: sql<number>`COUNT(*)::int`,
-              })
-              .from(transactions)
-              .leftJoin(
-                leafCategory,
-                and(eq(transactions.categoryId, leafCategory.id), eq(leafCategory.userId, userId)),
-              )
-              .leftJoin(
-                parentCategory,
-                and(
-                  eq(leafCategory.parentId, parentCategory.id),
-                  eq(parentCategory.userId, userId),
-                ),
-              )
-              .where(and(aggWhere, sql`${transactions.countryIso} IS NOT NULL`))
-              .groupBy(transactions.countryIso)
-              .orderBy(sql`SUM(ABS(CAST(${transactions.baseAmount} AS numeric))) DESC`)
-              .limit(6),
-          );
-
-    /** Top transactions by absolute amount within the slice. */
-    const topTxnsP = resilientQuery(() =>
-      db
-        .select({
-          date: sql<string>`${transactions.postedDate}::date::text`,
-          description: sql<string>`COALESCE(${transactions.merchantName}, ${transactions.rawDescription})`,
-          amount: sql<string>`ABS(CAST(${transactions.baseAmount} AS numeric))`,
-          currency: transactions.baseCurrency,
-        })
-        .from(transactions)
-        .leftJoin(
-          leafCategory,
-          and(eq(transactions.categoryId, leafCategory.id), eq(leafCategory.userId, userId)),
-        )
-        .leftJoin(
-          parentCategory,
-          and(eq(leafCategory.parentId, parentCategory.id), eq(parentCategory.userId, userId)),
-        )
-        .where(aggWhere)
-        .orderBy(desc(sql`ABS(CAST(${transactions.baseAmount} AS numeric))`))
-        .limit(5),
-    );
-
     const [
       aggRows,
       monthlyRows,
-      dowRows,
       grandRows,
       topMerchantsRows,
       topCategoriesRows,
-      topCountriesRows,
-      topTxnRows,
     ] = await Promise.all([
       aggP,
       monthlyP,
-      dowP,
       grandP,
       topMerchantsP,
       topCategoriesP,
-      topCountriesP,
-      topTxnsP,
     ]);
 
     const headline = aggRows[0];
@@ -512,12 +419,6 @@ export async function GET(request: NextRequest) {
       trendAnchorDate,
     );
 
-    const dowDistribution = [0, 0, 0, 0, 0, 0, 0];
-    for (const r of dowRows) {
-      const ui = pgDowToUiDow(r.dow);
-      dowDistribution[ui] = parseFloat(r.total ?? "0");
-    }
-
     const topMerchants: AnalyticsDetailRow[] = topMerchantsRows
       .filter((r) => r.name && String(r.name).length > 0)
       .map((r) => ({
@@ -534,21 +435,6 @@ export async function GET(request: NextRequest) {
         count: r.count,
       }));
 
-    const topCountries: AnalyticsDetailRow[] = topCountriesRows
-      .filter((r) => r.name && String(r.name).length > 0)
-      .map((r) => ({
-        name: String(r.name),
-        total: parseFloat(r.total ?? "0"),
-        count: r.count,
-      }));
-
-    const topTransactions: AnalyticsDetailTxn[] = topTxnRows.map((r) => ({
-      date: r.date,
-      description: String(r.description ?? ""),
-      amount: parseFloat(r.amount ?? "0"),
-      currency: r.currency,
-    }));
-
     const monthlyTotals = monthly.map((m) => m.total);
     const nonZero = monthlyTotals.filter((v) => v > 0);
     const monthlyAvg = nonZero.length > 0 ? nonZero.reduce((a, b) => a + b, 0) / nonZero.length : 0;
@@ -559,15 +445,6 @@ export async function GET(request: NextRequest) {
       if (!busiestMonth || m.total > busiestMonth.total) busiestMonth = { month: m.month, total: m.total };
     }
     if (busiestMonth && busiestMonth.total <= 0) busiestMonth = null;
-
-    let busiestDow: number | null = null;
-    let busiestDowVal = 0;
-    for (let i = 0; i < 7; i++) {
-      if (dowDistribution[i] > busiestDowVal) {
-        busiestDowVal = dowDistribution[i];
-        busiestDow = i;
-      }
-    }
 
     const payload: AnalyticsDetailResponse = {
       entity,
@@ -582,17 +459,13 @@ export async function GET(request: NextRequest) {
       firstSeen: headline?.firstSeen ?? null,
       lastSeen: headline?.lastSeen ?? null,
       monthly,
-      dowDistribution,
       topMerchants,
       topCategories,
-      topCountries,
-      topTransactions,
       monthlyAvg: Math.round(monthlyAvg * 100) / 100,
       monthlyMedian: Math.round(monthlyMedian * 100) / 100,
       busiestMonth: busiestMonth
         ? { month: busiestMonth.month, total: Math.round(busiestMonth.total * 100) / 100 }
         : null,
-      busiestDow,
       selectedMonth,
     };
 
