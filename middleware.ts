@@ -25,6 +25,8 @@ const isPublicRoute = createRouteMatcher([
   "/api/demo/(.*)",
   /** Handlers verify `CRON_SECRET` themselves. */
   "/api/cron/(.*)",
+  /** MCP server + OAuth: external GenAI clients authenticate via Bearer tokens. */
+  "/api/mcp(.*)",
 ]);
 
 function redirectUnauthenticatedToLanding(req: NextRequest) {

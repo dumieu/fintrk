@@ -22,6 +22,7 @@ const PAGE_META: Array<{ match: (p: string) => boolean; title: string; subtitle:
   { match: (p) => p.startsWith("/dashboard/categories"), title: "Category Mapping", subtitle: "Curate how transactions roll up into categories and subcategories" },
   { match: (p) => p.startsWith("/dashboard/my-profile"), title: "My Profile", subtitle: "Personal preferences and account settings" },
   { match: (p) => p.startsWith("/dashboard/profile"), title: "My Profile", subtitle: "Manage your personal information and preferences" },
+  { match: (p) => p.startsWith("/dashboard/connect-ai"), title: "Connect your AI", subtitle: "Link ChatGPT, Claude, or Perplexity to your real financial data" },
   { match: (p) => p.startsWith("/dashboard/contact"), title: "Contact", subtitle: "Get in touch with the FinTRK team" },
   { match: (p) => p.startsWith("/dashboard/faq"), title: "FAQ", subtitle: "Frequently asked questions about FinTRK" },
 ];

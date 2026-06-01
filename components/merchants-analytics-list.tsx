@@ -17,6 +17,7 @@ export interface MerchantRow {
   count: number;
   currency: string;
   subcategory: string | null;
+  category: string | null;
   subcategoryColor: string | null;
 }
 
@@ -204,7 +205,10 @@ export function MerchantsAnalyticsList({
                     <div className="flex flex-wrap items-center gap-1.5">
                       <p className="break-words text-xs font-medium leading-snug text-white/90">{m.name}</p>
                       {m.subcategory ? (
-                        <SubcategoryPill label={m.subcategory} color={m.subcategoryColor} />
+                        <SubcategoryPill
+                          label={categoryPillLabel(m.category, m.subcategory)}
+                          color={m.subcategoryColor}
+                        />
                       ) : null}
                     </div>
                     <p className="text-[10px] text-white/45">
@@ -318,11 +322,16 @@ function MerchantDetailHelpButton({
   );
 }
 
+function categoryPillLabel(category: string | null, subcategory: string): string {
+  if (category && category !== subcategory) return `${category} - ${subcategory}`;
+  return subcategory;
+}
+
 function SubcategoryPill({ label, color }: { label: string; color: string | null }) {
   const accent = color && /^#[0-9A-Fa-f]{6}$/.test(color) ? color : "#808080";
   return (
     <span
-      className="inline-flex max-w-[9rem] shrink-0 items-center truncate rounded-full border px-1.5 py-0.5 text-[9px] font-semibold leading-none"
+      className="inline-flex max-w-[12rem] shrink-0 items-center truncate rounded-full border px-1.5 py-0.5 text-[9px] font-semibold leading-none"
       style={{
         color: accent,
         borderColor: `${accent}55`,

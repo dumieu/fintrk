@@ -12,6 +12,7 @@ import {
 } from "@/lib/db/excluded-transactions";
 import { eq, and, or, sql } from "drizzle-orm";
 import { logServerError } from "@/lib/safe-error";
+import { analyticsSubcategoryColor } from "@/lib/analytics-category-colors";
 
 export const dynamic = "force-dynamic";
 
@@ -47,7 +48,7 @@ async function dominantCategoriesForMerchants(
   userId: string,
   pairs: { name: string; currency: string }[],
 ) {
-  if (pairs.length === 0) return new Map<string, { subcategory: string; color: string | null }>();
+  if (pairs.length === 0) return new Map<string, { category: string | null; subcategory: string; color: string | null }>();
 
   const pairFilter = or(
     ...pairs.map((p) =>
@@ -60,8 +61,8 @@ async function dominantCategoriesForMerchants(
       .select({
         name: transactions.merchantName,
         currency: transactions.baseCurrency,
+        category: sql<string | null>`${parentCategory.name}`,
         subcategory: merchantCategoryLabelSql,
-        color: sql<string | null>`COALESCE(${leafCategory.color}, ${parentCategory.color})`,
         total: sql<string>`SUM(ABS(CAST(${transactions.baseAmount} AS numeric)))`,
       })
       .from(transactions)
@@ -86,12 +87,12 @@ async function dominantCategoriesForMerchants(
       .groupBy(
         transactions.merchantName,
         transactions.baseCurrency,
+        sql`${parentCategory.name}`,
         merchantCategoryLabelSql,
-        sql`COALESCE(${leafCategory.color}, ${parentCategory.color})`,
       ),
   );
 
-  const best = new Map<string, { subcategory: string; color: string | null; total: number }>();
+  const best = new Map<string, { category: string | null; subcategory: string; color: string | null; total: number }>();
   for (const row of rows) {
     const name = row.name ?? "";
     const currency = row.currency ?? "";
@@ -100,16 +101,17 @@ async function dominantCategoriesForMerchants(
     const cur = best.get(key);
     if (!cur || total > cur.total) {
       best.set(key, {
+        category: row.category,
         subcategory: row.subcategory,
-        color: row.color,
+        color: analyticsSubcategoryColor(row.category, row.subcategory),
         total,
       });
     }
   }
 
-  const out = new Map<string, { subcategory: string; color: string | null }>();
+  const out = new Map<string, { category: string | null; subcategory: string; color: string | null }>();
   for (const [key, v] of best) {
-    out.set(key, { subcategory: v.subcategory, color: v.color });
+    out.set(key, { category: v.category, subcategory: v.subcategory, color: v.color });
   }
   return out;
 }
@@ -179,6 +181,7 @@ export async function GET(request: NextRequest) {
         count: m.count,
         currency: m.currency,
         subcategory: meta?.subcategory ?? null,
+        category: meta?.category ?? null,
         subcategoryColor: meta?.color ?? null,
       };
     });

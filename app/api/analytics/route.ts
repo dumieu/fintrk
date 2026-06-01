@@ -13,19 +13,11 @@ import {
 } from "@/lib/db/excluded-transactions";
 import { eq, and, sql } from "drizzle-orm";
 import { logServerError } from "@/lib/safe-error";
+import { analyticsCategoryColor } from "@/lib/analytics-category-colors";
 
 export const dynamic = "force-dynamic";
 
 const NO_STORE = { "Cache-Control": "no-store" } as const;
-
-const CATEGORY_COLORS: Record<string, string> = {
-  "Tax": "#EF4444", "Household": "#2CA2FF", "Transportation": "#AD74FF",
-  "Shopping": "#FF6F69", "Entertainment": "#AD74FF", "Health & Fitness": "#0BC18D",
-  "Financial": "#2CA2FF", "Travel": "#ECAA0B", "Education": "#AD74FF",
-  "Gifts & Donations": "#FF6F69", "Income": "#0BC18D",
-  "Food & Drink": "#ECAA0B", "Groceries": "#ECAA0B", "Restaurants": "#ECAA0B",
-  "Housing": "#2CA2FF", "Health": "#0BC18D",
-};
 
 export async function GET() {
   try {
@@ -149,7 +141,7 @@ export async function GET() {
       dayOfWeekCategoryBreakdown[idx].push({
         label,
         amount: parseFloat(row.total ?? "0"),
-        color: CATEGORY_COLORS[label] ?? "#808080",
+        color: analyticsCategoryColor(label),
       });
     }
     for (const arr of dayOfWeekCategoryBreakdown) {
@@ -172,7 +164,7 @@ export async function GET() {
         categoryBreakdown: categoryBreakdown.map((c) => ({
           label: c.category ?? "Uncategorized",
           amount: parseFloat(c.total ?? "0"),
-          color: CATEGORY_COLORS[c.category ?? ""] ?? "#808080",
+          color: analyticsCategoryColor(c.category ?? "Uncategorized"),
         })),
         dayOfWeekSpend: dowArray,
         dayOfWeekCategoryBreakdown,

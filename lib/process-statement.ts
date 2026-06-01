@@ -584,7 +584,7 @@ export async function processStatement(statementId: number) {
   const userId = stmt.userId;
   const payload = stmt.fileData;
   if (!payload) {
-    await db.update(statements).set({ status: "failed", aiError: "No file data" }).where(eq(statements.id, statementId));
+    await db.update(statements).set({ status: "failed", aiError: "No file data", aiProcessedAt: new Date() }).where(eq(statements.id, statementId));
     await markUploadLogFailed(userId, stmt.fileName, stmt.fileSize, stmt.fileHash);
     return;
   }
@@ -661,20 +661,19 @@ export async function processStatement(statementId: number) {
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : "AI call failed";
-    await db.update(statements).set({ status: "failed", aiError: msg }).where(eq(statements.id, statementId));
+    await db.update(statements).set({ status: "failed", aiError: msg, aiProcessedAt: new Date() }).where(eq(statements.id, statementId));
     await markUploadLogFailed(userId, stmt.fileName, stmt.fileSize, stmt.fileHash);
     logServerError(`process-statement/${statementId}`, err);
     return;
   }
 
-  db.update(statements).set({ fileData: null }).where(eq(statements.id, statementId)).catch(() => {});
   logAiCost({ userId, model: GEMINI_MODEL, query: "ingest", inputTokens, outputTokens }).catch(() => {});
 
   let aiParsed: unknown;
   try {
     aiParsed = JSON.parse(aiText);
   } catch {
-    await db.update(statements).set({ status: "failed", aiError: "AI returned invalid JSON" }).where(eq(statements.id, statementId));
+    await db.update(statements).set({ status: "failed", aiError: "AI returned invalid JSON", aiProcessedAt: new Date() }).where(eq(statements.id, statementId));
     await markUploadLogFailed(userId, stmt.fileName, stmt.fileSize, stmt.fileHash);
     return;
   }
@@ -688,7 +687,7 @@ export async function processStatement(statementId: number) {
         .join("; ") || "Schema validation failed";
     await db
       .update(statements)
-      .set({ status: "failed", aiError: `Schema validation failed (${brief})` })
+      .set({ status: "failed", aiError: `Schema validation failed (${brief})`, aiProcessedAt: new Date() })
       .where(eq(statements.id, statementId));
     await markUploadLogFailed(userId, stmt.fileName, stmt.fileSize, stmt.fileHash);
     return;
@@ -1007,6 +1006,27 @@ export async function processStatement(statementId: number) {
 
   await updateUserMainCurrency(userId);
 
+  const extractedCount = aiResult.transactions.length;
+  if (extractedCount === 0) {
+    await db.update(statements).set({
+      status: "failed",
+      aiError: "No transactions extracted from this statement",
+      aiProcessedAt: new Date(),
+    }).where(eq(statements.id, statementId));
+    await markUploadLogFailed(userId, stmt.fileName, stmt.fileSize, stmt.fileHash);
+    return;
+  }
+
+  if (imported === 0 && duplicates === 0) {
+    await db.update(statements).set({
+      status: "failed",
+      aiError: "Could not import any transactions from this statement",
+      aiProcessedAt: new Date(),
+    }).where(eq(statements.id, statementId));
+    await markUploadLogFailed(userId, stmt.fileName, stmt.fileSize, stmt.fileHash);
+    return;
+  }
+
   await db.update(statements).set({
     status: "completed", aiModel: GEMINI_MODEL, aiProcessedAt: new Date(),
     accountId, transactionsImported: imported, transactionsDuplicate: duplicates,
@@ -1019,7 +1039,7 @@ export async function processStatement(statementId: number) {
     const truncated = msg.length > 2000 ? `${msg.slice(0, 2000)}…` : msg;
     await db
       .update(statements)
-      .set({ status: "failed", aiError: truncated })
+      .set({ status: "failed", aiError: truncated, aiProcessedAt: new Date() })
       .where(eq(statements.id, statementId));
     await markUploadLogFailed(userId, stmt.fileName, stmt.fileSize, stmt.fileHash);
     logServerError(`process-statement/${statementId}`, persistErr);

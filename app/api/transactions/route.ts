@@ -1,13 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
-import { transactions, accounts, statements, userCategories, merchantWarningRules, merchantLabelRules } from "@/lib/db/schema";
+import { transactions, accounts, statements, userCategories, merchantWarningRules, merchantLabelRules, doubleChargeWatchlistExclusions } from "@/lib/db/schema";
 import { eq, and, gte, lte, ilike, or, desc, asc, sql, count, isNull, isNotNull, ne, inArray } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { transactionFiltersSchema, updateCategorySchema, deleteTransactionsSchema, patchTransactionSchema } from "@/lib/validations/transaction";
 import { logServerError } from "@/lib/safe-error";
 import { ensureTransactionWarningFlagColumn } from "@/lib/ensure-transaction-warning-flag";
 import { excludeCardPaymentsSql } from "@/lib/db/excluded-transactions";
+import {
+  findDoubleChargeSuspects,
+  summarizeDoubleChargeMerchants,
+  doubleChargeMerchantKey,
+  type DoubleChargeCandidate,
+  type DoubleChargeMerchantSummary,
+  type DoubleChargeSuspectMeta,
+} from "@/lib/double-charge-suspects";
+import { ensureDoubleChargeWatchlistTable } from "@/lib/ensure-double-charge-watchlist";
 
 export const dynamic = "force-dynamic";
 
@@ -107,6 +116,57 @@ export async function GET(request: NextRequest) {
     if (f.amountMax !== undefined) conditions.push(lte(transactions.baseAmount, f.amountMax.toString()));
     if (f.isRecurring !== undefined) conditions.push(eq(transactions.isRecurring, f.isRecurring === "true"));
     if (f.warningOnly === "true") conditions.push(eq(transactions.warningFlag, true));
+
+    let doubleChargeById: Map<string, DoubleChargeSuspectMeta> | null = null;
+    let doubleChargeSuspectMerchants: DoubleChargeMerchantSummary[] | undefined;
+    let doubleChargeCandidatesById: Map<string, DoubleChargeCandidate> | null = null;
+    if (f.doubleChargeSuspects === "true") {
+      await ensureDoubleChargeWatchlistTable();
+      const exclusionRows = await resilientQuery(() =>
+        db
+          .select({ merchantKey: doubleChargeWatchlistExclusions.merchantKey })
+          .from(doubleChargeWatchlistExclusions)
+          .where(eq(doubleChargeWatchlistExclusions.userId, userId)),
+      );
+      const excludedMerchantKeys = new Set(exclusionRows.map((r) => r.merchantKey));
+
+      const candidateRows = await resilientQuery(() =>
+        db
+          .select({
+            id: transactions.id,
+            postedDate: transactions.postedDate,
+            merchantName: transactions.merchantName,
+            rawDescription: transactions.rawDescription,
+            baseAmount: transactions.baseAmount,
+            accountId: transactions.accountId,
+            referenceId: transactions.referenceId,
+            isRecurring: transactions.isRecurring,
+            statementId: transactions.statementId,
+          })
+          .from(transactions)
+          .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql())),
+      );
+      const candidates = candidateRows as DoubleChargeCandidate[];
+      doubleChargeCandidatesById = new Map(candidates.map((r) => [r.id, r]));
+      doubleChargeById = findDoubleChargeSuspects(candidates, { excludedMerchantKeys });
+      doubleChargeSuspectMerchants = summarizeDoubleChargeMerchants(candidates, doubleChargeById);
+
+      let suspectIds = [...doubleChargeById.keys()];
+      if (f.doubleChargeMerchant) {
+        const merchantFilter = f.doubleChargeMerchant;
+        suspectIds = suspectIds.filter((id) => {
+          const row = candidates.find((r) => r.id === id);
+          if (!row) return false;
+          return doubleChargeMerchantKey(row.merchantName, row.rawDescription) === merchantFilter;
+        });
+      }
+      if (suspectIds.length === 0) {
+        conditions.push(sql`1 = 0`);
+      } else {
+        conditions.push(inArray(transactions.id, suspectIds));
+      }
+    }
+
     if (f.search) {
       conditions.push(
         or(
@@ -246,9 +306,31 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(
       {
-        data,
+        data: data.map((row) => {
+          const suspect = doubleChargeById?.get(row.id);
+          const src = doubleChargeCandidatesById?.get(row.id);
+          return {
+            ...row,
+            ...(suspect
+              ? {
+                  doubleChargeSuspect: {
+                    ...suspect,
+                    merchantKey: src
+                      ? doubleChargeMerchantKey(src.merchantName, src.rawDescription)
+                      : doubleChargeMerchantKey(row.merchantName, row.rawDescription),
+                    displayName:
+                      src?.merchantName?.trim() ||
+                      row.merchantName?.trim() ||
+                      src?.rawDescription?.trim().slice(0, 64) ||
+                      row.rawDescription.trim().slice(0, 64),
+                  },
+                }
+              : {}),
+          };
+        }),
         total,
         statementCount,
+        ...(doubleChargeSuspectMerchants ? { doubleChargeSuspectMerchants } : {}),
         page: f.page,
         pages: Math.ceil(total / f.limit),
         amountTotals: amountTotals.map((row) => ({

@@ -11,15 +11,17 @@ import {
 import {
   FINTRK_TRANSACTIONS_CHANGED,
 } from "@/lib/notify-transactions-changed";
+import { formatMonthKeyLabel } from "@/lib/month-date-range";
 
 export type CategoryTransactionsFilter =
-  | { mode: "category"; name: string; level?: "category" | "subcategory" }
-  | { mode: "merchant"; name: string };
+  | { mode: "category"; name: string; level?: "category" | "subcategory"; dateFrom?: string; dateTo?: string }
+  | { mode: "merchant"; name: string; dateFrom?: string; dateTo?: string };
 
 function filterKey(filter: CategoryTransactionsFilter): string {
+  const dates = filter.dateFrom && filter.dateTo ? `:${filter.dateFrom}:${filter.dateTo}` : "";
   return filter.mode === "merchant"
-    ? `merchant:${filter.name}`
-    : `category:${filter.level ?? "category"}:${filter.name}`;
+    ? `merchant:${filter.name}${dates}`
+    : `category:${filter.level ?? "category"}:${filter.name}${dates}`;
 }
 
 function filterTitle(filter: CategoryTransactionsFilter): string {
@@ -29,13 +31,17 @@ function filterTitle(filter: CategoryTransactionsFilter): string {
 }
 
 function filterSubtitle(filter: CategoryTransactionsFilter): string {
+  const period =
+    filter.dateFrom && filter.dateTo
+      ? formatMonthKeyLabel(filter.dateFrom.slice(0, 7))
+      : "All-time";
   if (filter.mode === "merchant") {
-    return "All-time · spending intelligence · this merchant only";
+    return `${period} · spending intelligence · this merchant only`;
   }
   if (filter.level === "subcategory") {
-    return "All-time · spending intelligence · this subcategory only";
+    return `${period} · spending intelligence · this subcategory only`;
   }
-  return "All-time · spending intelligence · this category only";
+  return `${period} · spending intelligence · this category only`;
 }
 
 function filterEmptyMessage(filter: CategoryTransactionsFilter): string {
@@ -108,6 +114,8 @@ export function CategoryTransactionsModal({
       params.set("level", filter.level ?? "category");
     }
     if (currency) params.set("currency", currency);
+    if (filter.dateFrom) params.set("dateFrom", filter.dateFrom);
+    if (filter.dateTo) params.set("dateTo", filter.dateTo);
     void fetch(`/api/cashflow/category-transactions?${params}`, { signal: ctrl.signal })
       .then((r) => r.json())
       .then((json) => {

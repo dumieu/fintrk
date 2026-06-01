@@ -8,6 +8,7 @@ import {
 } from "@/components/analytics-detail-tooltip";
 import { useAnalyticsDetail } from "@/components/use-analytics-detail";
 import { CategoryTransactionsModal } from "@/components/category-transactions-modal";
+import { analyticsCategoryGlow } from "@/lib/analytics-category-colors";
 
 interface SpendingBar {
   label: string;
@@ -69,9 +70,19 @@ export function SpendingChart({ bars, currency, maxAmount }: SpendingChartProps)
               }
               onMouseLeave={scheduleClose}
             >
-              <div className="flex items-center justify-between gap-2 mb-1">
-                <span className="text-xs font-medium text-white/85 truncate max-w-[60%]">
-                  {bar.label}
+              <div className="mb-1 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
+                <span className="flex min-w-0 items-start gap-2">
+                  <span
+                    className="mt-1 h-2 w-2 shrink-0 rounded-[3px] ring-1 ring-white/10"
+                    style={{
+                      background: bar.color,
+                      boxShadow: `0 0 8px ${analyticsCategoryGlow(bar.color, 0.4)}`,
+                    }}
+                    aria-hidden
+                  />
+                  <span className="text-xs font-medium leading-snug text-white/85">
+                    {bar.label}
+                  </span>
                 </span>
                 <span className="shrink-0 text-right text-xs font-bold tabular-nums text-white">
                   <span>
@@ -86,12 +97,13 @@ export function SpendingChart({ bars, currency, maxAmount }: SpendingChartProps)
                   </span>
                 </span>
               </div>
-              <div className="h-2 rounded-full bg-white/8 overflow-hidden">
+              <div className="h-2 rounded-full bg-white/[0.06] overflow-hidden ring-1 ring-inset ring-white/[0.04]">
                 <div
-                  className="h-full rounded-full"
+                  className="h-full rounded-full transition-[width] duration-500 ease-out"
                   style={{
-                    backgroundColor: bar.color,
                     width: `${Math.min(pct, 100)}%`,
+                    background: `linear-gradient(90deg, ${bar.color}cc 0%, ${bar.color} 100%)`,
+                    boxShadow: `0 0 12px ${analyticsCategoryGlow(bar.color, 0.35)}`,
                   }}
                 />
               </div>

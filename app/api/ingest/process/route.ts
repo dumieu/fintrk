@@ -4,7 +4,7 @@ import { db, resilientQuery } from "@/lib/db";
 import { statements } from "@/lib/db/schema";
 import { processStatement } from "@/lib/process-statement";
 import { logServerError } from "@/lib/safe-error";
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 // AI extraction on a dense PDF + categorisation + bulk DB inserts can take
@@ -26,8 +26,14 @@ export async function POST(request: NextRequest) {
     // Mark as "processing" so processStatement accepts it
     const [row] = await resilientQuery(() =>
       db.update(statements)
-        .set({ status: "processing" })
-        .where(and(eq(statements.id, statementId), eq(statements.userId, userId)))
+        .set({ status: "processing", aiError: null, aiProcessedAt: null })
+        .where(
+          and(
+            eq(statements.id, statementId),
+            eq(statements.userId, userId),
+            inArray(statements.status, ["uploaded", "processing", "failed"]),
+          ),
+        )
         .returning({ id: statements.id }),
     );
 

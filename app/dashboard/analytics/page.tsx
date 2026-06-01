@@ -64,7 +64,7 @@ export default function AnalyticsPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.05 }}
             >
-              <MonthlyStackedSpend months={21} />
+              <MonthlyStackedSpend months={72} />
             </motion.div>
 
             {/* Analytics grid: 1 col mobile → 2 col tablet → 3 col when container fits */}

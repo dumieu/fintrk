@@ -34,7 +34,6 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { FintrkShortLogo } from "@/components/fintrk-short-logo";
 
 const ACCENT_HEX = "#0BC18D";
-const ACCENT_RGB = "11,193,141";
 
 export function HamburgerMenu() {
   const pathname = usePathname();
@@ -67,8 +66,8 @@ export function HamburgerMenu() {
     { label: "Transactions", href: `${basePath}/transactions`, icon: ArrowLeftRight },
     { label: "Cashflow", href: `${basePath}/cashflow`, icon: Waves },
     { label: "Spend Analytics", href: `${basePath}/analytics`, icon: BarChart3 },
-    { label: "Money X-Ray", href: `${basePath}/x-ray`, icon: ScanSearch, accent: true as const },
-    { label: "Net Worth Atlas", href: `${basePath}/net-worth`, icon: Sparkles, accent: true as const },
+    { label: "Money X-Ray", href: `${basePath}/x-ray`, icon: ScanSearch },
+    { label: "Net Worth Atlas", href: `${basePath}/net-worth`, icon: Sparkles },
     { label: "Accounts", href: `${basePath}/accounts`, icon: Landmark },
     { label: "Category Mapping", href: `${basePath}/categories`, icon: Network },
   ];
@@ -120,7 +119,6 @@ export function HamburgerMenu() {
             {navItems.map((item) => {
               const isActive = pathname.startsWith(item.href);
               const Icon = item.icon;
-              const accent = "accent" in item && item.accent;
               return (
                 <li key={item.href}>
                   <SheetClose
@@ -129,22 +127,13 @@ export function HamburgerMenu() {
                       <Link
                         href={item.href}
                         className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                          accent
-                            ? "border border-emerald-300/30 bg-gradient-to-r from-emerald-400/15 via-cyan-400/10 to-violet-400/10 text-white shadow-[0_0_18px_rgba(11,193,141,0.18)] hover:from-emerald-400/25 hover:via-cyan-400/15 hover:to-violet-400/15"
-                            : isActive
-                              ? "bg-primary/10"
-                              : "text-muted-foreground hover:bg-muted/50"
+                          isActive
+                            ? "bg-primary/10"
+                            : "text-muted-foreground hover:bg-muted/50"
                         }`}
                       >
-                        <Icon
-                          className={`w-5 h-5 shrink-0 ${accent ? "text-emerald-300" : ""}`}
-                        />
+                        <Icon className="w-5 h-5 shrink-0" />
                         {item.label}
-                        {accent && (
-                          <span className="ml-auto rounded-full bg-emerald-300/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-emerald-200">
-                            New
-                          </span>
-                        )}
                       </Link>
                     }
                   />
@@ -156,6 +145,24 @@ export function HamburgerMenu() {
           <div className="my-3 border-t border-border" />
 
           <ul className="space-y-1">
+            <li>
+              <SheetClose
+                nativeButton={false}
+                render={
+                  <Link
+                    href={`${basePath}/connect-ai`}
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                      pathname.startsWith(`${basePath}/connect-ai`)
+                        ? "bg-primary/10"
+                        : "text-muted-foreground hover:bg-muted/50"
+                    }`}
+                  >
+                    <Sparkles className="w-5 h-5 shrink-0" style={{ color: ACCENT_HEX }} />
+                    Connect your AI
+                  </Link>
+                }
+              />
+            </li>
             <li>
               <SheetClose
                 nativeButton={false}

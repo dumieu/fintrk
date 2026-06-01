@@ -14,6 +14,9 @@ export const transactionFiltersSchema = z.object({
   countryIso: z.string().length(2).optional(),
   isRecurring: z.enum(["true", "false"]).optional(),
   warningOnly: z.enum(["true", "false"]).optional(),
+  doubleChargeSuspects: z.enum(["true", "false"]).optional(),
+  /** Normalized merchant key when filtering double-charge suspects. */
+  doubleChargeMerchant: z.string().max(96).optional(),
   search: z.string().max(200).optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(25),

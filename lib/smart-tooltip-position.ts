@@ -10,8 +10,12 @@ export interface SmartTooltipPlacementInput {
   clientY: number;
   tooltipWidth: number;
   tooltipHeight: number;
+  /** @deprecated use avoidRects */
   avoidRect?: RectLike | null;
+  avoidRects?: RectLike[];
   margin?: number;
+  /** Minimum gap between the cursor and the tooltip edge. */
+  cursorGap?: number;
   viewportWidth?: number;
   viewportHeight?: number;
 }
@@ -21,7 +25,7 @@ export interface SmartTooltipPlacement {
   top: number;
 }
 
-type CornerAnchor = "top-left" | "top-right" | "bottom-left" | "bottom-right";
+type Side = "right" | "left" | "bottom" | "top";
 
 function toRect(left: number, top: number, w: number, h: number): RectLike {
   return { left, top, right: left + w, bottom: top + h };
@@ -52,83 +56,100 @@ function clampToViewport(
   };
 }
 
-function expansionSpace(anchor: CornerAnchor, cx: number, cy: number, margin: number, winW: number, winH: number): number {
-  switch (anchor) {
-    case "top-left":
-      return winW - margin - cx + (winH - margin - cy);
-    case "top-right":
-      return cx - margin + (winH - margin - cy);
-    case "bottom-left":
-      return winW - margin - cx + (cy - margin);
-    case "bottom-right":
-      return cx - margin + (cy - margin);
+function availableSpace(
+  side: Side,
+  cx: number,
+  cy: number,
+  margin: number,
+  winW: number,
+  winH: number,
+): number {
+  switch (side) {
+    case "right":
+      return winW - margin - cx;
+    case "left":
+      return cx - margin;
+    case "bottom":
+      return winH - margin - cy;
+    case "top":
+      return cy - margin;
   }
 }
 
-function cornerPosition(
-  anchor: CornerAnchor,
+function positionForSide(
+  side: Side,
   cx: number,
   cy: number,
   w: number,
   h: number,
+  gap: number,
 ): { left: number; top: number } {
-  switch (anchor) {
-    case "top-left":
-      return { left: cx, top: cy };
-    case "top-right":
-      return { left: cx - w, top: cy };
-    case "bottom-left":
-      return { left: cx, top: cy - h };
-    case "bottom-right":
-      return { left: cx - w, top: cy - h };
+  switch (side) {
+    case "right":
+      return { left: cx + gap, top: cy - h / 2 };
+    case "left":
+      return { left: cx - gap - w, top: cy - h / 2 };
+    case "bottom":
+      return { left: cx - w / 2, top: cy + gap };
+    case "top":
+      return { left: cx - w / 2, top: cy - gap - h };
   }
 }
 
+function cursorForbiddenZone(cx: number, cy: number, gap: number): RectLike {
+  return {
+    left: cx - gap,
+    top: cy - gap,
+    right: cx + gap,
+    bottom: cy + gap,
+  };
+}
+
+function overlapsCursor(rect: RectLike, cx: number, cy: number, gap: number): boolean {
+  return overlapArea(rect, cursorForbiddenZone(cx, cy, gap)) > 0;
+}
+
+function totalAvoidOverlap(rect: RectLike, avoidRects: RectLike[]): number {
+  return avoidRects.reduce((sum, zone) => sum + overlapArea(rect, zone, 4), 0);
+}
+
 /**
- * Place a tooltip so one corner sits on the cursor and the panel grows into the
- * quadrant with the most room, without covering `avoidRect` when possible.
+ * Place a tooltip beside the cursor on the side with the most room.
+ * The panel never overlaps the pointer or the forbidden zone around it.
  */
 export function computeSmartTooltipPlacement(input: SmartTooltipPlacementInput): SmartTooltipPlacement {
   const margin = input.margin ?? 10;
+  const gap = input.cursorGap ?? 16;
   const winW = input.viewportWidth ?? (typeof window !== "undefined" ? window.innerWidth : 1280);
   const winH = input.viewportHeight ?? (typeof window !== "undefined" ? window.innerHeight : 800);
   const { clientX: cx, clientY: cy, tooltipWidth: w, tooltipHeight: h } = input;
-  const avoid = input.avoidRect ?? null;
 
-  const anchors: CornerAnchor[] = ["top-left", "top-right", "bottom-left", "bottom-right"];
+  const avoidRects = [
+    ...(input.avoidRects ?? []),
+    ...(input.avoidRect ? [input.avoidRect] : []),
+  ];
+
+  const sides: Side[] = ["right", "left", "bottom", "top"];
+  sides.sort((a, b) => availableSpace(b, cx, cy, margin, winW, winH) - availableSpace(a, cx, cy, margin, winW, winH));
 
   let best: SmartTooltipPlacement | null = null;
   let bestScore = -Infinity;
 
-  for (const anchor of anchors) {
-    const { left, top } = cornerPosition(anchor, cx, cy, w, h);
-    const rect = toRect(left, top, w, h);
-    if (!fitsViewport(rect, margin, winW, winH)) continue;
-
-    const cardOverlap = avoid ? overlapArea(rect, avoid, 6) : 0;
-    if (cardOverlap > 0) continue;
-
-    const score = expansionSpace(anchor, cx, cy, margin, winW, winH);
-    if (score > bestScore) {
-      bestScore = score;
-      best = { left, top };
-    }
-  }
-
-  if (best) return best;
-
-  /** Soft fallback: allow viewport clamping, minimize card overlap. */
-  for (const anchor of anchors) {
-    const raw = cornerPosition(anchor, cx, cy, w, h);
+  for (const side of sides) {
+    const raw = positionForSide(side, cx, cy, w, h, gap);
     const clamped = clampToViewport(raw.left, raw.top, w, h, margin, winW, winH);
     const rect = toRect(clamped.left, clamped.top, w, h);
-    const cardOverlap = avoid ? overlapArea(rect, avoid, 6) : 0;
-    const viewportPenalty =
-      (clamped.left !== raw.left ? 500 : 0) + (clamped.top !== raw.top ? 500 : 0);
-    const score =
-      expansionSpace(anchor, cx, cy, margin, winW, winH) -
-      cardOverlap * 20 -
-      viewportPenalty;
+
+    if (overlapsCursor(rect, cx, cy, gap)) continue;
+
+    const avoidOverlap = totalAvoidOverlap(rect, avoidRects);
+    if (avoidOverlap > 0) continue;
+
+    const space = availableSpace(side, cx, cy, margin, winW, winH);
+    const clampPenalty =
+      (clamped.left !== raw.left ? 200 : 0) + (clamped.top !== raw.top ? 200 : 0);
+    const score = space - clampPenalty;
+
     if (score > bestScore) {
       bestScore = score;
       best = clamped;
@@ -137,5 +158,43 @@ export function computeSmartTooltipPlacement(input: SmartTooltipPlacementInput):
 
   if (best) return best;
 
-  return clampToViewport(cx, cy, w, h, margin, winW, winH);
+  /** Soft fallback: keep cursor clear, minimize host overlap. */
+  for (const side of sides) {
+    const raw = positionForSide(side, cx, cy, w, h, gap);
+    const clamped = clampToViewport(raw.left, raw.top, w, h, margin, winW, winH);
+    const rect = toRect(clamped.left, clamped.top, w, h);
+
+    if (overlapsCursor(rect, cx, cy, gap)) continue;
+
+    const avoidOverlap = totalAvoidOverlap(rect, avoidRects);
+    const clampPenalty =
+      (clamped.left !== raw.left ? 200 : 0) + (clamped.top !== raw.top ? 200 : 0);
+    const score =
+      availableSpace(side, cx, cy, margin, winW, winH) -
+      avoidOverlap * 30 -
+      clampPenalty;
+
+    if (score > bestScore) {
+      bestScore = score;
+      best = clamped;
+    }
+  }
+
+  if (best) return best;
+
+  /** Last resort: park in the corner farthest from the cursor. */
+  const corners = [
+    { left: margin, top: margin },
+    { left: winW - margin - w, top: margin },
+    { left: margin, top: winH - margin - h },
+    { left: winW - margin - w, top: winH - margin - h },
+  ];
+
+  for (const corner of corners) {
+    const rect = toRect(corner.left, corner.top, w, h);
+    if (overlapsCursor(rect, cx, cy, gap)) continue;
+    return corner;
+  }
+
+  return clampToViewport(cx + gap, cy + gap, w, h, margin, winW, winH);
 }

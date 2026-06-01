@@ -12,6 +12,7 @@ import {
   FileSpreadsheet,
   X,
   Ban,
+  RotateCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -144,6 +145,18 @@ function persistQueue(items: QueuedFile[]) {
   } catch {}
 }
 
+function isReuploadableQueueItem(item: QueuedFile): boolean {
+  if (item.status === "failed" || item.status === "error") return true;
+  if (item.status === "completed") {
+    return (item.imported ?? 0) === 0 && (item.duplicateTxns ?? 0) === 0;
+  }
+  return false;
+}
+
+function allowsReingestReason(reason: string | null | undefined): boolean {
+  return reason === "previously_failed" || reason === "previously_empty";
+}
+
 function loadPersistedQueue(): QueuedFile[] {
   try {
     const raw = sessionStorage.getItem(SESSION_KEY);
@@ -159,10 +172,42 @@ function loadPersistedQueue(): QueuedFile[] {
   }
 }
 
+function canRetryFileItem(item: QueuedFile, hasFile: boolean): boolean {
+  if (item.status !== "failed" && item.status !== "error") return false;
+  if (item.error === "Password-protected files are not supported") return false;
+  if (item.error === "File reference lost — please re-add") return false;
+  return Boolean(item.statementId) || hasFile;
+}
+
+type StatementPollRow = {
+  status: string;
+  transactionsImported: number | null;
+  transactionsDuplicate: number | null;
+  aiError: string | null;
+};
+
+/** Map a server statement row to a terminal queue patch, or null if still in flight. */
+function statementOutcomePatch(row: StatementPollRow): Partial<QueuedFile> | null {
+  if (row.status === "uploaded" || row.status === "processing") return null;
+  if (row.status === "failed") {
+    return { status: "failed", error: row.aiError ?? "Processing failed" };
+  }
+  if (row.status === "completed") {
+    const imported = row.transactionsImported ?? 0;
+    const duplicateTxns = row.transactionsDuplicate ?? 0;
+    if (imported === 0 && duplicateTxns === 0) {
+      return { status: "failed", error: "No transactions were imported from this statement" };
+    }
+    return { status: "completed", imported, duplicateTxns, error: null };
+  }
+  return null;
+}
+
 export function StatementUpload() {
   const [queue, setQueue] = useState<QueuedFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileStash = useRef<Map<string, File>>(new Map());
   const initialized = useRef(false);
@@ -188,18 +233,23 @@ export function StatementUpload() {
 
     let cancelled = false;
 
-    const triggerNext = async (activelyProcessingIds: Set<number>, uploadedIds: Set<number>) => {
+    const triggerNext = async (
+      activelyProcessingIds: Set<number>,
+      uploadedIds: Set<number>,
+      finishedMap: Map<number, { status: string }>,
+    ) => {
       if (processingRef.current || cancelled) return;
-      // Only trigger if nothing is currently being processed by AI
       if (activelyProcessingIds.size > 0) return;
 
-      // Find a submitted item whose statement is "uploaded" (saved but AI hasn't started)
-      const candidate = queue.find(
-        (item) =>
-          item.status === "submitted" &&
-          item.statementId &&
-          uploadedIds.has(item.statementId),
-      );
+      const candidate = queue.find((item) => {
+        if (item.status !== "submitted" || !item.statementId) return false;
+        if (activelyProcessingIds.has(item.statementId)) return false;
+        if (uploadedIds.has(item.statementId)) return true;
+        const finished = finishedMap.get(item.statementId);
+        if (finished?.status === "failed") return true;
+        if (!finished) return true;
+        return false;
+      });
       if (!candidate?.statementId) return;
 
       processingRef.current = true;
@@ -215,16 +265,25 @@ export function StatementUpload() {
 
     const poll = async () => {
       try {
-        const res = await fetch("/api/ingest/status");
+        const trackIds = queue
+          .filter((f) => f.status === "submitted" && f.statementId)
+          .map((f) => f.statementId as number);
+        const statusUrl =
+          trackIds.length > 0
+            ? `/api/ingest/status?ids=${trackIds.join(",")}`
+            : "/api/ingest/status";
+
+        const res = await fetch(statusUrl);
         if (!res.ok || cancelled) return;
         const data = await res.json() as {
           processing: { id: number; fileName: string; status: string }[];
           recentlyFinished: { id: number; fileName: string; status: string; transactionsImported: number | null; transactionsDuplicate: number | null; aiError: string | null }[];
+          tracked?: { id: number; fileName: string; status: string; transactionsImported: number | null; transactionsDuplicate: number | null; aiError: string | null }[];
         };
 
         const processingIds = new Set(data.processing.map((s) => s.id));
         const finishedMap = new Map(data.recentlyFinished.map((s) => [s.id, s]));
-        const finishedByName = new Map(data.recentlyFinished.map((s) => [s.fileName, s]));
+        const trackedMap = new Map((data.tracked ?? []).map((s) => [s.id, s]));
 
         setQueue((prev) => {
           let becameCompleted = false;
@@ -233,28 +292,16 @@ export function StatementUpload() {
 
             if (item.statementId) {
               if (processingIds.has(item.statementId)) return item;
-              const finished = finishedMap.get(item.statementId);
-              if (finished) {
-                if (finished.status === "completed") {
-                  becameCompleted = true;
-                  return { ...item, status: "completed" as const, imported: finished.transactionsImported ?? 0, duplicateTxns: finished.transactionsDuplicate ?? 0 };
-                }
-                return { ...item, status: "failed" as const, error: finished.aiError ?? "Processing failed" };
-              }
-            }
 
-            const byName = finishedByName.get(item.fileName);
-            if (byName && !processingIds.has(byName.id)) {
-              if (byName.status === "completed") {
-                becameCompleted = true;
-                return { ...item, status: "completed" as const, statementId: byName.id, imported: byName.transactionsImported ?? 0, duplicateTxns: byName.transactionsDuplicate ?? 0 };
+              const row = finishedMap.get(item.statementId) ?? trackedMap.get(item.statementId);
+              if (row) {
+                const patch = statementOutcomePatch(row);
+                if (!patch) return item;
+                if (patch.status === "completed") becameCompleted = true;
+                return { ...item, ...patch };
               }
-              return { ...item, status: "failed" as const, statementId: byName.id, error: byName.aiError ?? "Processing failed" };
-            }
 
-            if (item.statementId && !processingIds.has(item.statementId) && !finishedMap.has(item.statementId)) {
-              becameCompleted = true;
-              return { ...item, status: "completed" as const, imported: 0, duplicateTxns: 0 };
+              return item;
             }
 
             return item;
@@ -272,7 +319,7 @@ export function StatementUpload() {
         );
 
         // Trigger AI for the next unprocessed statement (one at a time)
-        void triggerNext(activelyProcessingIds, uploadedIds);
+        void triggerNext(activelyProcessingIds, uploadedIds, finishedMap);
       } catch {}
     };
 
@@ -314,9 +361,16 @@ export function StatementUpload() {
     }
     if (candidates.length === 0) return;
 
-    // Dedup against current queue
-    const currentHashes = new Set(queue.map((q) => q.hash));
-    const fresh = candidates.filter((c) => !currentHashes.has(c.hash));
+    const incomingHashes = new Set(candidates.map((c) => c.hash));
+    const reuploadableHashes = new Set(
+      queue.filter(isReuploadableQueueItem).map((q) => q.hash),
+    );
+
+    const fresh = candidates.filter((c) => {
+      const inQueue = queue.some((q) => q.hash === c.hash);
+      if (!inQueue) return true;
+      return reuploadableHashes.has(c.hash);
+    });
     if (fresh.length === 0) return;
 
     // Check for password-protected files
@@ -347,7 +401,12 @@ export function StatementUpload() {
     }));
 
     for (const c of checked) fileStash.current.set(c.hash, c.file);
-    setQueue((prev) => [...prev, ...rejected, ...newItems]);
+    setQueue((prev) => {
+      const withoutReplaced = prev.filter(
+        (item) => !(reuploadableHashes.has(item.hash) && incomingHashes.has(item.hash)),
+      );
+      return [...withoutReplaced, ...rejected, ...newItems];
+    });
 
     if (checked.length === 0) return;
 
@@ -363,7 +422,7 @@ export function StatementUpload() {
       return prev.map((item) => {
         const check = serverResults.get(item.hash);
         if (item.status !== "checking") return item;
-        if (check?.isDuplicate && check.reason !== "previously_failed") {
+        if (check?.isDuplicate && !allowsReingestReason(check.reason)) {
           return { ...item, status: "duplicate", error: "Already uploaded — skipped to save AI costs" };
         }
         if (slotsLeft > 0) {
@@ -389,12 +448,22 @@ export function StatementUpload() {
     setQueue((prev) => prev.map((f) => f.id === id ? { ...f, ...patch } : f));
   }, []);
 
-  const submitAll = useCallback(async () => {
-    if (isSubmitting) return;
-    setIsSubmitting(true);
+  const kickStatementProcessing = useCallback(async (statementId: number) => {
+    if (processingRef.current) return;
+    processingRef.current = true;
+    try {
+      await fetch("/api/ingest/process", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ statementId }),
+      });
+    } catch {}
+    processingRef.current = false;
+  }, []);
 
-    const pending = queue.filter((f) => f.status === "queued");
-    if (pending.length === 0) { setIsSubmitting(false); return; }
+  const submitQueuedItems = useCallback(async (itemIds: string[]) => {
+    const pending = queue.filter((f) => f.status === "queued" && itemIds.includes(f.id));
+    if (pending.length === 0) return;
 
     const structuredPayloads: { data: Record<string, unknown>[]; headers: string[]; fileName: string; fileHash: string; id: string }[] = [];
     const binaryFiles: { id: string; file: File; hash: string }[] = [];
@@ -489,9 +558,77 @@ export function StatementUpload() {
         }
       }
     }
+  }, [queue, updateFile]);
 
-    setIsSubmitting(false);
-  }, [queue, isSubmitting, updateFile]);
+  const submitAll = useCallback(async () => {
+    if (isSubmitting) return;
+    const pendingIds = queue.filter((f) => f.status === "queued").map((f) => f.id);
+    if (pendingIds.length === 0) return;
+    setIsSubmitting(true);
+    try {
+      await submitQueuedItems(pendingIds);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [queue, isSubmitting, submitQueuedItems]);
+
+  const retryFile = useCallback(async (item: QueuedFile) => {
+    if (isRetrying || isSubmitting) return;
+    if (!canRetryFileItem(item, fileStash.current.has(item.hash))) return;
+
+    setIsRetrying(true);
+    try {
+      if (item.statementId) {
+        updateFile(item.id, {
+          status: "submitted",
+          error: null,
+          imported: undefined,
+          duplicateTxns: undefined,
+        });
+        await kickStatementProcessing(item.statementId);
+      } else {
+        updateFile(item.id, { status: "queued", error: null });
+        await submitQueuedItems([item.id]);
+      }
+    } finally {
+      setIsRetrying(false);
+    }
+  }, [isRetrying, isSubmitting, kickStatementProcessing, submitQueuedItems, updateFile]);
+
+  const retryAll = useCallback(async () => {
+    if (isRetrying || isSubmitting) return;
+    const retryable = queue.filter((item) => canRetryFileItem(item, fileStash.current.has(item.hash)));
+    if (retryable.length === 0) return;
+
+    setIsRetrying(true);
+    try {
+      const withStatement = retryable.filter((item) => item.statementId);
+      const withoutStatement = retryable.filter((item) => !item.statementId);
+
+      for (const item of withStatement) {
+        updateFile(item.id, {
+          status: "submitted",
+          error: null,
+          imported: undefined,
+          duplicateTxns: undefined,
+        });
+      }
+      for (const item of withoutStatement) {
+        updateFile(item.id, { status: "queued", error: null });
+      }
+
+      if (withoutStatement.length > 0) {
+        await submitQueuedItems(withoutStatement.map((item) => item.id));
+      }
+
+      const firstStatement = withStatement[0]?.statementId;
+      if (firstStatement) {
+        await kickStatementProcessing(firstStatement);
+      }
+    } finally {
+      setIsRetrying(false);
+    }
+  }, [queue, isRetrying, isSubmitting, kickStatementProcessing, submitQueuedItems, updateFile]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -520,6 +657,7 @@ export function StatementUpload() {
   const submittedCount = queue.filter((f) => f.status === "submitted").length;
   const duplicateCount = queue.filter((f) => f.status === "duplicate").length;
   const errorCount = queue.filter((f) => f.status === "error" || f.status === "failed").length;
+  const retryableCount = queue.filter((f) => canRetryFileItem(f, fileStash.current.has(f.hash))).length;
   const deferredCount = queue.filter((f) => f.status === "deferred").length;
   const queuedCount = queue.filter((f) => f.status === "queued").length;
 
@@ -601,11 +739,28 @@ export function StatementUpload() {
                 {duplicateCount > 0 && <span className="text-[#ECAA0B] ml-2">{duplicateCount} duplicate{duplicateCount !== 1 ? "s" : ""} skipped</span>}
                 {errorCount > 0 && <span className="text-[#FF6F69] ml-2">{errorCount} failed</span>}
               </p>
-              {allDone && (
-                <Button onClick={reset} variant="ghost" size="sm" className="text-white/60 hover:text-white h-7 text-xs">
-                  Clear
-                </Button>
-              )}
+              {retryableCount > 0 || allDone ? (
+                <div className="flex items-center gap-2">
+                  {retryableCount > 0 && (
+                    <Button
+                      type="button"
+                      onClick={() => void retryAll()}
+                      disabled={isRetrying || isSubmitting}
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs text-[#0BC18D] hover:text-[#0BC18D] hover:bg-[#0BC18D]/10"
+                    >
+                      <RotateCw className={cn("w-3 h-3 mr-1", isRetrying && "animate-spin")} />
+                      Retry All
+                    </Button>
+                  )}
+                  {allDone && (
+                    <Button onClick={reset} variant="ghost" size="sm" className="text-white/60 hover:text-white h-7 text-xs">
+                      Clear
+                    </Button>
+                  )}
+                </div>
+              ) : null}
             </div>
 
             <div className="max-h-[min(52vh,28rem)] min-h-0 overflow-y-auto overscroll-y-contain [scrollbar-gutter:stable]">
@@ -681,7 +836,21 @@ export function StatementUpload() {
                     </p>
                   </div>
 
-                  <div className="shrink-0">
+                  <div className="shrink-0 flex items-center gap-1">
+                    {canRetryFileItem(item, fileStash.current.has(item.hash)) && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void retryFile(item);
+                        }}
+                        disabled={isRetrying || isSubmitting}
+                        className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] font-medium text-[#0BC18D] transition-colors hover:bg-[#0BC18D]/10 disabled:opacity-40"
+                      >
+                        <RotateCw className={cn("w-3 h-3", isRetrying && "animate-spin")} />
+                        Retry
+                      </button>
+                    )}
                     {(item.status === "queued" || item.status === "deferred" || item.status === "duplicate" || item.status === "error" || item.status === "completed" || item.status === "failed") && (
                       <button type="button" onClick={(e) => { e.stopPropagation(); removeFile(item.id); }} className="p-1 text-white/40 hover:text-white/70 transition-colors">
                         <X className="w-3.5 h-3.5" />

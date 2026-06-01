@@ -1,0 +1,15 @@
+import { NextRequest, NextResponse } from "next/server";
+import { corsHeaders, protectedResourceMetadata } from "@/lib/mcp/config";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: corsHeaders() });
+}
+
+// RFC 9728 path-aware discovery: for an MCP resource at /api/mcp, clients
+// (notably Claude) look for the metadata at this exact path.
+export async function GET(req: NextRequest) {
+  return NextResponse.json(protectedResourceMetadata(req), { headers: corsHeaders() });
+}

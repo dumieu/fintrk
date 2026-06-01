@@ -404,7 +404,7 @@ export function AnalyticsDetailTooltip({
         clientY,
         tooltipWidth: r.width,
         tooltipHeight: r.height,
-        avoidRect,
+        avoidRects: [rect, avoidRect].filter(Boolean) as DOMRect[],
       }),
     );
   }, [clientX, clientY, avoidRect, data, loading, errorMessage, rect]);
@@ -420,13 +420,13 @@ export function AnalyticsDetailTooltip({
           clientY,
           tooltipWidth: r.width,
           tooltipHeight: r.height,
-          avoidRect,
+          avoidRects: [rect, avoidRect].filter(Boolean) as DOMRect[],
         }),
       );
     };
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
-  }, [clientX, clientY, avoidRect]);
+  }, [clientX, clientY, avoidRect, rect]);
 
   const style: CSSProperties = {
     left: pos?.left ?? -9999,

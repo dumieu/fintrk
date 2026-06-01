@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useCallback,
 } from "react";
 import { createPortal } from "react-dom";
 import { CalendarRange, Maximize2, X } from "lucide-react";
@@ -18,13 +19,58 @@ import { formatCurrency } from "@/lib/format";
 import { AnalyticsDetailTooltip, detailTipAnchorFromEvent } from "@/components/analytics-detail-tooltip";
 import { useAnalyticsDetail } from "@/components/use-analytics-detail";
 import { CategoryTransactionsModal } from "@/components/category-transactions-modal";
+import { AnalyticsCategoryLegend } from "@/components/analytics-category-legend";
+import {
+  analyticsCategoryGradientId,
+  analyticsCategoryGradientTop,
+} from "@/lib/analytics-category-colors";
+import { monthKeyToDateRange } from "@/lib/month-date-range";
 
 const REF_LINE_INCOME = "#39FF14";
 const REF_LINE_SPEND = "#FF4444";
-const DEFAULT_MONTHS = 21;
+const DEFAULT_MONTHS = 72;
 const CHART_HEIGHT = 660;
 const CHART_HEIGHT_FULL_INIT = 900;
 const CHART_HEIGHT_FULL_MIN = 540;
+const DENSE_BAR_THRESHOLD = 20;
+/** ~0.5mm gap between bars in dense mode (2px at standard density). */
+const DENSE_BAR_GAP_PX = 2;
+
+function monthLabelShort(mk: string): string {
+  const [y, m] = mk.split("-").map((s) => parseInt(s, 10));
+  const d = new Date(Date.UTC(y, m - 1, 1));
+  return d.toLocaleString("en-US", { month: "short", timeZone: "UTC" });
+}
+
+function denseMonthShowsYear(mk: string, index: number, months: MonthlyStack[]): boolean {
+  if (index === 0) return true;
+  const prev = months[index - 1]?.month;
+  return !prev || mk.slice(0, 4) !== prev.slice(0, 4);
+}
+
+function computeBarGeometries(
+  count: number,
+  padL: number,
+  innerW: number,
+  dense: boolean,
+  fullscreen: boolean,
+): { cx: number; x: number; barW: number }[] {
+  if (count <= 0) return [];
+  if (!dense) {
+    const slot = innerW / count;
+    const maxBarW = fullscreen ? 72 : 56;
+    return Array.from({ length: count }, (_, i) => {
+      const barW = Math.max(18, Math.min(maxBarW, slot * 0.66));
+      const cx = padL + slot * i + slot / 2;
+      return { cx, x: cx - barW / 2, barW };
+    });
+  }
+  const barW = Math.max(2, (innerW - DENSE_BAR_GAP_PX * (count - 1)) / count);
+  return Array.from({ length: count }, (_, i) => {
+    const x = padL + i * (barW + DENSE_BAR_GAP_PX);
+    return { cx: x + barW / 2, x, barW };
+  });
+}
 
 function compact(n: number): string {
   const a = Math.abs(n);
@@ -75,12 +121,77 @@ function tightYScale(
   return { top, tickValues };
 }
 
+function filterMonthsBySoloCategory(
+  months: MonthlyStack[],
+  soloCategory: string | null,
+): MonthlyStack[] {
+  if (!soloCategory) return months;
+  return months.map((m) => {
+    const segments = m.segments.filter((s) => s.name === soloCategory);
+    const total = Math.round(segments.reduce((a, s) => a + s.amount, 0) * 100) / 100;
+    return { ...m, segments, total };
+  });
+}
+
 export function MonthlyStackedSpend({ months: monthsCount = DEFAULT_MONTHS }: { months?: number }) {
   const [data, setData] = useState<MonthlyStacksResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
-  const [categoryModal, setCategoryModal] = useState<string | null>(null);
+  const [soloCategory, setSoloCategory] = useState<string | null>(null);
+  const [drilldown, setDrilldown] = useState<MonthlyStacksResponse | null>(null);
+  const [drilldownLoading, setDrilldownLoading] = useState(false);
+  const [segmentModal, setSegmentModal] = useState<{
+    name: string;
+    level: "category" | "subcategory";
+    monthKey: string;
+  } | null>(null);
+
+  const toggleCategory = useCallback((name: string) => {
+    setSoloCategory((prev) => (prev === name ? null : name));
+  }, []);
+
+  const showAllCategories = useCallback(() => {
+    setSoloCategory(null);
+  }, []);
+
+  const openSegmentModal = useCallback(
+    (segment: { name: string; level: "category" | "subcategory"; monthKey: string }) => {
+      setSegmentModal(segment);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!soloCategory) {
+      setDrilldown(null);
+      setDrilldownLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setDrilldownLoading(true);
+    fetch(
+      `/api/analytics/monthly-stacks?months=${monthsCount}&category=${encodeURIComponent(soloCategory)}`,
+    )
+      .then((r) => r.json())
+      .then((j: MonthlyStacksResponse | { error: string }) => {
+        if (cancelled) return;
+        if ("error" in j) {
+          setDrilldown(null);
+        } else {
+          setDrilldown(j);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setDrilldown(null);
+      })
+      .finally(() => {
+        if (!cancelled) setDrilldownLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [soloCategory, monthsCount]);
 
   useEffect(() => {
     let cancelled = false;
@@ -136,11 +247,18 @@ export function MonthlyStackedSpend({ months: monthsCount = DEFAULT_MONTHS }: { 
   if (data.months.every((m) => m.total === 0)) {
     return (
       <Card className="border-white/[0.10] bg-white/[0.04] text-white">
-        <ChartCardHeader legend={data} />
+        <ChartCardHeader />
         <CardContent className="overflow-visible pt-0">
           <div className="flex h-[660px] items-center justify-center text-sm text-white/40">
             No spending in the selected window.
           </div>
+          <AnalyticsCategoryLegend
+            categories={data.categories}
+            compact
+            soloCategory={soloCategory}
+            onToggleCategory={toggleCategory}
+            onShowAll={showAllCategories}
+          />
         </CardContent>
       </Card>
     );
@@ -148,17 +266,41 @@ export function MonthlyStackedSpend({ months: monthsCount = DEFAULT_MONTHS }: { 
 
   return (
     <Card className="border-white/[0.10] bg-white/[0.04] text-white">
-      <ChartCardHeader legend={data} onExpand={() => setExpanded(true)} />
+      <ChartCardHeader onExpand={() => setExpanded(true)} />
       <CardContent className="overflow-visible pt-0">
-        <ChartView data={data} onCategoryClick={setCategoryModal} />
+        <ChartView
+          data={data}
+          soloCategory={soloCategory}
+          drilldown={drilldown}
+          drilldownLoading={drilldownLoading}
+          onSegmentClick={openSegmentModal}
+        />
+        <AnalyticsCategoryLegend
+          categories={data.categories}
+          avgSpend={data.avgMonthlySpendLast6}
+          avgIncome={data.avgMonthlyIncomeLast6}
+          soloCategory={soloCategory}
+          subcategoryBreakdown={
+            soloCategory && drilldown?.parentCategory === soloCategory
+              ? drilldown.categories
+              : undefined
+          }
+          onToggleCategory={toggleCategory}
+          onShowAll={showAllCategories}
+        />
       </CardContent>
-      {categoryModal &&
+      {segmentModal &&
         typeof document !== "undefined" &&
         createPortal(
           <CategoryTransactionsModal
-            filter={{ mode: "category", name: categoryModal, level: "category" }}
+            filter={{
+              mode: "category",
+              name: segmentModal.name,
+              level: segmentModal.level,
+              ...monthKeyToDateRange(segmentModal.monthKey),
+            }}
             currency={data.primaryCurrency}
-            onClose={() => setCategoryModal(null)}
+            onClose={() => setSegmentModal(null)}
           />,
           document.body,
         )}
@@ -167,8 +309,13 @@ export function MonthlyStackedSpend({ months: monthsCount = DEFAULT_MONTHS }: { 
         createPortal(
           <FullscreenChartModal
             data={data}
+            soloCategory={soloCategory}
+            drilldown={drilldown}
+            drilldownLoading={drilldownLoading}
+            onToggleCategory={toggleCategory}
+            onShowAllCategories={showAllCategories}
             onClose={() => setExpanded(false)}
-            onCategoryClick={setCategoryModal}
+            onSegmentClick={openSegmentModal}
           />,
           document.body,
         )}
@@ -190,29 +337,14 @@ function ExpandChartButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-function ChartCardHeader({
-  legend,
-  onExpand,
-}: {
-  legend?: MonthlyStacksResponse;
-  onExpand?: () => void;
-}) {
+function ChartCardHeader({ onExpand }: { onExpand?: () => void }) {
   return (
     <CardHeader className="pb-3">
       <CardTitle className="flex items-center gap-2 text-sm font-semibold text-white/85">
         <span className="grid h-7 w-7 place-items-center rounded-lg bg-gradient-to-br from-[#0BC18D]/30 to-[#5DD3F3]/20 ring-1 ring-white/10">
           <CalendarRange className="h-4 w-4 text-[#0BC18D]" />
         </span>
-        <span className="flex min-w-0 items-center gap-1.5">
-          <span>Monthly Spend by Category</span>
-          {legend ? (
-            <LegendHelpButton
-              categories={legend.categories}
-              avgIncome={legend.avgMonthlyIncomeLast6}
-              avgSpend={legend.avgMonthlySpendLast6}
-            />
-          ) : null}
-        </span>
+        <span>Monthly Spend by Category</span>
       </CardTitle>
       {onExpand ? (
         <CardAction>
@@ -225,12 +357,22 @@ function ChartCardHeader({
 
 function FullscreenChartModal({
   data,
+  soloCategory,
+  drilldown,
+  drilldownLoading,
+  onToggleCategory,
+  onShowAllCategories,
   onClose,
-  onCategoryClick,
+  onSegmentClick,
 }: {
   data: MonthlyStacksResponse;
+  soloCategory: string | null;
+  drilldown: MonthlyStacksResponse | null;
+  drilldownLoading: boolean;
+  onToggleCategory: (name: string) => void;
+  onShowAllCategories: () => void;
   onClose: () => void;
-  onCategoryClick: (categoryName: string) => void;
+  onSegmentClick: (segment: { name: string; level: "category" | "subcategory"; monthKey: string }) => void;
 }) {
   useEffect(() => {
     const prev = document.body.style.overflow;
@@ -257,14 +399,7 @@ function FullscreenChartModal({
           <span className="grid h-7 w-7 place-items-center rounded-lg bg-gradient-to-br from-[#0BC18D]/30 to-[#5DD3F3]/20 ring-1 ring-white/10">
             <Maximize2 className="h-3.5 w-3.5 text-[#0BC18D]" />
           </span>
-          <span className="flex items-center gap-1.5">
-            Monthly Spend by Category
-            <LegendHelpButton
-              categories={data.categories}
-              avgIncome={data.avgMonthlyIncomeLast6}
-              avgSpend={data.avgMonthlySpendLast6}
-            />
-          </span>
+          Monthly Spend by Category
         </div>
         <button
           type="button"
@@ -275,8 +410,28 @@ function FullscreenChartModal({
           <X className="h-4 w-4" />
         </button>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col px-4 py-4 sm:px-8 sm:py-6">
-        <ChartView data={data} fullscreen onCategoryClick={onCategoryClick} />
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4 sm:px-8 sm:py-6">
+        <ChartView
+          data={data}
+          soloCategory={soloCategory}
+          drilldown={drilldown}
+          drilldownLoading={drilldownLoading}
+          fullscreen
+          onSegmentClick={onSegmentClick}
+        />
+        <AnalyticsCategoryLegend
+          categories={data.categories}
+          avgSpend={data.avgMonthlySpendLast6}
+          avgIncome={data.avgMonthlyIncomeLast6}
+          soloCategory={soloCategory}
+          subcategoryBreakdown={
+            soloCategory && drilldown?.parentCategory === soloCategory
+              ? drilldown.categories
+              : undefined
+          }
+          onToggleCategory={onToggleCategory}
+          onShowAll={onShowAllCategories}
+        />
       </div>
     </div>
   );
@@ -284,12 +439,18 @@ function FullscreenChartModal({
 
 function ChartView({
   data,
+  soloCategory,
+  drilldown = null,
+  drilldownLoading = false,
   fullscreen = false,
-  onCategoryClick,
+  onSegmentClick,
 }: {
   data: MonthlyStacksResponse;
+  soloCategory?: string | null;
+  drilldown?: MonthlyStacksResponse | null;
+  drilldownLoading?: boolean;
   fullscreen?: boolean;
-  onCategoryClick?: (categoryName: string) => void;
+  onSegmentClick?: (segment: { name: string; level: "category" | "subcategory"; monthKey: string }) => void;
 }) {
   const { tip, open, scheduleClose, clearLeave } = useAnalyticsDetail();
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -316,48 +477,97 @@ function ChartView({
     return () => ro.disconnect();
   }, [fullscreen]);
 
-  const { months, primaryCurrency, avgMonthlyIncomeLast6, avgMonthlySpendLast6 } = data;
+  const { months: rawMonths, primaryCurrency, avgMonthlyIncomeLast6, avgMonthlySpendLast6, categories } = data;
+  const categoryFilterActive = soloCategory != null;
+  const usingSubcategoryStacks =
+    categoryFilterActive &&
+    drilldown?.parentCategory === soloCategory &&
+    drilldown.months.length > 0;
 
-  /** Layout — legend now lives below the chart, so no left gutter for it. */
+  const months = useMemo(() => {
+    if (usingSubcategoryStacks && drilldown) return drilldown.months;
+    return filterMonthsBySoloCategory(rawMonths, soloCategory ?? null);
+  }, [rawMonths, soloCategory, usingSubcategoryStacks, drilldown]);
+
+  const segmentLevel: "category" | "subcategory" = usingSubcategoryStacks
+    ? "subcategory"
+    : "category";
+
+  const legendCategories = usingSubcategoryStacks && drilldown
+    ? drilldown.categories
+    : categories;
+
+  const gradientCategories = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const c of legendCategories) map.set(c.name, c.color);
+    for (const m of months) {
+      for (const s of m.segments) {
+        if (!map.has(s.name)) map.set(s.name, s.color);
+      }
+    }
+    return Array.from(map.entries()).map(([name, color]) => ({ name, color }));
+  }, [legendCategories, months]);
+
+  const denseBars = months.length > DENSE_BAR_THRESHOLD;
   const padL = fullscreen ? 64 : 56;
   const padR = 16;
   const padT = fullscreen ? 12 : 6;
-  const padB = fullscreen ? 64 : 52;
+  const padB = denseBars ? (fullscreen ? 40 : 36) : fullscreen ? 64 : 52;
   const innerW = size.w - padL - padR;
   const innerH = size.h - padT - padB;
-  const slot = innerW / months.length;
-  const barW = Math.max(18, Math.min(fullscreen ? 72 : 56, slot * 0.66));
+  const barGeometries = useMemo(
+    () => computeBarGeometries(months.length, padL, innerW, denseBars, fullscreen),
+    [months.length, padL, innerW, denseBars, fullscreen],
+  );
+  const denseLabelStride =
+    denseBars && (barGeometries[0]?.barW ?? 0) < 14
+      ? 3
+      : denseBars && (barGeometries[0]?.barW ?? 0) < 22
+        ? 2
+        : 1;
   const axisFont = fullscreen ? 12 : 10;
-  const monthFont = fullscreen ? 12 : 10;
+  const monthFont = denseBars ? (fullscreen ? 9 : 8) : fullscreen ? 12 : 10;
   const monthYearFont = fullscreen ? 11 : 10;
 
-  /** Scale to the tallest rendered bar or reference line — never API maxStack alone. */
-  const yMaxRaw = useMemo(
-    () =>
-      Math.max(
-        0,
-        ...months.map((m) => m.total),
-        avgMonthlyIncomeLast6 ?? 0,
-        avgMonthlySpendLast6 ?? 0,
-      ),
-    [months, avgMonthlyIncomeLast6, avgMonthlySpendLast6],
-  );
+  /** Scale to filtered bar totals only when a category slicer is active. */
+  const yMaxRaw = useMemo(() => {
+    const barMax = Math.max(0, ...months.map((m) => m.total));
+    if (categoryFilterActive) return barMax;
+    return Math.max(
+      barMax,
+      avgMonthlyIncomeLast6 ?? 0,
+      avgMonthlySpendLast6 ?? 0,
+    );
+  }, [months, avgMonthlyIncomeLast6, avgMonthlySpendLast6, categoryFilterActive]);
   const yScale = useMemo(() => tightYScale(yMaxRaw, innerH), [yMaxRaw, innerH]);
   const yToPx = (v: number) => padT + innerH - (v / yScale.top) * innerH;
 
   /** Income line spans only the rightmost 6 bars (or however many the API used). */
   const incomeBarsCount = Math.min(6, months.length);
   const incomeFirstIdx = months.length - incomeBarsCount;
-  const incomeX1 = padL + slot * incomeFirstIdx + slot * 0.08;
-  const incomeX2 = padL + slot * months.length - slot * 0.08;
-  const incomeY = avgMonthlyIncomeLast6 != null ? yToPx(avgMonthlyIncomeLast6) : null;
-  const spendY = avgMonthlySpendLast6 != null ? yToPx(avgMonthlySpendLast6) : null;
+  const incomeX1 = barGeometries[incomeFirstIdx]?.x ?? padL;
+  const incomeX2 =
+    barGeometries[months.length - 1] != null
+      ? barGeometries[months.length - 1].x + barGeometries[months.length - 1].barW
+      : padL + innerW;
+  const showRefLines = !categoryFilterActive;
+  const incomeY =
+    showRefLines && avgMonthlyIncomeLast6 != null ? yToPx(avgMonthlyIncomeLast6) : null;
+  const spendY =
+    showRefLines && avgMonthlySpendLast6 != null ? yToPx(avgMonthlySpendLast6) : null;
 
   return (
     <div
       ref={wrapRef}
       className={`relative w-full ${fullscreen ? "flex min-h-0 flex-1 flex-col" : ""}`}
     >
+      {categoryFilterActive && drilldownLoading && !usingSubcategoryStacks ? (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-[#111111]/40 backdrop-blur-[1px]">
+          <span className="rounded-lg border border-white/10 bg-[#111111]/90 px-3 py-1.5 text-xs text-white/60">
+            Loading subcategory breakdown…
+          </span>
+        </div>
+      ) : null}
       <div className={`relative w-full ${fullscreen ? "min-h-0 flex-1" : ""}`}>
         <svg
           width={size.w}
@@ -372,6 +582,20 @@ function ChartView({
                 <stop offset="0%" stopColor="rgba(255,255,255,0.18)" />
                 <stop offset="100%" stopColor="rgba(255,255,255,0)" />
               </linearGradient>
+              {gradientCategories.map((c) => (
+                <linearGradient
+                  key={c.name}
+                  id={analyticsCategoryGradientId(c.name)}
+                  x1="0"
+                  y1="0"
+                  x2="0"
+                  y2="1"
+                >
+                  <stop offset="0%" stopColor={analyticsCategoryGradientTop(c.color)} />
+                  <stop offset="55%" stopColor={c.color} />
+                  <stop offset="100%" stopColor={c.color} stopOpacity={0.88} />
+                </linearGradient>
+              ))}
             </defs>
 
             {/* Y-axis gridlines + labels — only at values the data reaches */}
@@ -486,8 +710,7 @@ function ChartView({
 
             {/* Stacks */}
             {months.map((m, i) => {
-              const cx = padL + slot * i + slot / 2;
-              const x = cx - barW / 2;
+              const { cx, x, barW } = barGeometries[i] ?? { cx: padL, x: padL, barW: 4 };
               return (
                 <MonthBar
                   key={m.month}
@@ -502,7 +725,11 @@ function ChartView({
                   open={open}
                   scheduleClose={scheduleClose}
                   shineId={shineId}
-                  onCategoryClick={onCategoryClick}
+                  segmentLevel={segmentLevel}
+                  onSegmentClick={onSegmentClick}
+                  hideLabels={denseBars}
+                  hideEmptyMarker={denseBars}
+                  barRadius={denseBars ? Math.min(2, barW / 3) : 4}
                   segmentLabelMin={fullscreen ? 12 : 14}
                   barLabelFont={fullscreen ? 11 : 9.5}
                   totalFont={fullscreen ? 12 : 10.5}
@@ -568,7 +795,27 @@ function ChartView({
 
             {/* X-axis month labels */}
             {months.map((m, i) => {
-              const cx = padL + slot * i + slot / 2;
+              const cx = barGeometries[i]?.cx ?? padL;
+              if (denseBars) {
+                if (i % denseLabelStride !== 0) return null;
+                const short = monthLabelShort(m.month);
+                const showYear = denseMonthShowsYear(m.month, i, months);
+                const label = showYear
+                  ? `${short} '${m.month.slice(2, 4)}`
+                  : short;
+                return (
+                  <text
+                    key={`lbl-${m.month}`}
+                    x={cx}
+                    y={size.h - padB + 14}
+                    textAnchor="middle"
+                    className="fill-white/50"
+                    style={{ fontSize: monthFont, fontWeight: 600 }}
+                  >
+                    {label}
+                  </text>
+                );
+              }
               const lbl = monthLabel(m.month);
               return (
                 <g key={`lbl-${m.month}`}>
@@ -635,7 +882,11 @@ function MonthBar({
   open,
   scheduleClose,
   shineId,
-  onCategoryClick,
+  segmentLevel = "category",
+  onSegmentClick,
+  hideLabels = false,
+  barRadius = 4,
+  hideEmptyMarker = false,
   segmentLabelMin = 14,
   barLabelFont = 9.5,
   totalFont = 10.5,
@@ -651,12 +902,17 @@ function MonthBar({
   open: ReturnType<typeof useAnalyticsDetail>["open"];
   scheduleClose: ReturnType<typeof useAnalyticsDetail>["scheduleClose"];
   shineId: string;
-  onCategoryClick?: (categoryName: string) => void;
+  segmentLevel?: "category" | "subcategory";
+  onSegmentClick?: (segment: { name: string; level: "category" | "subcategory"; monthKey: string }) => void;
+  hideLabels?: boolean;
+  barRadius?: number;
+  hideEmptyMarker?: boolean;
   segmentLabelMin?: number;
   barLabelFont?: number;
   totalFont?: number;
 }) {
   if (month.total <= 0) {
+    if (hideEmptyMarker) return null;
     return (
       <text
         x={cx}
@@ -689,7 +945,7 @@ function MonthBar({
         if (h < 0.5) return null;
         const rectY = yEnd; // y of the segment's TOP edge
         const isTop = idx === stackRects.length - 1;
-        const showLabel = h >= segmentLabelMin && barW >= 26;
+        const showLabel = !hideLabels && h >= segmentLabelMin && barW >= 26;
         const labelText = compact(seg.amount);
         return (
           <g
@@ -708,18 +964,18 @@ function MonthBar({
             onClick={(e) => {
               e.stopPropagation();
               scheduleClose();
-              onCategoryClick?.(seg.name);
+              onSegmentClick?.({ name: seg.name, level: segmentLevel, monthKey: month.month });
             }}
-            style={{ cursor: onCategoryClick ? "pointer" : "default" }}
+            style={{ cursor: onSegmentClick ? "pointer" : "default" }}
           >
             <rect
               x={x}
               y={rectY}
               width={barW}
               height={h}
-              fill={seg.color}
-              rx={isTop ? 4 : 0}
-              ry={isTop ? 4 : 0}
+              fill={`url(#${analyticsCategoryGradientId(seg.name)})`}
+              rx={isTop ? barRadius : 0}
+              ry={isTop ? barRadius : 0}
             />
             {/* Inner highlight for depth */}
             <rect
@@ -729,8 +985,8 @@ function MonthBar({
               height={Math.min(h, 8)}
               fill={`url(#msb-shine-${shineId})`}
               opacity={0.4}
-              rx={isTop ? 4 : 0}
-              ry={isTop ? 4 : 0}
+              rx={isTop ? barRadius : 0}
+              ry={isTop ? barRadius : 0}
               pointerEvents="none"
             />
             {showLabel && (
@@ -767,142 +1023,29 @@ function MonthBar({
       })}
 
       {/* Total — inside tall stacks; above short stacks */}
-      {(() => {
-        const barPx = yBottom - topY;
-        const inside = barPx >= 28;
-        return (
-          <text
-            x={cx}
-            y={inside ? topY + totalFont + 2 : Math.max(yTop + totalFont + 2, topY - 4)}
-            textAnchor="middle"
-            style={{
-              fontSize: totalFont,
-              fontWeight: 800,
-              fill: "rgba(255,255,255,0.92)",
-              letterSpacing: "0.01em",
-              textShadow: inside ? "0 1px 3px rgba(0,0,0,0.65)" : undefined,
-            }}
-          >
-            {compact(month.total)}
-          </text>
-        );
-      })()}
+      {!hideLabels &&
+        (() => {
+          const barPx = yBottom - topY;
+          const inside = barPx >= 28;
+          return (
+            <text
+              x={cx}
+              y={inside ? topY + totalFont + 2 : Math.max(yTop + totalFont + 2, topY - 4)}
+              textAnchor="middle"
+              style={{
+                fontSize: totalFont,
+                fontWeight: 800,
+                fill: "rgba(255,255,255,0.92)",
+                letterSpacing: "0.01em",
+                textShadow: inside ? "0 1px 3px rgba(0,0,0,0.65)" : undefined,
+              }}
+            >
+              {compact(month.total)}
+            </text>
+          );
+        })()}
       {/* Hidden formatter usage to keep tree-shaking happy */}
       <title>{`${monthLabel(month.month).line1} ${monthLabel(month.month).line2} • ${formatCurrency(month.total, currency)}`}</title>
     </g>
-  );
-}
-
-function LegendHelpButton({
-  categories,
-  avgIncome,
-  avgSpend,
-}: {
-  categories: MonthlyStacksResponse["categories"];
-  avgIncome: number | null;
-  avgSpend: number | null;
-}) {
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node)) return;
-      if (wrapRef.current?.contains(target)) return;
-      setOpen(false);
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("pointerdown", onPointerDown, true);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown, true);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
-
-  return (
-    <div ref={wrapRef} className="relative inline-flex">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="grid h-4 w-4 place-items-center rounded-full border border-white/20 bg-white/[0.06] text-[10px] font-bold leading-none text-white/45 transition-colors hover:border-white/35 hover:bg-white/[0.10] hover:text-white/80"
-        aria-label={open ? "Hide chart legend" : "Show chart legend"}
-        aria-expanded={open}
-        aria-haspopup="dialog"
-      >
-        ?
-      </button>
-      {open ? (
-        <div
-          role="dialog"
-          aria-label="Chart legend"
-          className="absolute left-0 top-[calc(100%+6px)] z-[120] w-[min(420px,calc(100vw-2rem))] rounded-xl border border-white/[0.12] bg-[#111111]/[0.98] p-3 shadow-[0_16px_48px_-8px_rgba(0,0,0,0.85),inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-xl"
-        >
-          <ChartLegendContent
-            categories={categories}
-            avgIncome={avgIncome}
-            avgSpend={avgSpend}
-          />
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function ChartLegendContent({
-  categories,
-  avgIncome,
-  avgSpend,
-}: {
-  categories: MonthlyStacksResponse["categories"];
-  avgIncome: number | null;
-  avgSpend: number | null;
-}) {
-  return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
-      {categories.map((c) => (
-        <span
-          key={c.name}
-          className="inline-flex items-center gap-1.5 text-[11px] text-white/70"
-        >
-          <span
-            className="inline-block h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-white/15"
-            style={{ background: c.color }}
-            aria-hidden
-          />
-          <span title={c.name}>{c.name.toLowerCase()}</span>
-        </span>
-      ))}
-      {avgSpend != null && avgSpend > 0 && (
-        <span className="inline-flex items-center gap-1.5 text-[11px] text-[#FFB4B4]">
-          <span
-            className="inline-block h-[2px] w-5 shrink-0 rounded-full"
-            style={{
-              background: "#FF4444",
-              boxShadow: "0 0 6px rgba(255,68,68,0.7)",
-            }}
-            aria-hidden
-          />
-          avg spend (last 6 mo)
-        </span>
-      )}
-      {avgIncome != null && avgIncome > 0 && (
-        <span className="inline-flex items-center gap-1.5 text-[11px] text-[#9DFFB0]">
-          <span
-            className="inline-block h-[2px] w-5 shrink-0 rounded-full"
-            style={{
-              background: "#39FF14",
-              boxShadow: "0 0 6px rgba(57,255,20,0.7)",
-            }}
-            aria-hidden
-          />
-          avg income (last 6 mo)
-        </span>
-      )}
-    </div>
   );
 }

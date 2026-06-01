@@ -14,6 +14,7 @@ import {
   index,
   serial,
   pgEnum,
+  unique,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import type { UserJSON } from "@clerk/backend";
@@ -266,6 +267,23 @@ export const merchantLabelRules = pgTable(
   (t) => [
     uniqueIndex("merchant_label_rules_user_merchant_idx").on(t.userId, t.merchantName),
     index("merchant_label_rules_user_idx").on(t.userId),
+  ],
+);
+
+// ─── Double-charge watchlist exclusions (per-user permanent dismissals) ─────
+
+export const doubleChargeWatchlistExclusions = pgTable(
+  "double_charge_watchlist_exclusions",
+  {
+    id: serial("id").primaryKey(),
+    userId: varchar("user_id", { length: 255 }).notNull(),
+    merchantKey: varchar("merchant_key", { length: 96 }).notNull(),
+    displayName: varchar("display_name", { length: 255 }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("double_charge_watchlist_excl_user_key_idx").on(t.userId, t.merchantKey),
+    index("double_charge_watchlist_excl_user_idx").on(t.userId),
   ],
 );
 
@@ -622,3 +640,54 @@ export const goalsRelations = relations(goals, ({ many }) => ({
 export const aiInsightsRelations = relations(aiInsights, ({}) => ({}));
 
 export const aiCostsRelations = relations(aiCosts, ({}) => ({}));
+
+/* MCP / Connect your AI — OAuth 2.1 provider for GenAI integrations */
+export const mcpClientsTable = pgTable("mcp_clients", {
+  id_client: integer("id_client").primaryKey().generatedAlwaysAsIdentity(),
+  clientId: varchar("client_id", { length: 255 }).notNull(),
+  clientSecretHash: varchar("client_secret_hash", { length: 64 }),
+  clientName: varchar("client_name", { length: 255 }),
+  redirectUris: text("redirect_uris").notNull(),
+  grantTypes: text("grant_types"),
+  tokenEndpointAuthMethod: varchar("token_endpoint_auth_method", { length: 64 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  clientIdUnique: unique("mcp_clients_client_id_unique").on(table.clientId),
+}));
+
+export const mcpAuthCodesTable = pgTable("mcp_auth_codes", {
+  id_code: integer("id_code").primaryKey().generatedAlwaysAsIdentity(),
+  codeHash: varchar("code_hash", { length: 64 }).notNull(),
+  clientId: varchar("client_id", { length: 255 }).notNull(),
+  clerkUserId: varchar("clerk_user_id", { length: 255 }).notNull(),
+  redirectUri: text("redirect_uri").notNull(),
+  codeChallenge: varchar("code_challenge", { length: 255 }),
+  codeChallengeMethod: varchar("code_challenge_method", { length: 16 }),
+  scope: text("scope"),
+  resource: text("resource"),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  codeHashUnique: unique("mcp_auth_codes_code_hash_unique").on(table.codeHash),
+}));
+
+export const mcpTokensTable = pgTable("mcp_tokens", {
+  id_token: integer("id_token").primaryKey().generatedAlwaysAsIdentity(),
+  tokenHash: varchar("token_hash", { length: 64 }).notNull(),
+  refreshHash: varchar("refresh_hash", { length: 64 }),
+  kind: varchar("kind", { length: 16 }).notNull(),
+  clientId: varchar("client_id", { length: 255 }),
+  clerkUserId: varchar("clerk_user_id", { length: 255 }).notNull(),
+  scope: text("scope"),
+  label: varchar("label", { length: 255 }),
+  tokenLast4: varchar("token_last4", { length: 8 }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  revoked: boolean("revoked").notNull().default(false),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  tokenHashUnique: unique("mcp_tokens_token_hash_unique").on(table.tokenHash),
+  refreshHashUnique: unique("mcp_tokens_refresh_hash_unique").on(table.refreshHash),
+  userIdx: index("mcp_tokens_user_idx").on(table.clerkUserId),
+  clientIdx: index("mcp_tokens_client_idx").on(table.clientId),
+}));

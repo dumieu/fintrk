@@ -208,7 +208,7 @@ function BucketCard({
                   {compactK(leaf.monthlyAvg)}
                 </span>
                 <span className="line-clamp-2 px-1 text-center text-[9px] leading-tight text-white/55">
-                  Monthly Avg {leaf.name}
+                  {leaf.name}
                 </span>
               </li>
             ))}

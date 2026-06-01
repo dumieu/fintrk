@@ -14,58 +14,18 @@ import {
 } from "@/lib/db/excluded-transactions";
 import { eq, and, sql } from "drizzle-orm";
 import { logServerError } from "@/lib/safe-error";
+import {
+  analyticsCategoryColor,
+  buildSubcategoryDrilldownColors,
+} from "@/lib/analytics-category-colors";
 
 export const dynamic = "force-dynamic";
 
 const NO_STORE = { "Cache-Control": "no-store" } as const;
 
-const MAX_MONTHS = 36;
-const DEFAULT_MONTHS = 21;
-
-/**
- * Distinct color per **rollup category** for the stacked chart.
- *
- * Hand-picked Tableau-like categorical palette: each category gets its own
- * hue with adequate luminance separation so stacked segments are
- * unambiguously distinguishable. (Previously Household and Health & Fitness
- * both mapped to #0BC18D, making them indistinguishable when stacked.)
- */
-const CATEGORY_COLORS: Record<string, string> = {
-  Travel: "#A78BFA",                  // violet
-  Shopping: "#38BDF8",                // sky blue
-  Entertainment: "#F472B6",           // pink
-  "Health & Fitness": "#34D399",      // emerald
-  Health: "#34D399",
-  Household: "#FB923C",               // orange
-  Transportation: "#FBBF24",          // amber
-  Transport: "#FBBF24",
-  Education: "#818CF8",               // indigo
-  "Restaurant & Entertain": "#F87171",// soft red
-  Restaurants: "#F87171",
-  "Food & Drink": "#F87171",
-  Groceries: "#84CC16",               // lime
-  Housing: "#06B6D4",                 // cyan
-  Financial: "#6366F1",               // deep indigo
-  Helper: "#C084FC",                  // light purple
-  "School & Extracur": "#22D3EE",     // teal-cyan
-  "Gifts & Donations": "#FB7185",     // rose
-  Income: "#10B981",
-  Tax: "#475569",                     // slate
-  Other: "#94A3B8",                   // light slate
-  Uncategorized: "#64748B",
-};
-
-/** Deterministic fallback color from category name (HSL evenly spaced). */
-function hashColor(name: string): string {
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
-  const hue = h % 360;
-  return `hsl(${hue} 70% 60%)`;
-}
-
-function colorFor(name: string): string {
-  return CATEGORY_COLORS[name] ?? hashColor(name);
-}
+/** Six years of monthly bars (72 months). */
+const MAX_MONTHS = 72;
+const DEFAULT_MONTHS = 72;
 
 /**
  * Generate a contiguous list of `YYYY-MM` keys ending at `anchor` (inclusive),
@@ -108,6 +68,8 @@ export interface MonthlyStacksResponse {
   months: MonthlyStack[];
   /** Legend — categories ordered by total spend across the whole window. */
   categories: { name: string; color: string; total: number; share: number }[];
+  /** Set when `category` query param requests a subcategory drill-down. */
+  parentCategory?: string;
   /** Largest single-month stack total — used for y-axis scaling. */
   maxStack: number;
   /** Sum across all months in the window. */
@@ -136,9 +98,15 @@ export async function GET(request: NextRequest) {
       MAX_MONTHS,
       Math.max(1, Number.isFinite(rawMonths) ? Math.floor(rawMonths) : DEFAULT_MONTHS),
     );
+    const drillCategory = request.nextUrl.searchParams.get("category")?.trim() ?? null;
+    if (drillCategory && drillCategory.length > 128) {
+      return NextResponse.json(
+        { error: "Invalid category" },
+        { status: 400, headers: NO_STORE },
+      );
+    }
 
-    /** Anchor the window at the user's actual outflow range so old datasets still render
-     *  meaningful data and we don't show 19 empty bars when only 2 months exist. */
+    /** Anchor at the latest outflow month; query up to 6 years back, return only months with spend. */
     const rangeRows = await resilientQuery(() =>
       db
         .select({
@@ -158,17 +126,10 @@ export async function GET(request: NextRequest) {
     );
     const rng = rangeRows[0];
     const anchor = rng && rng.maxY && rng.maxM ? { year: rng.maxY, month: rng.maxM } : null;
-    const dataSpanMonths = rng && rng.maxY && rng.minY
-      ? (rng.maxY - rng.minY) * 12 + (rng.maxM - rng.minM) + 1
-      : null;
-    /** Clamp requested months to the actual span (with a small floor for visual consistency). */
-    const effectiveMonths = dataSpanMonths
-      ? Math.max(1, Math.min(months, dataSpanMonths))
-      : months;
-
-    const monthKeys = genMonthKeys(effectiveMonths, anchor);
-    const startMonth = monthKeys[0]; // oldest YYYY-MM in window
-    const endMonthKey = monthKeys[monthKeys.length - 1];
+    /** Query window: up to `months` back from the latest outflow month. */
+    const windowKeys = genMonthKeys(months, anchor);
+    const startMonth = windowKeys[0];
+    const endMonthKey = windowKeys[windowKeys.length - 1];
     const startDate = `${startMonth}-01`;
     const endDateExclusive = `${endMonthKey}-01`;
 
@@ -178,40 +139,77 @@ export async function GET(request: NextRequest) {
      *  months, rolling) so a one-off historical bonus can't skew the line. */
 
     const [rows, userAccounts, incomeRows] = await Promise.all([
-      resilientQuery(() =>
-        db
-          .select({
-            month: sql<string>`to_char(date_trunc('month', ${transactions.postedDate}::date), 'YYYY-MM')`,
-            category: categoryRollupLabelSql,
-            total: sql<string>`SUM(ABS(CAST(${transactions.baseAmount} AS numeric)))`,
-            count: sql<number>`COUNT(*)::int`,
-          })
-          .from(transactions)
-          .leftJoin(
-            leafCategory,
-            and(eq(transactions.categoryId, leafCategory.id), eq(leafCategory.userId, userId)),
+      drillCategory
+        ? resilientQuery(() =>
+            db
+              .select({
+                month: sql<string>`to_char(date_trunc('month', ${transactions.postedDate}::date), 'YYYY-MM')`,
+                subcategory: leafCategory.name,
+                total: sql<string>`SUM(ABS(CAST(${transactions.baseAmount} AS numeric)))`,
+                count: sql<number>`COUNT(*)::int`,
+              })
+              .from(transactions)
+              .leftJoin(
+                leafCategory,
+                and(eq(transactions.categoryId, leafCategory.id), eq(leafCategory.userId, userId)),
+              )
+              .leftJoin(
+                parentCategory,
+                and(
+                  eq(leafCategory.parentId, parentCategory.id),
+                  eq(parentCategory.userId, userId),
+                ),
+              )
+              .where(
+                and(
+                  eq(transactions.userId, userId),
+                  excludeCardPaymentsSql(),
+                  spendingIntelligenceOutflowSql(),
+                  sql`${transactions.postedDate}::date >= ${startDate}::date`,
+                  sql`${transactions.postedDate}::date < (${endDateExclusive}::date + interval '1 month')`,
+                  sql`${categoryRollupLabelSql} = ${drillCategory}`,
+                ),
+              )
+              .groupBy(
+                sql`date_trunc('month', ${transactions.postedDate}::date)`,
+                leafCategory.id,
+                leafCategory.name,
+              ),
           )
-          .leftJoin(
-            parentCategory,
-            and(
-              eq(leafCategory.parentId, parentCategory.id),
-              eq(parentCategory.userId, userId),
-            ),
-          )
-          .where(
-            and(
-              eq(transactions.userId, userId),
-              excludeCardPaymentsSql(),
-              spendingIntelligenceOutflowSql(),
-              sql`${transactions.postedDate}::date >= ${startDate}::date`,
-              sql`${transactions.postedDate}::date < (${endDateExclusive}::date + interval '1 month')`,
-            ),
-          )
-          .groupBy(
-            sql`date_trunc('month', ${transactions.postedDate}::date)`,
-            categoryRollupLabelSql,
+        : resilientQuery(() =>
+            db
+              .select({
+                month: sql<string>`to_char(date_trunc('month', ${transactions.postedDate}::date), 'YYYY-MM')`,
+                category: categoryRollupLabelSql,
+                total: sql<string>`SUM(ABS(CAST(${transactions.baseAmount} AS numeric)))`,
+                count: sql<number>`COUNT(*)::int`,
+              })
+              .from(transactions)
+              .leftJoin(
+                leafCategory,
+                and(eq(transactions.categoryId, leafCategory.id), eq(leafCategory.userId, userId)),
+              )
+              .leftJoin(
+                parentCategory,
+                and(
+                  eq(leafCategory.parentId, parentCategory.id),
+                  eq(parentCategory.userId, userId),
+                ),
+              )
+              .where(
+                and(
+                  eq(transactions.userId, userId),
+                  excludeCardPaymentsSql(),
+                  spendingIntelligenceOutflowSql(),
+                  sql`${transactions.postedDate}::date >= ${startDate}::date`,
+                  sql`${transactions.postedDate}::date < (${endDateExclusive}::date + interval '1 month')`,
+                ),
+              )
+              .groupBy(
+                sql`date_trunc('month', ${transactions.postedDate}::date)`,
+                categoryRollupLabelSql,
+              ),
           ),
-      ),
       resilientQuery(() =>
         db
           .select({ primaryCurrency: accounts.primaryCurrency })
@@ -243,14 +241,17 @@ export async function GET(request: NextRequest) {
 
     const primaryCurrency = userAccounts[0]?.primaryCurrency ?? "USD";
 
-    /** Aggregate totals per (month, category) — DB already groups, this just normalizes types. */
+    /** Aggregate totals per (month, category or subcategory). */
     const byMonth = new Map<string, Map<string, { amount: number; count: number }>>();
     const totalByCat = new Map<string, number>();
     for (const r of rows) {
       const m = r.month;
-      const c = r.category ?? "Uncategorized";
+      const c = drillCategory
+        ? ("subcategory" in r ? r.subcategory : null) ?? "Uncategorized"
+        : ("category" in r ? r.category : null) ?? "Uncategorized";
       const amount = parseFloat(r.total ?? "0");
       const count = r.count ?? 0;
+      if (!c || c.length === 0) continue;
       if (!byMonth.has(m)) byMonth.set(m, new Map());
       byMonth.get(m)!.set(c, { amount, count });
       totalByCat.set(c, (totalByCat.get(c) ?? 0) + amount);
@@ -258,30 +259,40 @@ export async function GET(request: NextRequest) {
 
     const grandTotal = Array.from(totalByCat.values()).reduce((a, b) => a + b, 0);
 
+    /** Only months that actually have outflow — no zero-padding on the x-axis. */
+    const monthKeys = Array.from(byMonth.keys()).sort();
+
+    const subcategoryColors = drillCategory
+      ? buildSubcategoryDrilldownColors(drillCategory, totalByCat, monthKeys.length)
+      : null;
+
+    const colorForSegment = (name: string) => {
+      if (subcategoryColors) return subcategoryColors.get(name) ?? analyticsCategoryColor(drillCategory!);
+      return analyticsCategoryColor(name);
+    };
+
     /** Legend — categories sorted by overall total in the window. */
     const categories = Array.from(totalByCat.entries())
       .map(([name, total]) => ({
         name,
-        color: colorFor(name),
+        color: colorForSegment(name),
         total: Math.round(total * 100) / 100,
         share: grandTotal > 0 ? Math.round((total / grandTotal) * 10000) / 100 : 0,
       }))
       .sort((a, b) => b.total - a.total);
 
-    /** Build a contiguous month series with stable per-month segment ordering (largest at top). */
+    /** Per-month stacks sorted by segment size (largest at top). */
     let maxStack = 0;
     const monthsOut: MonthlyStack[] = monthKeys.map((mk) => {
-      const seg = byMonth.get(mk);
-      const segments: MonthlyStackSegment[] = seg
-        ? Array.from(seg.entries())
-            .map(([name, v]) => ({
-              name,
-              color: colorFor(name),
-              amount: Math.round(v.amount * 100) / 100,
-              count: v.count,
-            }))
-            .sort((a, b) => b.amount - a.amount)
-        : [];
+      const seg = byMonth.get(mk)!;
+      const segments: MonthlyStackSegment[] = Array.from(seg.entries())
+        .map(([name, v]) => ({
+          name,
+          color: colorForSegment(name),
+          amount: Math.round(v.amount * 100) / 100,
+          count: v.count,
+        }))
+        .sort((a, b) => b.amount - a.amount);
       const total = segments.reduce((a, b) => a + b.amount, 0);
       if (total > maxStack) maxStack = total;
       return { month: mk, total: Math.round(total * 100) / 100, segments };
@@ -311,6 +322,7 @@ export async function GET(request: NextRequest) {
     const payload: MonthlyStacksResponse = {
       months: monthsOut,
       categories,
+      ...(drillCategory ? { parentCategory: drillCategory } : {}),
       maxStack: Math.round(maxStack * 100) / 100,
       grandTotal: Math.round(grandTotal * 100) / 100,
       avgMonthlyIncomeLast6,

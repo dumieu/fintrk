@@ -3,7 +3,7 @@ import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
 import { statements, fileUploadLog } from "@/lib/db/schema";
 import { logServerError } from "@/lib/safe-error";
-import { eq, and, or } from "drizzle-orm";
+import { blocksIngestUpload } from "@/lib/ingest-dedupe";
 
 export const dynamic = "force-dynamic";
 // Receiving up to 100 PDFs in one multipart request + per-file dedupe checks
@@ -12,36 +12,6 @@ export const maxDuration = 300;
 
 const NO_STORE = { "Cache-Control": "no-store" } as const;
 const SERVER_BATCH_LIMIT = 100;
-
-async function isDuplicate(
-  userId: string,
-  fileName: string,
-  fileSize: number,
-  fileHash: string | null,
-): Promise<boolean> {
-  const nameSizeMatch = and(
-    eq(fileUploadLog.fileName, fileName),
-    eq(fileUploadLog.fileSize, fileSize),
-  );
-  const orCondition = fileHash
-    ? or(eq(fileUploadLog.fileHash, fileHash), nameSizeMatch)
-    : nameSizeMatch;
-
-  const existing = await resilientQuery(() =>
-    db.select({ id: fileUploadLog.id, fileSize: fileUploadLog.fileSize, outcome: fileUploadLog.outcome })
-      .from(fileUploadLog)
-      .where(and(eq(fileUploadLog.userId, userId), orCondition))
-      .limit(1),
-  );
-
-  if (existing.length === 0) return false;
-
-  const match = existing[0];
-  if (match.outcome === "failed") return false;
-  if (fileSize > match.fileSize) return false;
-
-  return true;
-}
 
 async function logUpload(
   userId: string,
@@ -83,7 +53,7 @@ export async function POST(request: NextRequest) {
         if (file.size > 1 * 1024 * 1024) continue;
 
         const hash = hashMap[file.name] ?? null;
-        if (await isDuplicate(userId, file.name, file.size, hash)) {
+        if (await blocksIngestUpload(userId, file.name, file.size, hash)) {
           skippedDuplicates.push(file.name);
           continue;
         }
@@ -117,7 +87,7 @@ export async function POST(request: NextRequest) {
         const size = JSON.stringify(data).length;
         const hash = fileHash ?? null;
 
-        if (await isDuplicate(userId, name, size, hash)) {
+        if (await blocksIngestUpload(userId, name, size, hash)) {
           skippedDuplicates.push(name);
           continue;
         }

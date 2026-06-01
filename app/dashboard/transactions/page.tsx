@@ -17,6 +17,7 @@ import {
   ChevronDown,
   SlidersHorizontal,
   AlertTriangle,
+  Copy,
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -80,6 +81,13 @@ interface Transaction {
   statementPeriodEnd: string | null;
   note: string | null;
   label: string | null;
+  doubleChargeSuspect?: {
+    verdict: "strong" | "likely_benign";
+    reason: string;
+    relatedIds: string[];
+    merchantKey?: string;
+    displayName?: string;
+  };
 }
 
 interface Filters {
@@ -88,6 +96,8 @@ interface Filters {
   dateTo: string;
   isRecurring: string;
   warningOnly: boolean;
+  doubleChargeSuspects: boolean;
+  doubleChargeMerchant: string;
   accountId: string;
   categoryId: string;
   /** Mind-map parent flow filter; empty = all. */
@@ -108,12 +118,6 @@ const AMOUNT_RANGE_MAX = 50_000;
 const AMOUNT_STEP = 50;
 /** Page size for API + infinite scroll (under API max of 100). */
 const TRANSACTION_PAGE_SIZE = 40;
-
-interface AmountTotalRow {
-  currency: string;
-  creditSum: string;
-  debitSum: string;
-}
 
 /** Keeps first occurrence; avoids duplicate keys when API pages overlap on sort ties. */
 function dedupeTransactionsById(rows: Transaction[]): Transaction[] {
@@ -138,6 +142,10 @@ function buildTransactionQueryParams(f: Filters, page: number): URLSearchParams 
   if (f.dateTo) params.set("dateTo", f.dateTo);
   if (f.isRecurring) params.set("isRecurring", f.isRecurring);
   if (f.warningOnly) params.set("warningOnly", "true");
+  if (f.doubleChargeSuspects) {
+    params.set("doubleChargeSuspects", "true");
+    if (f.doubleChargeMerchant) params.set("doubleChargeMerchant", f.doubleChargeMerchant);
+  }
   if (f.accountId) params.set("accountId", f.accountId);
   if (f.categoryId) params.set("categoryId", f.categoryId);
   if (f.flowTheme) params.set("flowTheme", f.flowTheme);
@@ -223,6 +231,110 @@ function TransactionSourceSubtitle({ txn }: { txn: Transaction }) {
         ))}
       </span>
     </p>
+  );
+}
+
+function DoubleChargeSuspectBadge({
+  suspect,
+  onReviewStrong,
+}: {
+  suspect: NonNullable<Transaction["doubleChargeSuspect"]>;
+  onReviewStrong?: (merchantKey: string, displayName: string) => void;
+}) {
+  const isStrong = suspect.verdict === "strong";
+  const label = isStrong ? "Likely double charge" : "Possible duplicate (often benign)";
+  const tooltip = `${label}: ${suspect.reason}${
+    suspect.relatedIds.length > 0 ? ` · ${suspect.relatedIds.length} related charge(s)` : ""
+  }`;
+  const className = cn(
+    "inline-flex shrink-0 items-center gap-1 rounded-md border px-1.5 py-0.5 text-[9px] font-medium leading-none transition-colors",
+    isStrong
+      ? "border-[#FF6F69]/55 bg-[#FF6F69]/12 text-[#FF6F69] hover:border-[#FF6F69]/75 hover:bg-[#FF6F69]/18"
+      : "border-[#AD74FF]/45 bg-[#AD74FF]/10 text-[#AD74FF]",
+  );
+
+  const content = (
+    <>
+      <Copy className="h-2.5 w-2.5" aria-hidden />
+      {isStrong ? "Double?" : "Benign dup?"}
+    </>
+  );
+
+  if (isStrong && onReviewStrong && suspect.merchantKey) {
+    return (
+      <button
+        type="button"
+        className={className}
+        title={`${tooltip} · Click to review watchlist`}
+        aria-label={`${tooltip}. Review watchlist.`}
+        onClick={() =>
+          onReviewStrong(suspect.merchantKey!, suspect.displayName ?? suspect.merchantKey!)
+        }
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return (
+    <span className={className} title={tooltip} aria-label={tooltip}>
+      {content}
+    </span>
+  );
+}
+
+interface DoubleChargeMerchantOption {
+  key: string;
+  label: string;
+  count: number;
+}
+
+function DoubleChargeMerchantSlicer({
+  merchants,
+  selectedKey,
+  onSelect,
+}: {
+  merchants: DoubleChargeMerchantOption[];
+  selectedKey: string;
+  onSelect: (key: string) => void;
+}) {
+  if (merchants.length === 0) return null;
+
+  return (
+    <div className="mb-3 min-w-0 shrink-0 rounded-xl border border-[#FF6F69]/25 bg-[#FF6F69]/[0.04] px-3 py-2.5 sm:px-4">
+      <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#FF6F69]/80">
+        Suspected merchants
+      </p>
+      <div className="flex min-w-0 gap-2 overflow-x-auto pb-0.5 [scrollbar-gutter:stable]">
+        {merchants.map((m) => {
+          const active = selectedKey === m.key;
+          return (
+            <button
+              key={m.key}
+              type="button"
+              onClick={() => onSelect(active ? "" : m.key)}
+              aria-pressed={active}
+              className={cn(
+                "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-all",
+                active
+                  ? "border-[#FF6F69]/75 bg-[#FF6F69]/18 text-white shadow-[0_0_20px_-8px_rgba(255,111,105,0.55)] ring-1 ring-[#FF6F69]/35"
+                  : "border-white/12 bg-black/25 text-white/85 hover:border-[#FF6F69]/40 hover:bg-[#FF6F69]/10",
+              )}
+            >
+              <span className="max-w-[12rem] truncate">{m.label}</span>
+              <span
+                className={cn(
+                  "rounded-full px-1.5 py-0.5 text-[10px] tabular-nums",
+                  active ? "bg-[#FF6F69]/25 text-white" : "bg-white/10 text-white/60",
+                )}
+              >
+                {m.count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -1219,6 +1331,17 @@ export default function TransactionsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [filtersSheetOpen, setFiltersSheetOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [watchlistDialog, setWatchlistDialog] = useState<
+    | { step: "idle" }
+    | { step: "review"; merchantKey: string; displayName: string }
+    | { step: "confirm_remove"; merchantKey: string; displayName: string }
+  >({ step: "idle" });
+  const [watchlistRemoving, setWatchlistRemoving] = useState(false);
+  const [watchlistError, setWatchlistError] = useState<string | null>(null);
+  const [doubleChargeSuspectMerchants, setDoubleChargeSuspectMerchants] = useState<
+    DoubleChargeMerchantOption[]
+  >([]);
+  const [listRefreshKey, setListRefreshKey] = useState(0);
   const [deleteInProgress, setDeleteInProgress] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [filters, setFilters] = useState<Filters>({
@@ -1227,6 +1350,8 @@ export default function TransactionsPage() {
     dateTo: "",
     isRecurring: "",
     warningOnly: false,
+    doubleChargeSuspects: false,
+    doubleChargeMerchant: "",
     accountId: "",
     categoryId: "",
     flowTheme: "",
@@ -1247,7 +1372,6 @@ export default function TransactionsPage() {
   /** Bumps when filters/sort change so in-flight load-more responses are ignored. */
   const listVersionRef = useRef(0);
   const [categoryOptions, setCategoryOptions] = useState<CategorySlicerOption[]>([]);
-  const [amountTotals, setAmountTotals] = useState<AmountTotalRow[]>([]);
   const [userCats, setUserCats] = useState<UserCategory[]>([]);
   const [distinctLabels, setDistinctLabels] = useState<string[]>([]);
 
@@ -1345,6 +1469,8 @@ export default function TransactionsPage() {
     filters.dateTo,
     filters.isRecurring,
     filters.warningOnly,
+    filters.doubleChargeSuspects,
+    filters.doubleChargeMerchant,
     filters.accountKind,
     filters.accountNumber,
     filters.amountMin,
@@ -1504,6 +1630,57 @@ export default function TransactionsPage() {
     });
   }, []);
 
+  const toggleDoubleChargeSuspectsFilter = useCallback(() => {
+    setFilters((f) => {
+      const turningOff = f.doubleChargeSuspects;
+      if (turningOff) {
+        setDoubleChargeSuspectMerchants([]);
+      }
+      return {
+        ...f,
+        doubleChargeSuspects: !f.doubleChargeSuspects,
+        doubleChargeMerchant: turningOff ? "" : f.doubleChargeMerchant,
+      };
+    });
+  }, []);
+
+  const toggleWarningOnlyFilter = useCallback(() => {
+    setFilters((f) => ({ ...f, warningOnly: !f.warningOnly }));
+  }, []);
+
+  const openWatchlistReview = useCallback((merchantKey: string, displayName: string) => {
+    setWatchlistError(null);
+    setWatchlistDialog({ step: "review", merchantKey, displayName });
+  }, []);
+
+  const confirmWatchlistRemoval = useCallback(async () => {
+    if (watchlistDialog.step !== "confirm_remove") return;
+    const { merchantKey, displayName } = watchlistDialog;
+    setWatchlistRemoving(true);
+    setWatchlistError(null);
+    try {
+      const res = await fetch("/api/transactions/double-charge-watchlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ merchantKey, displayName }),
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(typeof json.error === "string" ? json.error : "Could not update watchlist");
+      }
+      setWatchlistDialog({ step: "idle" });
+      setFilters((f) => ({
+        ...f,
+        doubleChargeMerchant: f.doubleChargeMerchant === merchantKey ? "" : f.doubleChargeMerchant,
+      }));
+      setListRefreshKey((k) => k + 1);
+    } catch (err) {
+      setWatchlistError(err instanceof Error ? err.message : "Could not update watchlist");
+    } finally {
+      setWatchlistRemoving(false);
+    }
+  }, [watchlistDialog]);
+
   /** Initial / filter change: replace list from page 1. */
   useEffect(() => {
     let cancelled = false;
@@ -1520,19 +1697,23 @@ export default function TransactionsPage() {
           setTxns(dedupeTransactionsById(data.data));
           setTotal(typeof data.total === "number" ? data.total : 0);
           setStatementCount(typeof data.statementCount === "number" ? data.statementCount : 0);
-          setAmountTotals(Array.isArray(data.amountTotals) ? data.amountTotals : []);
+          if (Array.isArray(data.doubleChargeSuspectMerchants)) {
+            setDoubleChargeSuspectMerchants(data.doubleChargeSuspectMerchants);
+          } else if (!filters.doubleChargeSuspects) {
+            setDoubleChargeSuspectMerchants([]);
+          }
         } else {
           setTxns([]);
           setTotal(0);
           setStatementCount(0);
-          setAmountTotals([]);
+          setDoubleChargeSuspectMerchants([]);
         }
       } catch {
         if (!cancelled) {
           setTxns([]);
           setTotal(0);
           setStatementCount(0);
-          setAmountTotals([]);
+          setDoubleChargeSuspectMerchants([]);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -1541,7 +1722,7 @@ export default function TransactionsPage() {
     return () => {
       cancelled = true;
     };
-  }, [filters]);
+  }, [filters, listRefreshKey]);
 
   const loadMore = useCallback(async () => {
     if (loading || loadMoreGuardRef.current) return;
@@ -1625,7 +1806,6 @@ export default function TransactionsPage() {
         setTxns(dedupeTransactionsById(listJson.data));
         setTotal(typeof listJson.total === "number" ? listJson.total : 0);
         setStatementCount(typeof listJson.statementCount === "number" ? listJson.statementCount : 0);
-        setAmountTotals(Array.isArray(listJson.amountTotals) ? listJson.amountTotals : []);
       }
       dispatchTransactionsChanged();
     } catch (e) {
@@ -1664,42 +1844,6 @@ export default function TransactionsPage() {
                   "No transactions yet"
                 )}
               </span>
-              {total > 0 && amountTotals.length > 0 && (
-                <>
-                  <span className="text-white/35 select-none" aria-hidden>
-                    {"\u00A0\u00A0\u00A0"}
-                  </span>
-                  {amountTotals.map((t, i) => {
-                    const creditN = parseFloat(t.creditSum);
-                    const debitN = parseFloat(t.debitSum);
-                    const suffix = amountTotals.length > 1 ? ` ${t.currency}` : "";
-                    return (
-                      <Fragment key={t.currency}>
-                        {i > 0 ? (
-                          <span className="text-white/30 select-none px-2" aria-hidden>
-                            ·
-                          </span>
-                        ) : null}
-                        <span className="font-medium tabular-nums text-[#FCA5A5]">
-                          Credit{suffix}{" "}
-                          {creditN < 0
-                            ? `−${formatCurrency(Math.abs(creditN), t.currency)}`
-                            : formatCurrency(0, t.currency)}
-                        </span>
-                        <span className="text-white/35 select-none" aria-hidden>
-                          {"\u00A0\u00A0"}
-                        </span>
-                        <span className="font-medium tabular-nums text-[#A7F3D0]">
-                          Debit{suffix}{" "}
-                          {debitN > 0
-                            ? `+${formatCurrency(debitN, t.currency)}`
-                            : formatCurrency(0, t.currency)}
-                        </span>
-                      </Fragment>
-                    );
-                  })}
-                </>
-              )}
             </p>
           </div>
           <div className="flex shrink-0 gap-2 sm:ml-auto">
@@ -1804,6 +1948,116 @@ export default function TransactionsPage() {
           </div>
         )}
 
+        {watchlistDialog.step !== "idle" && (
+          <div
+            className="fixed inset-0 z-[200] flex items-center justify-center bg-black/75 p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="double-charge-watchlist-title"
+            onClick={() => {
+              if (!watchlistRemoving) {
+                setWatchlistDialog({ step: "idle" });
+                setWatchlistError(null);
+              }
+            }}
+          >
+            <div
+              className="w-full max-w-md rounded-xl border border-white/15 bg-[#161616] p-6 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {watchlistDialog.step === "review" ? (
+                <>
+                  <h2 id="double-charge-watchlist-title" className="text-lg font-semibold text-white">
+                    Review double-charge suspect
+                  </h2>
+                  <p className="mt-3 text-sm leading-relaxed text-white/65">
+                    <span className="font-medium text-white">{watchlistDialog.displayName}</span> matched
+                    as a possible duplicate charge. Keep monitoring this merchant, or remove them from your
+                    double-charge watchlist.
+                  </p>
+                  {watchlistError && (
+                    <p className="mt-3 text-sm text-red-400" role="alert">
+                      {watchlistError}
+                    </p>
+                  )}
+                  <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="text-white/80"
+                      onClick={() => setWatchlistDialog({ step: "idle" })}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="button"
+                      className="bg-[#FF6F69]/20 text-[#FF6F69] hover:bg-[#FF6F69]/28"
+                      onClick={() =>
+                        setWatchlistDialog({
+                          step: "confirm_remove",
+                          merchantKey: watchlistDialog.merchantKey,
+                          displayName: watchlistDialog.displayName,
+                        })
+                      }
+                    >
+                      No - remove from watchlist
+                    </Button>
+                    <Button
+                      type="button"
+                      className="bg-[#0BC18D] text-white hover:bg-[#0BC18D]/90"
+                      onClick={() => setWatchlistDialog({ step: "idle" })}
+                    >
+                      Maybe - keep on watchlist
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h2 id="double-charge-watchlist-title" className="text-lg font-semibold text-white">
+                    Remove from watchlist permanently?
+                  </h2>
+                  <p className="mt-3 text-sm leading-relaxed text-white/65">
+                    Are you sure?{" "}
+                    <span className="font-medium text-white">{watchlistDialog.displayName}</span> will be
+                    permanently removed from your double-charge watchlist and will never appear in Double-charge
+                    Suspects again.
+                  </p>
+                  {watchlistError && (
+                    <p className="mt-3 text-sm text-red-400" role="alert">
+                      {watchlistError}
+                    </p>
+                  )}
+                  <div className="mt-6 flex flex-wrap justify-end gap-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      disabled={watchlistRemoving}
+                      className="text-white/80"
+                      onClick={() =>
+                        setWatchlistDialog({
+                          step: "review",
+                          merchantKey: watchlistDialog.merchantKey,
+                          displayName: watchlistDialog.displayName,
+                        })
+                      }
+                    >
+                      Back
+                    </Button>
+                    <Button
+                      type="button"
+                      disabled={watchlistRemoving}
+                      className="bg-red-600 text-white hover:bg-red-600/90"
+                      onClick={() => void confirmWatchlistRemoval()}
+                    >
+                      {watchlistRemoving ? "Removing…" : "Confirm removal"}
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Search + Amount range + Filters; extra filters slide open below */}
         <div className="mb-3 min-w-0 shrink-0 sm:mb-4">
           <motion.div
@@ -1822,7 +2076,7 @@ export default function TransactionsPage() {
                 className="w-full rounded-lg border border-white/15 bg-white/[0.05] py-2 pl-9 pr-3 text-sm text-white placeholder:text-white/45 focus:border-[#0BC18D]/40 focus:outline-none focus:ring-1 focus:ring-[#0BC18D]/20 sm:py-2.5 sm:pl-10"
               />
             </div>
-            <div className="min-w-0 w-full sm:min-w-0 sm:flex-1">
+            <div className="min-w-0 w-full sm:max-w-[22%] sm:flex-none">
               <AmountRangeSlider
                 min={AMOUNT_RANGE_MIN}
                 max={AMOUNT_RANGE_MAX}
@@ -1835,10 +2089,43 @@ export default function TransactionsPage() {
             <div className="flex w-full shrink-0 justify-stretch gap-2 sm:w-auto sm:justify-start">
               <button
                 type="button"
-                onClick={() => setFilters((f) => ({ ...f, warningOnly: !f.warningOnly }))}
+                onClick={toggleDoubleChargeSuspectsFilter}
+                aria-pressed={filters.doubleChargeSuspects}
+                aria-label={
+                  filters.doubleChargeSuspects
+                    ? "Double-charge suspects filter on. Click to show all transactions."
+                    : "Show double-charge suspects only"
+                }
+                title={
+                  filters.doubleChargeSuspects
+                    ? "Double-charge suspects on — click again to show all transactions"
+                    : "Filter to suspected duplicate charges at the same merchant"
+                }
+                className={cn(
+                  "inline-flex min-h-[2.5rem] min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl border px-3 py-2.5 text-xs font-semibold transition-all sm:flex-none sm:px-3.5",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6F69]/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0a]",
+                  filters.doubleChargeSuspects
+                    ? "border-[#FF6F69]/75 bg-[#FF6F69]/14 text-[#FF6F69] shadow-[0_0_24px_-8px_rgba(255,111,105,0.65)]"
+                    : "border-white/15 bg-white/[0.045] text-white/55 hover:border-[#FF6F69]/40 hover:bg-[#FF6F69]/10 hover:text-[#FF6F69]/85",
+                )}
+              >
+                <Copy className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                <span className="truncate">Double-charge Suspects</span>
+              </button>
+              <button
+                type="button"
+                onClick={toggleWarningOnlyFilter}
                 aria-pressed={filters.warningOnly}
-                aria-label={filters.warningOnly ? "Showing highlighted transactions only" : "Show highlighted transactions only"}
-                title={filters.warningOnly ? "Showing highlighted transactions only" : "Show highlighted transactions only"}
+                aria-label={
+                  filters.warningOnly
+                    ? "Highlighted transactions filter on. Click to show all transactions."
+                    : "Show highlighted transactions only"
+                }
+                title={
+                  filters.warningOnly
+                    ? "Highlighted only — click again to show all transactions"
+                    : "Show highlighted transactions only"
+                }
                 className={cn(
                   "inline-flex min-h-[2.5rem] w-12 shrink-0 items-center justify-center rounded-xl border px-3 py-2.5 transition-all sm:w-auto",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ECAA0B]/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0a]",
@@ -1946,6 +2233,14 @@ export default function TransactionsPage() {
           </div>
         </div>
 
+        {filters.doubleChargeSuspects && (
+          <DoubleChargeMerchantSlicer
+            merchants={doubleChargeSuspectMerchants}
+            selectedKey={filters.doubleChargeMerchant}
+            onSelect={(key) => setFilters((f) => ({ ...f, doubleChargeMerchant: key }))}
+          />
+        )}
+
         {/* Transaction Table — fills remaining viewport; list scrolls inside */}
         <Card className="flex min-h-0 flex-1 flex-col overflow-hidden border-white/[0.10] bg-white/[0.04] py-0 text-white rounded-xl sm:rounded-2xl">
           <CardContent className="flex min-h-0 flex-1 flex-col p-0">
@@ -2004,6 +2299,10 @@ export default function TransactionsPage() {
                         className={cn(
                           "relative grid grid-cols-[auto_1fr] gap-1.5 border border-transparent px-2.5 py-2.5 pr-16 transition-colors hover:bg-white/[0.06] sm:grid-cols-[auto_minmax(0,1.65fr)_minmax(4.5rem,6.5rem)_minmax(0,12rem)_minmax(7.5rem,10rem)_80px_minmax(7rem,1.25fr)_64px] sm:justify-items-stretch sm:gap-2 sm:px-4 sm:py-3 sm:pr-4",
                           txn.warningFlag && "border-dotted border-[#ECAA0B]/80 bg-[#ECAA0B]/[0.035] shadow-[inset_0_0_0_1px_rgba(236,170,11,0.12)]",
+                          txn.doubleChargeSuspect?.verdict === "strong" &&
+                            "border-dotted border-[#FF6F69]/70 bg-[#FF6F69]/[0.04] shadow-[inset_0_0_0_1px_rgba(255,111,105,0.14)]",
+                          txn.doubleChargeSuspect?.verdict === "likely_benign" &&
+                            "border-dotted border-[#AD74FF]/45 bg-[#AD74FF]/[0.035]",
                         )}
                       >
                         <TransactionInsightHover txn={txn}>
@@ -2015,11 +2314,19 @@ export default function TransactionsPage() {
                           </div>
                         </TransactionInsightHover>
                         <div className="min-w-0 overflow-hidden">
-                          <div className="min-w-0 py-0.5 -my-0.5 pr-1">
-                            <MerchantNameEditor
-                              txn={txn}
-                              onSaved={saveMerchantName}
-                            />
+                          <div className="min-w-0 flex flex-wrap items-center gap-1.5 py-0.5 -my-0.5 pr-1">
+                            <div className="min-w-0 flex-1">
+                              <MerchantNameEditor
+                                txn={txn}
+                                onSaved={saveMerchantName}
+                              />
+                            </div>
+                            {txn.doubleChargeSuspect ? (
+                              <DoubleChargeSuspectBadge
+                                suspect={txn.doubleChargeSuspect}
+                                onReviewStrong={openWatchlistReview}
+                              />
+                            ) : null}
                           </div>
                           <div className="mt-0.5 flex items-start gap-2 text-[12px] text-white/50 sm:hidden">
                             <TransactionCategoryIcon
