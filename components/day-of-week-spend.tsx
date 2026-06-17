@@ -53,7 +53,7 @@ export function DayOfWeekSpend({ spend, categoriesByDay: _categoriesByDay, curre
               onMouseLeave={scheduleClose}
             >
               <div className="flex min-h-[28px] flex-col items-center justify-end gap-0.5 text-center">
-                <span className="text-[9px] leading-tight text-white/65 tabular-nums">
+                <span className="text-[9px] leading-tight text-muted-foreground tabular-nums">
                   {amount > 0 ? formatCurrency(amount, currency) : "—"}
                 </span>
                 <span className="text-[8px] font-medium leading-none text-[#7AE8C5]/90 tabular-nums">
@@ -78,7 +78,7 @@ export function DayOfWeekSpend({ spend, categoriesByDay: _categoriesByDay, curre
                 />
               </div>
 
-              <span className="mt-1 text-[10px] font-medium text-white/55">
+              <span className="mt-1 text-[10px] font-medium text-muted-foreground">
                 {DAY_LABELS[i]}
               </span>
             </div>

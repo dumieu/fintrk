@@ -10,6 +10,8 @@ import {
 } from "@/components/analytics-detail-tooltip";
 import { useAnalyticsDetail } from "@/components/use-analytics-detail";
 import { CategoryTransactionsModal } from "@/components/category-transactions-modal";
+import { chartChipClass, chartListRowClass, chartMutedClass } from "@/lib/chart-ui";
+import { cn } from "@/lib/utils";
 
 export interface MerchantRow {
   name: string;
@@ -26,7 +28,7 @@ const PAGE = 50;
 /** Fixed height (~4 rows, room for two-line rows) so the card stays stable when filtering. */
 /** Fills the parent flex container (set via `flex-1` on CardContent). */
 const LIST_HEIGHT = "h-full min-h-[200px] w-full";
-const LIST_SCROLL = `${LIST_HEIGHT} scrollbar-slim-dark min-h-0 flex-1 flex flex-col overflow-y-auto overscroll-contain pr-1 [scrollbar-gutter:stable]`;
+const LIST_SCROLL = `${LIST_HEIGHT} scrollbar-slim min-h-0 flex-1 flex flex-col overflow-y-auto overscroll-contain pr-1 [scrollbar-gutter:stable]`;
 
 function merchantKey(m: MerchantRow) {
   return `${m.name}\0${m.currency}`;
@@ -145,9 +147,9 @@ export function MerchantsAnalyticsList({
   if (error) {
     return (
       <div
-        className={`flex ${LIST_HEIGHT} items-center justify-center rounded-xl border border-white/[0.04] bg-white/[0.02]`}
+        className={`flex ${LIST_HEIGHT} items-center justify-center rounded-xl border border-chart-border bg-chart-muted/40`}
       >
-        <p className="px-4 text-center text-sm text-white/50">{error}</p>
+        <p className={cn("px-4 text-center", chartMutedClass)}>{error}</p>
       </div>
     );
   }
@@ -155,9 +157,9 @@ export function MerchantsAnalyticsList({
   if (!loading && merchants.length === 0) {
     return (
       <div
-        className={`flex ${LIST_HEIGHT} items-center justify-center rounded-xl border border-white/[0.04] bg-white/[0.02]`}
+        className={`flex ${LIST_HEIGHT} items-center justify-center rounded-xl border border-chart-border bg-chart-muted/40`}
       >
-        <p className="px-4 text-center text-sm text-white/50">No merchant data yet</p>
+        <p className={cn("px-4 text-center", chartMutedClass)}>No merchant data yet</p>
       </div>
     );
   }
@@ -171,12 +173,12 @@ export function MerchantsAnalyticsList({
     >
       {centerInitialLoad ? (
         <div className="flex flex-1 items-center justify-center py-8">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/15 border-t-[#0BC18D]" />
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-chart-border border-t-[#0BC18D]" />
         </div>
       ) : (
         <>
           {q && filtered.length === 0 && merchants.length > 0 && (
-            <p className="mb-3 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-center text-xs text-white/55">
+            <p className="mb-3 rounded-lg border border-chart-border bg-chart-muted px-3 py-2 text-center text-xs text-muted-foreground">
               No merchants match “{filterQuery.trim()}”. Try another term or scroll to load more.
             </p>
           )}
@@ -186,10 +188,10 @@ export function MerchantsAnalyticsList({
               return (
                 <li
                   key={merchantKey(m)}
-                  className="flex cursor-pointer items-center gap-3 rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 py-2 transition-colors hover:border-white/12 hover:bg-white/[0.05]"
+                  className={cn(chartListRowClass, "flex cursor-pointer items-center gap-3 px-2.5 py-2")}
                   onClick={() => setMerchantModal(m)}
                 >
-                  <span className="w-5 shrink-0 text-right text-[10px] font-medium tabular-nums text-white/40">
+                  <span className="w-5 shrink-0 text-right text-[10px] font-medium tabular-nums text-muted-foreground">
                     {rank}
                   </span>
                   <MerchantDetailHelpButton
@@ -203,7 +205,7 @@ export function MerchantsAnalyticsList({
                   />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <p className="break-words text-xs font-medium leading-snug text-white/90">{m.name}</p>
+                      <p className="break-words text-xs font-medium leading-snug text-foreground">{m.name}</p>
                       {m.subcategory ? (
                         <SubcategoryPill
                           label={categoryPillLabel(m.category, m.subcategory)}
@@ -211,11 +213,11 @@ export function MerchantsAnalyticsList({
                         />
                       ) : null}
                     </div>
-                    <p className="text-[10px] text-white/45">
+                    <p className="text-[10px] text-muted-foreground">
                       {m.count} {m.count === 1 ? "transaction" : "transactions"}
                     </p>
                   </div>
-                  <span className="shrink-0 text-right text-xs font-bold tabular-nums text-white/90">
+                  <span className="shrink-0 text-right text-xs font-bold tabular-nums text-foreground">
                     {formatCurrency(m.total, m.currency)}
                   </span>
                 </li>
@@ -225,11 +227,11 @@ export function MerchantsAnalyticsList({
           <div ref={sentinelRef} className="h-4 w-full shrink-0" aria-hidden />
           {loading && merchants.length > 0 && (
             <div className="flex justify-center py-3">
-              <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/15 border-t-[#0BC18D]" />
+              <div className="h-5 w-5 animate-spin rounded-full border-2 border-chart-border border-t-[#0BC18D]" />
             </div>
           )}
           {!hasMore && merchants.length > 0 && !q && (
-            <p className="pb-2 pt-1 text-center text-[10px] text-white/35">End of list</p>
+            <p className="pb-2 pt-1 text-center text-[10px] text-muted-foreground">End of list</p>
           )}
         </>
       )}
@@ -308,7 +310,7 @@ function MerchantDetailHelpButton({
   return (
     <button
       type="button"
-      className="grid h-6 w-6 shrink-0 place-items-center rounded-full border border-white/20 bg-white/[0.04] text-[10px] font-bold leading-none text-white/55 transition-colors hover:border-white/40 hover:bg-white/[0.08] hover:text-white/85"
+      className={cn(chartChipClass, "grid h-6 w-6 shrink-0 place-items-center rounded-full text-[10px] font-bold leading-none")}
       aria-label={`Details for ${merchant.name}`}
       onMouseEnter={showTip}
       onMouseLeave={onHoverClose}

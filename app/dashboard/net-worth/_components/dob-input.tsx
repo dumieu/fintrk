@@ -49,20 +49,20 @@ export function DobInput({
   }, [birthYear]);
 
   const selectCls = compact
-    ? "h-7 min-w-[3.25rem] flex-1 rounded-md border border-white/10 bg-[#0e0822] px-1.5 text-[11px] font-semibold text-white outline-none transition focus:border-white/30 sm:min-w-[4.25rem] sm:flex-none"
-    : "h-9 w-full rounded-lg border border-white/10 bg-[#0e0822] px-2.5 text-sm font-semibold text-white outline-none transition focus:border-white/30";
+    ? "h-7 min-w-[3.25rem] flex-1 rounded-md border border-chart-border bg-card px-1.5 text-[11px] font-semibold text-white outline-none transition focus:border-primary/40 sm:min-w-[4.25rem] sm:flex-none"
+    : "h-9 w-full rounded-lg border border-chart-border bg-card px-2.5 text-sm font-semibold text-white outline-none transition focus:border-primary/40";
 
   const yearCls = compact
-    ? "h-7 w-[3.25rem] shrink-0 rounded-md border border-white/10 bg-[#0e0822] px-1.5 text-[11px] font-semibold tabular-nums text-white outline-none transition focus:border-white/30 sm:w-[3.5rem]"
-    : "h-9 w-full rounded-lg border border-white/10 bg-[#0e0822] px-2.5 text-sm font-semibold tabular-nums text-white outline-none transition focus:border-white/30";
+    ? "h-7 w-[3.25rem] shrink-0 rounded-md border border-chart-border bg-card px-1.5 text-[11px] font-semibold tabular-nums text-white outline-none transition focus:border-primary/40 sm:w-[3.5rem]"
+    : "h-9 w-full rounded-lg border border-chart-border bg-card px-2.5 text-sm font-semibold tabular-nums text-white outline-none transition focus:border-primary/40";
 
   if (compact) {
     return (
       <div
-        className="flex min-w-0 flex-wrap items-center gap-1.5 rounded-lg border border-white/[0.08] bg-white/[0.03] px-2 py-1"
+        className="flex min-w-0 flex-wrap items-center gap-1.5 rounded-lg border border-chart-border bg-chart-muted/60 px-2 py-1"
         style={complete ? { borderColor: `${accent}35` } : undefined}
       >
-        <span className="flex shrink-0 items-center gap-1 text-[9px] font-bold uppercase tracking-wide text-white/55">
+        <span className="flex shrink-0 items-center gap-1 text-[9px] font-bold uppercase tracking-wide text-muted-foreground">
           <Cake className="h-3 w-3" style={{ color: accent }} />
           DOB
         </span>
@@ -134,9 +134,9 @@ export function DobInput({
   }
 
   return (
-    <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-3.5">
+    <div className="rounded-xl border border-chart-border bg-chart-muted/60 p-3.5">
       <div className="flex items-center justify-between gap-2">
-        <label className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-white/70">
+        <label className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
           <Cake className="h-3.5 w-3.5" style={{ color: accent }} />
           Date of birth
         </label>
@@ -212,7 +212,7 @@ export function DobInput({
         />
       </div>
 
-      <p className="mt-2 text-[10px] leading-relaxed text-white/40">
+      <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
         {complete
           ? `Saved — every projection now anchors to ${MONTHS[(birthMonth ?? 1) - 1]} ${birthYear}.`
           : "Just month + year. Drives your current age and the retirement countdown."}

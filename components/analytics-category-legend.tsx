@@ -4,6 +4,8 @@ import {
   analyticsCategoryGlow,
   analyticsCategoryLabelTone,
 } from "@/lib/analytics-category-colors";
+import { chartChipClass, useChartSurface } from "@/lib/chart-ui";
+import { cn } from "@/lib/utils";
 
 export interface AnalyticsLegendCategory {
   name: string;
@@ -47,7 +49,7 @@ function CategorySlicerButton({
   const shareLabel = formatShare(category.share);
   const tone = analyticsCategoryLabelTone(category.color);
   const textMain = tone === "light" ? "text-white" : "text-[#0a0a0a]";
-  const textSub = tone === "light" ? "text-white/85" : "text-[#0a0a0a]/75";
+  const textSub = tone === "light" ? "text-foreground" : "text-[#0a0a0a]/75";
   const title = readOnly
     ? category.name
     : highlighted
@@ -58,10 +60,10 @@ function CategorySlicerButton({
     "group relative min-w-[7.5rem] max-w-full overflow-hidden rounded-xl border px-3 py-2 text-left",
     "transition-all duration-200 ease-out",
     dimmed
-      ? "scale-[0.97] border-white/[0.06] opacity-35 saturate-[0.45] hover:opacity-55"
-      : "scale-100 border-white/20 opacity-100 shadow-lg",
-    highlighted && !readOnly ? "ring-2 ring-white/35" : "",
-    readOnly ? "" : "hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40",
+      ? "scale-[0.97] border-chart-border opacity-35 saturate-[0.45] hover:opacity-55"
+      : "scale-100 border-chart-border opacity-100 shadow-lg",
+    highlighted && !readOnly ? "ring-2 ring-primary/30" : "",
+    readOnly ? "" : "hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
   ].join(" ");
 
   const style = {
@@ -127,6 +129,7 @@ export function AnalyticsCategoryLegend({
   onToggleCategory,
   onShowAll,
 }: AnalyticsCategoryLegendProps) {
+  const surface = useChartSurface();
   const filterActive = soloCategory != null;
   const showRefLines =
     !filterActive &&
@@ -144,21 +147,21 @@ export function AnalyticsCategoryLegend({
       className={
         compact
           ? "space-y-2.5"
-          : "mt-1 border-t border-white/[0.06] pt-4"
+          : "mt-1 border-t border-chart-border pt-4"
       }
     >
       {categories.length > 0 ? (
         <div className="space-y-2.5">
           {slicerEnabled && filterActive ? (
             <div className="flex items-center justify-between gap-3">
-              <p className="text-[10px] font-medium text-white/40">
-                Showing <span className="font-semibold capitalize text-white/65">{soloLabel}</span> only
+              <p className="text-[10px] font-medium text-muted-foreground">
+                Showing <span className="font-semibold capitalize text-foreground">{soloLabel}</span> only
               </p>
               {onShowAll ? (
                 <button
                   type="button"
                   onClick={onShowAll}
-                  className="shrink-0 rounded-lg border border-white/10 bg-white/[0.06] px-2.5 py-1 text-[10px] font-semibold text-white/65 transition-colors hover:border-white/20 hover:bg-white/[0.10] hover:text-white/90"
+                  className={cn(chartChipClass, "shrink-0 px-2.5 py-1 text-[10px] font-semibold")}
                 >
                   Show all
                 </button>
@@ -186,8 +189,8 @@ export function AnalyticsCategoryLegend({
           </div>
 
           {hasSubcategories ? (
-            <div className="space-y-2 border-t border-white/[0.04] pt-3">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-white/35">
+            <div className="space-y-2 border-t border-chart-border pt-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                 Subcategories in chart
               </p>
               <div className="flex flex-wrap gap-2" role="list" aria-label="Subcategory breakdown">
@@ -210,33 +213,37 @@ export function AnalyticsCategoryLegend({
       {showRefLines ? (
         <div
           className={`flex flex-wrap items-center gap-2 ${
-            categories.length > 0 ? "border-t border-white/[0.04] pt-3" : ""
+            categories.length > 0 ? "border-t border-chart-border pt-3" : ""
           }`}
         >
           {avgSpend != null && avgSpend > 0 ? (
-            <span className="inline-flex items-center gap-2 rounded-lg border border-[#FF4444]/25 bg-[#FF4444]/10 px-2.5 py-1.5 text-[10px]">
+            <span className="inline-flex items-center gap-2 rounded-lg border border-[#FF4444]/30 bg-[#FF4444]/12 px-2.5 py-1.5 text-[10px]">
               <span
                 className="inline-block h-[2px] w-5 shrink-0 rounded-full"
                 style={{
                   background: "linear-gradient(90deg, transparent, #FF4444, transparent)",
-                  boxShadow: "0 0 8px rgba(255,68,68,0.55)",
+                  boxShadow: surface === "dark" ? "0 0 8px rgba(255,68,68,0.55)" : undefined,
                 }}
                 aria-hidden
               />
-              <span className="font-semibold text-[#FFB4B4]">Avg spend · last 6 mo</span>
+              <span className={`font-semibold ${surface === "dark" ? "text-[#FFB4B4]" : "text-[#B91C1C]"}`}>
+                Avg spend · last 6 mo
+              </span>
             </span>
           ) : null}
           {avgIncome != null && avgIncome > 0 ? (
-            <span className="inline-flex items-center gap-2 rounded-lg border border-[#39FF14]/25 bg-[#39FF14]/10 px-2.5 py-1.5 text-[10px]">
+            <span className="inline-flex items-center gap-2 rounded-lg border border-[#16A34A]/30 bg-[#16A34A]/12 px-2.5 py-1.5 text-[10px]">
               <span
                 className="inline-block h-[2px] w-5 shrink-0 rounded-full"
                 style={{
-                  background: "linear-gradient(90deg, transparent, #39FF14, transparent)",
-                  boxShadow: "0 0 8px rgba(57,255,20,0.45)",
+                  background: "linear-gradient(90deg, transparent, #16A34A, transparent)",
+                  boxShadow: surface === "dark" ? "0 0 8px rgba(57,255,20,0.45)" : undefined,
                 }}
                 aria-hidden
               />
-              <span className="font-semibold text-[#9DFFB0]">Avg income · last 6 mo</span>
+              <span className={`font-semibold ${surface === "dark" ? "text-[#9DFFB0]" : "text-[#15803D]"}`}>
+                Avg income · last 6 mo
+              </span>
             </span>
           ) : null}
         </div>

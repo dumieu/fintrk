@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth-admin";
+import { isEncryptedTable, decryptRow } from "@/lib/crypto/encrypted-fields";
+import { getActiveDecryptionSession, trackSessionAccess } from "@/lib/decryption-session";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -117,10 +119,33 @@ export async function GET(request: NextRequest) {
     const dataQuery = `SELECT ${selectCols} FROM "${table}" ${whereClause} ORDER BY "${sortCol}" ${order} LIMIT $${p} OFFSET $${p + 1}`;
     params.push(limit, offset);
 
-    const rows = await sql.query(dataQuery, params);
+    let rows = await sql.query(dataQuery, params);
+
+    // Decrypt encrypted columns only when an admin decryption session is active.
+    let decrypted = false;
+    if (isEncryptedTable(table)) {
+      const session = await getActiveDecryptionSession();
+      if (session) {
+        rows = rows.map((r) => decryptRow(table, r as Record<string, unknown>));
+        decrypted = true;
+        await trackSessionAccess(session.id, table);
+        console.log(
+          JSON.stringify({
+            _type: "fintrk_admin_audit",
+            action: "rows_read_decrypted",
+            admin: gate.email,
+            table,
+            sessionId: session.id,
+            at: new Date().toISOString(),
+          }),
+        );
+      }
+    }
 
     return NextResponse.json({
       rows,
+      encrypted: isEncryptedTable(table),
+      decrypted,
       meta: {
         primaryKey,
         columns: allColumns.map((c) => ({

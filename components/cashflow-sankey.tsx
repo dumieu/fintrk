@@ -4,6 +4,7 @@ import { useMemo, useState, useId, useCallback, useEffect, useLayoutEffect, useR
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
+import { sankeyTheme, useChartSurface } from "@/lib/chart-ui";
 /** Integer-only currency formatter (no decimals anywhere on this page). */
 function fmtInt(amount: number, currency: string, locale = "en-US"): string {
   const n = Math.round(amount);
@@ -262,6 +263,33 @@ const BASE_W =
  *  collide. Below this width the SVG falls back to `meet` scaling. */
 const MIN_W =
   PAD_LEFT_MIN + COL_GAPS.length * MIN_GAP + NODE_W + PAD_RIGHT_MIN;
+
+/** Natural layout size — used to preserve diagram aspect ratio on tall viewports. */
+export const CASHFLOW_SANKEY_BASE_W = BASE_W;
+export const CASHFLOW_SANKEY_BASE_H = 720;
+export const CASHFLOW_SANKEY_MIN_H = 280;
+export const CASHFLOW_SANKEY_MAX_H = 820;
+/** Do not let the diagram grow taller than this width:height ratio (landscape). */
+const CASHFLOW_SANKEY_MIN_WIDTH_TO_HEIGHT = 1.35;
+
+/** Height for the Sankey SVG given the available slot — caps abnormally tall layouts. */
+export function computeCashflowSankeyDisplayHeight(
+  containerWidth: number,
+  containerHeight: number,
+): number {
+  const w = Math.max(1, containerWidth);
+  const h = Math.max(1, containerHeight);
+  const scaled = Math.round((w / CASHFLOW_SANKEY_BASE_W) * CASHFLOW_SANKEY_BASE_H);
+  const aspectFit = Math.min(
+    CASHFLOW_SANKEY_MAX_H,
+    Math.max(CASHFLOW_SANKEY_MIN_H, scaled),
+  );
+  const tallCap = Math.round(w / CASHFLOW_SANKEY_MIN_WIDTH_TO_HEIGHT);
+  return Math.max(
+    CASHFLOW_SANKEY_MIN_H,
+    Math.min(h, aspectFit, tallCap),
+  );
+}
 
 /** Compute per-column x positions for a given target SVG width.
  *
@@ -919,6 +947,8 @@ export function CashflowSankey({
   /** Live cursor position (viewport coords) used to anchor the tooltip. */
   const [hoverPoint, setHoverPoint] = useState<{ x: number; y: number } | null>(null);
   const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
+  const surface = useChartSurface();
+  const sk = sankeyTheme(surface);
   const selectedNodeId = useMemo(() => {
     if (!selectedCategory) return null;
     const selected = layout.nodes.find((n) => {
@@ -975,10 +1005,10 @@ export function CashflowSankey({
   const isAnyHover = !!activeNodeId || !!hoverLinkId;
 
   const linkOpacity = useCallback((id: string) => {
-    if (!isAnyHover) return 0.42;
-    if (highlightedLinkIds.has(id)) return 0.85;
-    return 0.06;
-  }, [isAnyHover, highlightedLinkIds]);
+    if (!isAnyHover) return sk.linkRest;
+    if (highlightedLinkIds.has(id)) return sk.linkHi;
+    return sk.linkDim;
+  }, [isAnyHover, highlightedLinkIds, sk.linkRest, sk.linkHi, sk.linkDim]);
 
   const nodeOpacity = useCallback((id: string) => {
     if (!isAnyHover) return 1;
@@ -1001,8 +1031,8 @@ export function CashflowSankey({
     return (
       <div className="flex h-full min-h-[280px] items-center justify-center">
         <div className="text-center">
-          <p className="text-lg font-semibold text-white/85">No cash flow data yet</p>
-          <p className="mt-1 text-sm text-white/55">
+          <p className="text-lg font-semibold text-foreground">No cash flow data yet</p>
+          <p className="mt-1 text-sm text-muted-foreground">
             Upload a statement to see your money flow come to life.
           </p>
         </div>
@@ -1011,7 +1041,7 @@ export function CashflowSankey({
   }
 
   return (
-    <div ref={wrapRef} className="relative h-full w-full">
+    <div ref={wrapRef} className="relative h-auto w-full rounded-xl" style={{ background: "var(--chart-sankey-bg)" }}>
       <svg
         viewBox={`0 0 ${layout.width} ${layout.height}`}
         width="100%"
@@ -1032,8 +1062,8 @@ export function CashflowSankey({
                 id={`${uid}-grad-${cleanId(l.id)}`}
                 x1="0%" y1="0%" x2="100%" y2="0%"
               >
-                <stop offset="0%" stopColor={src.color} stopOpacity="0.95" />
-                <stop offset="100%" stopColor={tgt.color} stopOpacity="0.95" />
+                <stop offset="0%" stopColor={src.color} stopOpacity={surface === "dark" ? "0.95" : "1"} />
+                <stop offset="100%" stopColor={tgt.color} stopOpacity={surface === "dark" ? "0.95" : "1"} />
               </linearGradient>
             );
           })}
@@ -1056,7 +1086,7 @@ export function CashflowSankey({
             x2={x + NODE_W / 2}
             y1={PAD_Y - 6}
             y2={layout.height - PAD_Y + 6}
-            stroke="rgba(255,255,255,0.04)"
+            stroke={sk.guide}
             strokeWidth="1"
             strokeDasharray="2 6"
           />
@@ -1092,7 +1122,7 @@ export function CashflowSankey({
                 d={path}
                 fill={`url(#${uid}-grad-${cleanId(l.id)})`}
                 stroke="none"
-                style={{ mixBlendMode: "screen" }}
+                style={{ mixBlendMode: sk.blendMode }}
                 initial={{ opacity: 0 }}
                 animate={{ opacity: op }}
                 transition={{ duration: 0.5, ease: "easeOut" }}
@@ -1175,7 +1205,9 @@ export function CashflowSankey({
                   height={n.height}
                   rx={Math.min(4, n.height / 2)}
                   fill={n.color}
-                  filter={`url(#${uid}-glow)`}
+                  stroke={surface === "light" ? "var(--chart-sankey-node-stroke)" : "none"}
+                  strokeWidth={surface === "light" ? 0.75 : 0}
+                  filter={surface === "dark" ? `url(#${uid}-glow)` : undefined}
                 />
                 {/* Inner highlight */}
                 <rect
@@ -1184,7 +1216,7 @@ export function CashflowSankey({
                   width={NODE_W - 4}
                   height={Math.max(0, n.height - 2)}
                   rx={Math.min(2, (n.height - 2) / 2)}
-                  fill="rgba(255,255,255,0.18)"
+                  fill={sk.nodeHighlight}
                 />
               </g>
             );
@@ -1207,12 +1239,13 @@ export function CashflowSankey({
             const minHForText = 10;
             const minHForValue = 16;
 
-            // Different sizes per emphasis
-            const fontSize = n.emphasis === 0 ? 13 : n.emphasis === 1 ? 11 : 9.5;
-            const valueFontSize = n.emphasis === 0 ? 10 : 9;
+            // Different sizes per emphasis — slightly larger on light for readability
+            const sizeBoost = surface === "light" ? 1.15 : 1;
+            const fontSize = (n.emphasis === 0 ? 13 : n.emphasis === 1 ? 11 : 9.5) * sizeBoost;
+            const valueFontSize = (n.emphasis === 0 ? 10 : 9) * sizeBoost;
             const fontWeight = n.emphasis === 0 ? 700 : n.emphasis === 1 ? 600 : 500;
-            const fillName = n.emphasis === 0 ? "rgba(255,255,255,0.98)" : "rgba(255,255,255,0.88)";
-            const fillValue = "rgba(255,255,255,0.55)";
+            const fillName = n.emphasis === 0 ? sk.labelFill[0] : sk.labelFill[1];
+            const fillValue = sk.labelMuted;
 
             if (n.height < minHForText) return null;
 
@@ -1259,8 +1292,8 @@ export function CashflowSankey({
                   fontWeight={fontWeight}
                   fill={fillName}
                   style={{ paintOrder: "stroke" }}
-                  stroke="rgba(8,5,26,0.92)"
-                  strokeWidth={2.6}
+                  stroke={sk.labelStroke}
+                  strokeWidth={surface === "light" ? 3.2 : 2.6}
                   strokeLinejoin="round"
                 >
                   {truncName}
@@ -1272,11 +1305,11 @@ export function CashflowSankey({
                     textAnchor={anchor}
                     dominantBaseline="middle"
                     fontSize={valueFontSize}
-                    fontWeight={500}
+                    fontWeight={600}
                     fill={fillValue}
                     style={{ paintOrder: "stroke" }}
-                    stroke="rgba(8,5,26,0.92)"
-                    strokeWidth={2.0}
+                    stroke={sk.labelStroke}
+                    strokeWidth={surface === "light" ? 2.4 : 2.0}
                     strokeLinejoin="round"
                   >
                     {fmtInt(n.value, data.currency)}
@@ -1424,7 +1457,7 @@ function BreakdownTooltip({
         initial={{ opacity: 0, scale: 0.98 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.14, ease: "easeOut" }}
-        className="overflow-hidden rounded-2xl border border-white/12 bg-gradient-to-br from-[#141414]/97 via-[#0a0a0a]/97 to-[#0a0a0a]/97 p-3.5 text-white/90 shadow-2xl backdrop-blur-xl"
+        className="overflow-hidden rounded-2xl border border-chart-border bg-chart-surface p-3.5 text-card-foreground shadow-[var(--chart-tooltip-shadow)] backdrop-blur-xl"
         style={{
           boxShadow:
             "0 20px 60px -15px rgba(0,0,0,0.75), 0 0 0 1px rgba(255,255,255,0.04), inset 0 1px 0 rgba(255,255,255,0.06)",
@@ -1440,14 +1473,14 @@ function BreakdownTooltip({
 
       {/* Optional ribbon-context strip (when hovering a link) */}
       {linkContext && (
-        <div className="mb-2.5 flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1.5 text-[10.5px] text-white/80">
+        <div className="mb-2.5 flex items-center justify-between gap-2 rounded-lg border border-chart-border bg-chart-surface px-2 py-1.5 text-[10.5px] text-foreground">
           <div className="flex min-w-0 items-center gap-1.5">
             <span
               className="inline-block h-2 w-2 shrink-0 rounded-full"
               style={{ background: linkContext.src.color }}
             />
             <span className="truncate">{linkContext.src.name}</span>
-            <span className="text-white/40">→</span>
+            <span className="text-muted-foreground">→</span>
             <span
               className="inline-block h-2 w-2 shrink-0 rounded-full"
               style={{ background: linkContext.tgt.color }}
@@ -1455,10 +1488,10 @@ function BreakdownTooltip({
             <span className="truncate">{linkContext.tgt.name}</span>
           </div>
           <div className="flex shrink-0 items-baseline gap-1.5 tabular-nums">
-            <span className="font-semibold text-white">
+            <span className="font-semibold text-foreground">
               {fmtInt(linkContext.value, currency)}
             </span>
-            <span className="text-white/45">{Math.round(linkPct)}%</span>
+            <span className="text-muted-foreground">{Math.round(linkPct)}%</span>
           </div>
         </div>
       )}
@@ -1466,15 +1499,15 @@ function BreakdownTooltip({
       {/* Header */}
       <div className="flex items-start gap-2.5">
         <span
-          className="mt-1 inline-block h-3 w-3 shrink-0 rounded-full ring-2 ring-white/15"
+          className="mt-1 inline-block h-3 w-3 shrink-0 rounded-full ring-2 ring-chart-border"
           style={{ background: node.color, boxShadow: `0 0 14px ${node.color}88` }}
         />
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[13px] font-semibold text-white/95" title={node.name}>
+          <div className="truncate text-[13px] font-semibold text-foreground" title={node.name}>
             {node.name}
           </div>
-          <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[10.5px] text-white/55">
-            <span className="text-base font-bold tabular-nums text-white">
+          <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[10.5px] text-muted-foreground">
+            <span className="text-base font-bold tabular-nums text-foreground">
               {fmtInt(total, currency)}
             </span>
             <span className="tabular-nums">{Math.round(pct)}% of income</span>
@@ -1489,8 +1522,8 @@ function BreakdownTooltip({
 
       {/* All-time stats panel + sparkline */}
       {stats && stats.monthsSpan > 0 && (
-        <div className="mt-3 rounded-xl border border-white/10 bg-white/[0.035] p-2.5">
-          <div className="flex items-center justify-between text-[9.5px] uppercase tracking-[0.14em] text-white/40">
+        <div className="mt-3 rounded-xl border border-chart-border bg-chart-muted/50 p-2.5">
+          <div className="flex items-center justify-between text-[9.5px] uppercase tracking-[0.14em] text-muted-foreground">
             <span>All-time trend</span>
             <span className="tabular-nums">
               {formatYmShort(stats.firstYm)} → {formatYmShort(stats.lastYm)}
@@ -1511,7 +1544,7 @@ function BreakdownTooltip({
               accent={node.color}
             />
           </div>
-          <div className="mt-1.5 flex items-center justify-between text-[10px] text-white/45 tabular-nums">
+          <div className="mt-1.5 flex items-center justify-between text-[10px] text-muted-foreground tabular-nums">
             <span>{stats.monthsSpan} mo span</span>
             <span>
               {fmtInt(stats.total, currency)} total · {stats.count.toLocaleString()} txn
@@ -1524,7 +1557,7 @@ function BreakdownTooltip({
       {/* Breakdown body */}
       {items.length > 0 ? (
         <>
-          <div className="mt-3 flex items-center justify-between text-[9.5px] uppercase tracking-[0.14em] text-white/40">
+          <div className="mt-3 flex items-center justify-between text-[9.5px] uppercase tracking-[0.14em] text-muted-foreground">
             <span>{node.breakdownKind ?? "Breakdown"}</span>
             <span>{items.length} item{items.length === 1 ? "" : "s"}</span>
           </div>
@@ -1542,20 +1575,20 @@ function BreakdownTooltip({
                         className="inline-block h-2 w-2 shrink-0 rounded-full"
                         style={{ background: it.color }}
                       />
-                      <span className="truncate text-white/85" title={it.name}>
+                      <span className="truncate text-foreground" title={it.name}>
                         {it.name}
                       </span>
                     </div>
                     <div className="flex shrink-0 items-baseline gap-1.5 tabular-nums">
-                      <span className="text-[10.5px] text-white/45">
+                      <span className="text-[10.5px] text-muted-foreground">
                         {Math.round(itemPct)}%
                       </span>
-                      <span className="font-semibold text-white/95">
+                      <span className="font-semibold text-foreground">
                         {fmtInt(it.value, currency)}
                       </span>
                     </div>
                   </div>
-                  <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-white/[0.06]">
+                  <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-chart-muted">
                     <motion.div
                       initial={{ width: 0 }}
                       animate={{ width: `${widthPct}%` }}
@@ -1571,7 +1604,7 @@ function BreakdownTooltip({
               );
             })}
             {restCount > 0 && (
-              <li className="flex items-baseline justify-between gap-2 pt-0.5 text-[10.5px] text-white/55">
+              <li className="flex items-baseline justify-between gap-2 pt-0.5 text-[10.5px] text-muted-foreground">
                 <span>+ {restCount} more</span>
                 <span className="tabular-nums">{fmtInt(restValue, currency)}</span>
               </li>
@@ -1579,7 +1612,7 @@ function BreakdownTooltip({
           </ul>
         </>
       ) : !stats ? (
-        <div className="mt-3 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-2 text-[11px] text-white/55">
+        <div className="mt-3 rounded-lg border border-chart-border bg-chart-muted/60 px-2.5 py-2 text-[11px] text-muted-foreground">
           No further breakdown for this node.
         </div>
       ) : null}
@@ -1684,7 +1717,7 @@ function StatTile({
 }) {
   return (
     <div
-      className="relative overflow-hidden rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1.5"
+      className="relative overflow-hidden rounded-lg border border-chart-border bg-chart-muted/60 px-2.5 py-1.5"
       style={{
         boxShadow: `inset 0 0 0 1px rgba(255,255,255,0.02)`,
       }}
@@ -1693,10 +1726,10 @@ function StatTile({
         className="absolute left-0 top-0 h-full w-[2px]"
         style={{ background: accent, opacity: 0.7 }}
       />
-      <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-white/45">
+      <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
         {label}
       </div>
-      <div className="mt-0.5 text-[12.5px] font-bold tabular-nums text-white">
+      <div className="mt-0.5 text-[12.5px] font-bold tabular-nums text-foreground">
         {value}
       </div>
     </div>
@@ -1719,7 +1752,7 @@ function Sparkline({
 
   if (months.length < 2) {
     return (
-      <div className="flex h-[38px] w-full items-center justify-center rounded-md bg-white/[0.03] text-[10px] text-white/35">
+      <div className="flex h-[38px] w-full items-center justify-center rounded-md bg-chart-muted/60 text-[10px] text-muted-foreground/80">
         Not enough history yet
       </div>
     );
@@ -1762,7 +1795,7 @@ function Sparkline({
         x2={W}
         y1={H - PAD_BOTTOM}
         y2={H - PAD_BOTTOM}
-        stroke="rgba(255,255,255,0.06)"
+        stroke="var(--chart-grid)"
         strokeWidth={1}
       />
       <path

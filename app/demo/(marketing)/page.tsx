@@ -1,15 +1,15 @@
 "use client";
 
-import { useDemo } from "./demo-store";
-import { DemoHero } from "./sections/hero";
-import { DemoKpiStrip } from "./sections/kpi-strip";
-import { DemoCashflowSection } from "./sections/cashflow";
-import { DemoCategoriesSection } from "./sections/categories";
-import { DemoAccountsSection } from "./sections/accounts";
-import { DemoTransactionsSection } from "./sections/transactions";
-import { DemoRecurringSection } from "./sections/recurring";
-import { DemoInsightsSection } from "./sections/insights";
-import { DemoFooter } from "./sections/footer";
+import { useDemo } from "../demo-store";
+import { DemoHero } from "../sections/hero";
+import { DemoKpiStrip } from "../sections/kpi-strip";
+import { DemoCashflowSection } from "../sections/cashflow";
+import { DemoCategoriesSection } from "../sections/categories";
+import { DemoAccountsSection } from "../sections/accounts";
+import { DemoTransactionsSection } from "../sections/transactions";
+import { DemoRecurringSection } from "../sections/recurring";
+import { DemoInsightsSection } from "../sections/insights";
+import { DemoFooter } from "../sections/footer";
 
 export default function DemoPage() {
   const { snapshot, loading, error } = useDemo();
@@ -58,7 +58,7 @@ function DemoLoading() {
             style={{ animation: "spin 1.4s linear infinite" }}
           />
         </div>
-        <p className="text-sm text-white/70">Loading 3 years of Sterling family finances…</p>
+        <p className="text-sm text-white/70">Loading 5 years of Sterling family finances&hellip;</p>
       </div>
     </div>
   );

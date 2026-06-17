@@ -260,7 +260,7 @@ function EditModal({ txn, onClose }: { txn: DemoTransaction; onClose: () => void
         flow_type: newCat?.flow_type ?? txn.flow_type,
       },
     });
-    toast("Updated (demo only — refresh to reset)", "ok");
+    toast("Updated (demo only - refresh to reset)", "ok");
     onClose();
   };
 

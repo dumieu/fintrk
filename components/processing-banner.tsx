@@ -66,13 +66,13 @@ export function ProcessingBanner() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -10, scale: 0.95 }}
             layout
-            className="pointer-events-auto rounded-xl border border-[#AD74FF]/30 bg-[#111111]/95 backdrop-blur-md shadow-lg shadow-[#AD74FF]/10 p-3 flex items-center gap-3"
+            className="pointer-events-auto rounded-xl border border-[#AD74FF]/30 bg-chart-surface/98 backdrop-blur-md shadow-lg shadow-[#AD74FF]/10 p-3 flex items-center gap-3"
           >
             <div className="w-8 h-8 rounded-lg bg-[#AD74FF]/10 flex items-center justify-center shrink-0">
               <Loader2 className="w-4 h-4 text-[#AD74FF] animate-spin" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-white/90 truncate">{stmt.fileName}</p>
+              <p className="text-xs font-medium text-foreground truncate">{stmt.fileName}</p>
               <p className="text-[10px] text-[#AD74FF]/85">AI is processing…</p>
             </div>
             <div className="shrink-0">
@@ -94,8 +94,8 @@ export function ProcessingBanner() {
             layout
             className={`pointer-events-auto rounded-xl border p-3 flex items-center gap-3 backdrop-blur-md shadow-lg cursor-pointer ${
               stmt.status === "completed"
-                ? "border-[#0BC18D]/30 bg-[#111111]/95 shadow-[#0BC18D]/10"
-                : "border-[#FF6F69]/30 bg-[#111111]/95 shadow-[#FF6F69]/10"
+                ? "border-[#0BC18D]/30 bg-chart-surface/98 shadow-[#0BC18D]/10"
+                : "border-[#FF6F69]/30 bg-chart-surface/98 shadow-[#FF6F69]/10"
             }`}
             onClick={() => {
               if (stmt.status === "completed") {
@@ -114,7 +114,7 @@ export function ProcessingBanner() {
               )}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-white/90 truncate">{stmt.fileName}</p>
+              <p className="text-xs font-medium text-foreground truncate">{stmt.fileName}</p>
               <p className="text-[10px]">
                 {stmt.status === "completed" ? (
                   <span className="text-[#0BC18D]">
@@ -130,7 +130,7 @@ export function ProcessingBanner() {
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); dismiss(stmt.id); }}
-              className="p-1 text-white/40 hover:text-white/70 transition-colors shrink-0"
+              className="p-1 text-muted-foreground hover:text-muted-foreground transition-colors shrink-0"
             >
               <X className="w-3 h-3" />
             </button>

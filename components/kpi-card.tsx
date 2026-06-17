@@ -2,6 +2,7 @@
 
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { chartPanelClass } from "@/lib/chart-ui";
 import { motion } from "framer-motion";
 
 interface KpiCardProps {
@@ -30,7 +31,10 @@ export function KpiCard({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: index * 0.06 }}
-      className="group relative rounded-xl border border-white/[0.10] bg-white/[0.04] p-3 sm:p-4 backdrop-blur-sm transition-all duration-300 hover:border-white/[0.18] hover:bg-white/[0.07]"
+      className={cn(
+        chartPanelClass,
+        "group relative p-3 sm:p-4 transition-all duration-300 hover:bg-chart-hover",
+      )}
       style={{
         boxShadow: `0 0 30px rgba(${accentRgb}, 0.03)`,
       }}
@@ -46,12 +50,12 @@ export function KpiCard({
         >
           <Icon className="w-3 h-3" style={{ color: accentColor }} />
         </div>
-        <span className="text-[10px] sm:text-[11px] font-medium text-white/60 truncate">
+        <span className="text-[10px] sm:text-[11px] font-medium text-muted-foreground truncate">
           {label}
         </span>
       </div>
 
-      <div className="text-base sm:text-xl font-bold text-white tabular-nums">
+      <div className="text-base sm:text-xl font-bold text-foreground tabular-nums">
         {value}
       </div>
 
@@ -60,7 +64,7 @@ export function KpiCard({
           "text-[10px] sm:text-xs font-semibold mt-0.5 tabular-nums",
           deltaDirection === "up" && "text-[#0BC18D]",
           deltaDirection === "down" && "text-[#FF6F69]",
-          deltaDirection === "flat" && "text-white/60",
+          deltaDirection === "flat" && "text-muted-foreground",
         )}>
           {delta}
         </div>

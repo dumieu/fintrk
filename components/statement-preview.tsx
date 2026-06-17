@@ -29,17 +29,17 @@ export function StatementPreview({ file, parsedData, onReset, onSubmit }: Statem
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
-      className="rounded-2xl border border-white/10 bg-white/[0.02] overflow-hidden"
+      className="rounded-2xl border border-chart-border bg-white/[0.02] overflow-hidden"
     >
-      <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-chart-border">
         <div className="flex items-center gap-3">
           {fileTypeIcon(file.name)}
           <div>
             <p className="text-sm font-medium text-white truncate max-w-[200px] sm:max-w-none">{file.name}</p>
-            <p className="text-[11px] text-white/40">{formatSize(file.size)}</p>
+            <p className="text-[11px] text-muted-foreground">{formatSize(file.size)}</p>
           </div>
         </div>
-        <Button variant="ghost" size="icon" onClick={onReset} className="text-white/40 hover:text-white">
+        <Button variant="ghost" size="icon" onClick={onReset} className="text-muted-foreground hover:text-white">
           <X className="w-4 h-4" />
         </Button>
       </div>
@@ -50,7 +50,7 @@ export function StatementPreview({ file, parsedData, onReset, onSubmit }: Statem
             <thead className="sticky top-0 bg-black/60 backdrop-blur">
               <tr>
                 {parsedData.headers.map((h) => (
-                  <th key={h} className="text-left px-3 py-2 text-white/50 font-medium whitespace-nowrap">
+                  <th key={h} className="text-left px-3 py-2 text-muted-foreground font-medium whitespace-nowrap">
                     {h}
                   </th>
                 ))}
@@ -60,7 +60,7 @@ export function StatementPreview({ file, parsedData, onReset, onSubmit }: Statem
               {parsedData.rows.slice(0, 10).map((row, i) => (
                 <tr key={i} className="border-t border-white/5">
                   {parsedData.headers.map((h) => (
-                    <td key={h} className="px-3 py-2 text-white/70 whitespace-nowrap max-w-[200px] truncate">
+                    <td key={h} className="px-3 py-2 text-muted-foreground whitespace-nowrap max-w-[200px] truncate">
                       {String(row[h] ?? "")}
                     </td>
                   ))}
@@ -69,7 +69,7 @@ export function StatementPreview({ file, parsedData, onReset, onSubmit }: Statem
             </tbody>
           </table>
           {parsedData.rows.length > 10 && (
-            <p className="px-3 py-2 text-[11px] text-white/30 text-center border-t border-white/5">
+            <p className="px-3 py-2 text-[11px] text-muted-foreground/70 text-center border-t border-white/5">
               Showing 10 of {parsedData.rows.length} rows
             </p>
           )}
@@ -79,14 +79,14 @@ export function StatementPreview({ file, parsedData, onReset, onSubmit }: Statem
       {!parsedData && (
         <div className="px-5 py-8 text-center">
           <FileText className="w-10 h-10 mx-auto mb-3 text-[#AD74FF]/60" />
-          <p className="text-sm text-white/50">
+          <p className="text-sm text-muted-foreground">
             PDF will be processed by AI vision — no preview available
           </p>
         </div>
       )}
 
-      <div className="flex items-center gap-3 px-5 py-4 border-t border-white/10">
-        <Button onClick={onReset} variant="ghost" className="text-white/50 hover:text-white">
+      <div className="flex items-center gap-3 px-5 py-4 border-t border-chart-border">
+        <Button onClick={onReset} variant="ghost" className="text-muted-foreground hover:text-white">
           Try another file
         </Button>
         <div className="flex-1" />

@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { Toaster } from "sonner";
 import { AdminSidebar } from "@/components/admin-sidebar";
+import { DecryptionSessionBanner } from "@/components/decryption-session-banner";
 
 export function RootChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -26,6 +27,7 @@ export function RootChrome({ children }: { children: React.ReactNode }) {
         className="min-h-screen transition-[padding] duration-200"
         style={{ paddingLeft: collapsed ? 20 : 270 }}
       >
+        <DecryptionSessionBanner />
         {children}
       </main>
       <Toaster position="top-right" richColors closeButton />

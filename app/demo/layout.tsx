@@ -1,24 +1,20 @@
 import type { ReactNode } from "react";
 import type { Metadata } from "next";
-import { DemoProvider } from "./demo-store";
-import { DemoBanner } from "./demo-banner";
-import { DemoToasts } from "./demo-toasts";
+import { DemoApiBridge } from "./demo-api-bridge";
+import { DemoRibbon } from "./demo-ribbon";
 
 export const metadata: Metadata = {
-  title: "FinTRK Live Demo · The Sterling Family",
+  title: "FinTRK Live Demo \u00b7 The Sterling Family",
   description:
-    "Walk through three years of real financial life — incomes, mortgage, two kids' colleges, every transaction. Edit anything; nothing persists. Refresh to reset.",
+    "Explore the full FinTRK app with five years of a real upper-middle-class household's finances - income, mortgage, three kids, every transaction, the Net Worth Atlas. Edit anything; nothing saves. Refresh to reset.",
   robots: { index: true, follow: true },
 };
 
 export default function DemoLayout({ children }: { children: ReactNode }) {
   return (
-    <DemoProvider>
-      <div className="flex min-h-screen flex-col bg-[#04060d] text-white">
-        <DemoBanner />
-        <main className="flex-1">{children}</main>
-        <DemoToasts />
-      </div>
-    </DemoProvider>
+    <DemoApiBridge>
+      <DemoRibbon />
+      {children}
+    </DemoApiBridge>
   );
 }

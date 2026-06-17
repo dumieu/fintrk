@@ -13,6 +13,15 @@ import { netWorthItems, netWorthSettings } from "@/lib/db/schema";
 import { eq, and, asc } from "drizzle-orm";
 import { z } from "zod";
 import { logServerError } from "@/lib/safe-error";
+import { ef, df } from "@/lib/crypto/encryption";
+
+/** Decrypt an encrypted numeric/text field back into a number (or null). */
+function dfNum(val: string | null | undefined): number | null {
+  const plain = df(val);
+  if (plain == null || plain === "") return null;
+  const n = Number(plain);
+  return Number.isFinite(n) ? n : null;
+}
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -32,6 +41,10 @@ const settingsSchema = z.object({
   annualDrawdown: z.number().min(0).max(100_000_000).default(0),
   annualDrawdownPre: z.number().min(0).max(100_000_000).default(0),
   showInflationAdjusted: z.boolean().default(false),
+  annualIncome: z.number().min(0).max(100_000_000).default(0),
+  incomeGrowthRate: z.number().min(-0.5).max(1).default(0.03),
+  postRetirementIncome: z.number().min(0).max(100_000_000).default(0),
+  postRetirementIncomeStartAge: z.number().int().min(30).max(100).default(67),
 });
 
 const DEFAULTS = settingsSchema.parse({
@@ -47,6 +60,10 @@ const DEFAULTS = settingsSchema.parse({
   annualDrawdown: 60_000,
   annualDrawdownPre: 0,
   showInflationAdjusted: false,
+  annualIncome: 90_000,
+  incomeGrowthRate: 0.03,
+  postRetirementIncome: 24_000,
+  postRetirementIncomeStartAge: 67,
 });
 
 export async function GET() {
@@ -76,11 +93,15 @@ export async function GET() {
           inflationRate: Number(settingsRow[0].inflationRate),
           currentAge: settingsRow[0].currentAge,
           retirementAge: settingsRow[0].retirementAge,
-          birthMonth: settingsRow[0].birthMonth,
-          birthYear: settingsRow[0].birthYear,
+          birthMonth: dfNum(settingsRow[0].birthMonth),
+          birthYear: dfNum(settingsRow[0].birthYear),
           annualDrawdown: Number(settingsRow[0].annualDrawdown),
           annualDrawdownPre: Number(settingsRow[0].annualDrawdownPre),
           showInflationAdjusted: settingsRow[0].showInflationAdjusted,
+          annualIncome: dfNum(settingsRow[0].annualIncome) ?? 0,
+          incomeGrowthRate: Number(settingsRow[0].incomeGrowthRate ?? 0.03),
+          postRetirementIncome: Number(settingsRow[0].postRetirementIncome ?? 0),
+          postRetirementIncomeStartAge: settingsRow[0].postRetirementIncomeStartAge ?? 67,
         }
       : DEFAULTS;
 
@@ -90,11 +111,11 @@ export async function GET() {
           id: it.id,
           kind: it.kind,
           category: it.category,
-          label: it.label,
+          label: df(it.label) ?? "",
           amount: Number(it.amount),
           currency: it.currency,
           growthRate: it.growthRate == null ? null : Number(it.growthRate),
-          notes: it.notes,
+          notes: df(it.notes),
           displayOrder: it.displayOrder,
         })),
         settings,
@@ -130,11 +151,16 @@ export async function PUT(req: Request) {
       inflationRate: parsed.inflationRate.toFixed(4),
       currentAge: parsed.currentAge,
       retirementAge: parsed.retirementAge,
-      birthMonth: parsed.birthMonth,
-      birthYear: parsed.birthYear,
+      // PII / financial - encrypted at rest.
+      birthMonth: ef(parsed.birthMonth == null ? null : String(parsed.birthMonth)),
+      birthYear: ef(parsed.birthYear == null ? null : String(parsed.birthYear)),
       annualDrawdown: parsed.annualDrawdown.toFixed(2),
       annualDrawdownPre: parsed.annualDrawdownPre.toFixed(2),
       showInflationAdjusted: parsed.showInflationAdjusted,
+      annualIncome: ef(parsed.annualIncome.toFixed(2)),
+      incomeGrowthRate: parsed.incomeGrowthRate.toFixed(4),
+      postRetirementIncome: parsed.postRetirementIncome.toFixed(2),
+      postRetirementIncomeStartAge: parsed.postRetirementIncomeStartAge,
       updatedAt: new Date(),
     } as const;
     await resilientQuery(() =>

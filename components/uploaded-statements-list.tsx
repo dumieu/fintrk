@@ -130,15 +130,15 @@ export function UploadedStatementsList() {
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.18 }}
-        className="mt-6 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.035]"
+        className="mt-6 overflow-hidden rounded-2xl border border-chart-border bg-chart-muted/50"
       >
-        <div className="flex items-center justify-between gap-3 border-b border-white/10 px-5 py-3">
+        <div className="flex items-center justify-between gap-3 border-b border-chart-border px-5 py-3">
           <div className="min-w-0">
             <h2 className="flex items-center gap-2 text-sm font-semibold text-white">
               <FileText className="h-4 w-4 text-[#0BC18D]" />
               Uploaded statements
             </h2>
-            <p className="mt-0.5 text-[11px] text-white/50">
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
               Permanent history of successfully processed statements for this account.
             </p>
           </div>
@@ -148,7 +148,7 @@ export function UploadedStatementsList() {
             size="sm"
             onClick={() => void load("refresh")}
             disabled={refreshing || loading}
-            className="text-white/60 hover:text-white"
+            className="text-muted-foreground hover:text-white"
           >
             {refreshing ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -160,17 +160,17 @@ export function UploadedStatementsList() {
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center gap-2 px-5 py-8 text-xs text-white/55">
+          <div className="flex items-center justify-center gap-2 px-5 py-8 text-xs text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin text-[#AD74FF]" />
             Loading uploaded statements…
           </div>
         ) : items.length === 0 ? (
           <div className="px-5 py-8 text-center">
             <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-white/[0.05]">
-              <CalendarDays className="h-4 w-4 text-white/45" />
+              <CalendarDays className="h-4 w-4 text-muted-foreground" />
             </div>
-            <p className="mt-3 text-sm font-medium text-white/75">No successful uploads yet</p>
-            <p className="mt-1 text-xs text-white/45">
+            <p className="mt-3 text-sm font-medium text-foreground">No successful uploads yet</p>
+            <p className="mt-1 text-xs text-muted-foreground">
               Once a statement finishes processing, it will appear here automatically.
             </p>
           </div>
@@ -189,19 +189,19 @@ export function UploadedStatementsList() {
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <CheckCircle2 className="h-4 w-4 shrink-0 text-[#0BC18D]" />
-                      <p className="truncate text-xs font-semibold text-white/90">{statement.name}</p>
+                      <p className="truncate text-xs font-semibold text-foreground">{statement.name}</p>
                     </div>
-                    <p className="mt-0.5 pl-6 text-[10px] text-white/45">
+                    <p className="mt-0.5 pl-6 text-[10px] text-muted-foreground">
                       {statement.transactionsImported.toLocaleString("en-US")} imported
                       {statement.transactionsDuplicate > 0
                         ? ` · ${statement.transactionsDuplicate.toLocaleString("en-US")} duplicate txns`
                         : ""}
                     </p>
                   </div>
-                  <p className="min-w-0 truncate text-xs text-white/65 sm:text-right">
+                  <p className="min-w-0 truncate text-xs text-muted-foreground sm:text-right">
                     {accountLabel(statement)}
                   </p>
-                  <p className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-right text-[11px] font-medium tabular-nums text-white/80">
+                  <p className="rounded-full border border-chart-border bg-chart-muted px-2.5 py-1 text-right text-[11px] font-medium tabular-nums text-foreground">
                     {formatRangeDate(statement.transactionStart)} : {formatRangeDate(statement.transactionEnd)}
                   </p>
                   <div className="flex justify-end sm:justify-center">
@@ -231,14 +231,14 @@ export function UploadedStatementsList() {
       </motion.section>
 
       <Dialog open={pendingDelete !== null} onOpenChange={(open) => !open && closeDeleteDialog()}>
-        <DialogContent className="border-white/10 bg-[#121212] text-white sm:max-w-md">
+        <DialogContent className="border-chart-border bg-card text-white sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-white">Delete uploaded statement?</DialogTitle>
-            <DialogDescription className="text-white/60">
+            <DialogDescription className="text-muted-foreground">
               {pendingDelete ? (
                 <>
                   This permanently removes{" "}
-                  <span className="font-medium text-white/85">{pendingDelete.name}</span>, all{" "}
+                  <span className="font-medium text-foreground">{pendingDelete.name}</span>, all{" "}
                   {pendingDelete.transactionsImported.toLocaleString("en-US")} related transactions,
                   and its upload history. You can upload the same file again later and it will be
                   processed from scratch.
@@ -249,13 +249,13 @@ export function UploadedStatementsList() {
           {deleteError ? (
             <p className="text-xs text-[#FF6F69]">{deleteError}</p>
           ) : null}
-          <DialogFooter className="border-white/10 bg-transparent">
+          <DialogFooter className="border-chart-border bg-transparent">
             <Button
               type="button"
               variant="ghost"
               onClick={closeDeleteDialog}
               disabled={deletingId !== null}
-              className="text-white/70 hover:text-white"
+              className="text-muted-foreground hover:text-white"
             >
               Cancel
             </Button>

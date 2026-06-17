@@ -25,6 +25,14 @@ import {
   analyticsCategoryGradientTop,
 } from "@/lib/analytics-category-colors";
 import { monthKeyToDateRange } from "@/lib/month-date-range";
+import {
+  chartChipClass,
+  chartIconBadgeClass,
+  chartMutedClass,
+  chartOverlayClass,
+  chartOverlayPillClass,
+  chartTitleClass,
+} from "@/lib/chart-ui";
 
 const REF_LINE_INCOME = "#39FF14";
 const REF_LINE_SPEND = "#FF4444";
@@ -222,10 +230,10 @@ export function MonthlyStackedSpend({ months: monthsCount = DEFAULT_MONTHS }: { 
 
   if (loading && !data) {
     return (
-      <Card className="border-white/[0.10] bg-white/[0.04] text-white">
+      <Card className="border-chart-border bg-chart-surface text-card-foreground shadow-chart">
         <ChartCardHeader />
         <CardContent className="overflow-visible pt-0">
-          <div className="flex h-[660px] items-center justify-center text-sm text-white/40">
+          <div className="flex h-[660px] items-center justify-center text-sm text-muted-foreground">
             Loading monthly breakdown…
           </div>
         </CardContent>
@@ -234,7 +242,7 @@ export function MonthlyStackedSpend({ months: monthsCount = DEFAULT_MONTHS }: { 
   }
   if (error || !data) {
     return (
-      <Card className="border-white/[0.10] bg-white/[0.04] text-white">
+      <Card className="border-chart-border bg-chart-surface text-card-foreground shadow-chart">
         <ChartCardHeader />
         <CardContent className="overflow-visible pt-0">
           <div className="flex h-[660px] items-center justify-center text-sm text-rose-300/80">
@@ -246,10 +254,10 @@ export function MonthlyStackedSpend({ months: monthsCount = DEFAULT_MONTHS }: { 
   }
   if (data.months.every((m) => m.total === 0)) {
     return (
-      <Card className="border-white/[0.10] bg-white/[0.04] text-white">
+      <Card className="border-chart-border bg-chart-surface text-card-foreground shadow-chart">
         <ChartCardHeader />
         <CardContent className="overflow-visible pt-0">
-          <div className="flex h-[660px] items-center justify-center text-sm text-white/40">
+          <div className="flex h-[660px] items-center justify-center text-sm text-muted-foreground">
             No spending in the selected window.
           </div>
           <AnalyticsCategoryLegend
@@ -265,7 +273,7 @@ export function MonthlyStackedSpend({ months: monthsCount = DEFAULT_MONTHS }: { 
   }
 
   return (
-    <Card className="border-white/[0.10] bg-white/[0.04] text-white">
+    <Card className="border-chart-border bg-chart-surface text-card-foreground shadow-chart">
       <ChartCardHeader onExpand={() => setExpanded(true)} />
       <CardContent className="overflow-visible pt-0">
         <ChartView
@@ -328,7 +336,7 @@ function ExpandChartButton({ onClick }: { onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      className="grid h-7 w-7 place-items-center rounded-lg border border-white/10 bg-[#121212]/80 text-white/45 backdrop-blur-sm transition-colors hover:border-white/20 hover:bg-white/[0.10] hover:text-white/85"
+      className="grid h-7 w-7 place-items-center rounded-lg border border-chart-border bg-chart-surface text-muted-foreground backdrop-blur-sm transition-colors hover:border-chart-border hover:bg-chart-hover hover:text-foreground"
       aria-label="Expand chart to full screen"
       title="Expand"
     >
@@ -340,8 +348,8 @@ function ExpandChartButton({ onClick }: { onClick: () => void }) {
 function ChartCardHeader({ onExpand }: { onExpand?: () => void }) {
   return (
     <CardHeader className="pb-3">
-      <CardTitle className="flex items-center gap-2 text-sm font-semibold text-white/85">
-        <span className="grid h-7 w-7 place-items-center rounded-lg bg-gradient-to-br from-[#0BC18D]/30 to-[#5DD3F3]/20 ring-1 ring-white/10">
+      <CardTitle className="flex items-center gap-2 text-sm font-semibold text-foreground">
+        <span className="grid h-7 w-7 place-items-center rounded-lg bg-gradient-to-br from-[#0BC18D]/30 to-[#5DD3F3]/20 ring-1 ring-chart-border">
           <CalendarRange className="h-4 w-4 text-[#0BC18D]" />
         </span>
         <span>Monthly Spend by Category</span>
@@ -394,9 +402,9 @@ function FullscreenChartModal({
       aria-modal="true"
       aria-label="Monthly Spend by Category — expanded"
     >
-      <div className="flex shrink-0 items-center justify-between border-b border-white/[0.08] px-5 py-3.5 sm:px-8">
-        <div className="flex items-center gap-2 text-sm font-semibold text-white/90">
-          <span className="grid h-7 w-7 place-items-center rounded-lg bg-gradient-to-br from-[#0BC18D]/30 to-[#5DD3F3]/20 ring-1 ring-white/10">
+      <div className="flex shrink-0 items-center justify-between border-b border-chart-border px-5 py-3.5 sm:px-8">
+        <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+          <span className="grid h-7 w-7 place-items-center rounded-lg bg-gradient-to-br from-[#0BC18D]/30 to-[#5DD3F3]/20 ring-1 ring-chart-border">
             <Maximize2 className="h-3.5 w-3.5 text-[#0BC18D]" />
           </span>
           Monthly Spend by Category
@@ -404,7 +412,7 @@ function FullscreenChartModal({
         <button
           type="button"
           onClick={onClose}
-          className="grid h-8 w-8 place-items-center rounded-lg border border-white/10 bg-white/[0.06] text-white/60 transition-colors hover:bg-white/[0.12] hover:text-white"
+          className="grid h-8 w-8 place-items-center rounded-lg border border-chart-border bg-chart-muted text-muted-foreground transition-colors hover:bg-chart-hover hover:text-white"
           aria-label="Close expanded chart"
         >
           <X className="h-4 w-4" />
@@ -562,8 +570,8 @@ function ChartView({
       className={`relative w-full ${fullscreen ? "flex min-h-0 flex-1 flex-col" : ""}`}
     >
       {categoryFilterActive && drilldownLoading && !usingSubcategoryStacks ? (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-[#111111]/40 backdrop-blur-[1px]">
-          <span className="rounded-lg border border-white/10 bg-[#111111]/90 px-3 py-1.5 text-xs text-white/60">
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-chart-overlay backdrop-blur-[1px]">
+          <span className="rounded-lg border border-chart-border bg-chart-surface px-3 py-1.5 text-xs text-muted-foreground">
             Loading subcategory breakdown…
           </span>
         </div>
@@ -612,7 +620,7 @@ function ChartView({
                     x2={size.w - padR}
                     y1={y}
                     y2={y}
-                    stroke="rgba(255,255,255,0.08)"
+                    stroke="var(--chart-grid)"
                     strokeDasharray={i === 0 ? undefined : "3 4"}
                     strokeWidth={1}
                   />
@@ -621,7 +629,7 @@ function ChartView({
                       x={padL - 8}
                       y={y + 3}
                       textAnchor="end"
-                      className="fill-white/45"
+                      className="fill-chart-axis"
                       style={{ fontSize: axisFont, fontWeight: 600 }}
                     >
                       {compact(v)}
@@ -809,7 +817,7 @@ function ChartView({
                     x={cx}
                     y={size.h - padB + 14}
                     textAnchor="middle"
-                    className="fill-white/50"
+                    className="fill-chart-label-muted"
                     style={{ fontSize: monthFont, fontWeight: 600 }}
                   >
                     {label}
@@ -823,7 +831,7 @@ function ChartView({
                     x={cx}
                     y={size.h - padB + 16}
                     textAnchor="middle"
-                    className="fill-white/55"
+                    className="fill-chart-label"
                     style={{ fontSize: monthFont, fontWeight: 600 }}
                   >
                     {lbl.line1}
@@ -832,7 +840,7 @@ function ChartView({
                     x={cx}
                     y={size.h - padB + 30}
                     textAnchor="middle"
-                    className="fill-white/35"
+                    className="fill-chart-label-muted"
                     style={{ fontSize: monthYearFont }}
                   >
                     {lbl.line2}
@@ -918,7 +926,7 @@ function MonthBar({
         x={cx}
         y={yBottom - 4}
         textAnchor="middle"
-        className="fill-white/25"
+        className="fill-chart-label-muted"
         style={{ fontSize: 9, fontStyle: "italic" }}
       >
         —
@@ -1035,9 +1043,11 @@ function MonthBar({
               style={{
                 fontSize: totalFont,
                 fontWeight: 800,
-                fill: "rgba(255,255,255,0.92)",
+                fill: "var(--chart-label)",
                 letterSpacing: "0.01em",
-                textShadow: inside ? "0 1px 3px rgba(0,0,0,0.65)" : undefined,
+                paintOrder: "stroke",
+                stroke: "var(--chart-surface)",
+                strokeWidth: inside ? 3 : 2.5,
               }}
             >
               {compact(month.total)}

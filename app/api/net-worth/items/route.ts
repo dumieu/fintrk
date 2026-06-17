@@ -13,6 +13,7 @@ import { netWorthItems } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { logServerError } from "@/lib/safe-error";
+import { ef } from "@/lib/crypto/encryption";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -51,11 +52,11 @@ export async function PUT(req: Request) {
             userId,
             kind: it.kind,
             category: it.category,
-            label: it.label,
+            label: ef(it.label) ?? it.label,
             amount: it.amount.toFixed(2),
             currency: it.currency,
             growthRate: it.growthRate == null ? null : it.growthRate.toFixed(4),
-            notes: it.notes ?? null,
+            notes: ef(it.notes ?? null),
             displayOrder: it.displayOrder ?? idx,
             isActive: true,
           })),

@@ -27,8 +27,8 @@ import {
   Settings,
   Network,
   Waves,
-  ScanSearch,
   Sparkles,
+  Gem,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { FintrkShortLogo } from "@/components/fintrk-short-logo";
@@ -66,7 +66,6 @@ export function HamburgerMenu() {
     { label: "Transactions", href: `${basePath}/transactions`, icon: ArrowLeftRight },
     { label: "Cashflow", href: `${basePath}/cashflow`, icon: Waves },
     { label: "Spend Analytics", href: `${basePath}/analytics`, icon: BarChart3 },
-    { label: "Money X-Ray", href: `${basePath}/x-ray`, icon: ScanSearch },
     { label: "Net Worth Atlas", href: `${basePath}/net-worth`, icon: Sparkles },
     { label: "Accounts", href: `${basePath}/accounts`, icon: Landmark },
     { label: "Category Mapping", href: `${basePath}/categories`, icon: Network },
@@ -145,6 +144,24 @@ export function HamburgerMenu() {
           <div className="my-3 border-t border-border" />
 
           <ul className="space-y-1">
+            <li>
+              <SheetClose
+                nativeButton={false}
+                render={
+                  <Link
+                    href={`${basePath}/upgrade`}
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                      pathname.startsWith(`${basePath}/upgrade`)
+                        ? "bg-primary/10"
+                        : "text-muted-foreground hover:bg-muted/50"
+                    }`}
+                  >
+                    <Gem className="w-5 h-5 shrink-0" style={{ color: ACCENT_HEX }} />
+                    Plan &amp; Billing
+                  </Link>
+                }
+              />
+            </li>
             <li>
               <SheetClose
                 nativeButton={false}

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth-admin";
+import { decryptRow } from "@/lib/crypto/encrypted-fields";
+import { getActiveDecryptionSession, trackSessionAccess } from "@/lib/decryption-session";
 
 export const dynamic = "force-dynamic";
 
@@ -147,8 +149,21 @@ export async function GET(
     const profileRow = (profile as Record<string, unknown>[])[0];
     if (!profileRow) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
+    // Decrypt PII / encrypted columns only with an active decryption session.
+    const session = await getActiveDecryptionSession();
+    let decryptedProfile = profileRow;
+    let decryptedStatements = recentStatements;
+    if (session) {
+      decryptedProfile = decryptRow("users", profileRow);
+      decryptedStatements = (recentStatements as Record<string, unknown>[]).map((s) =>
+        decryptRow("statements", s),
+      );
+      await trackSessionAccess(session.id, "users");
+    }
+
     return NextResponse.json({
-      profile: profileRow,
+      profile: decryptedProfile,
+      decrypted: Boolean(session),
       counts: (counts as Record<string, unknown>[])[0] || {},
       lifetime: (lifetime as Record<string, unknown>[])[0] || {},
       monthlyTimeline,
@@ -159,7 +174,7 @@ export async function GET(
       topCategories,
       activeRecurring,
       recentTransactions,
-      recentStatements,
+      recentStatements: decryptedStatements,
       aiCost: (aiCost as Record<string, unknown>[])[0] || { total_cost: 0, cost_7d: 0, calls: 0 },
       hourly,
       dow,

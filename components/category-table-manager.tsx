@@ -65,9 +65,9 @@ const SUBCAT_FILTER_LABEL: Record<SubcategoryType, string> = {
 };
 
 const SUBCAT_TYPE_META: Record<SubcategoryType, { label: string; tip: string; bg: string; text: string; border: string }> = {
-  "non-discretionary":  { label: "Non-disc",  tip: "Non-discretionary — essential expense you can't avoid (e.g. rent, insurance, utilities)", bg: "bg-[#EF4444]/10", text: "text-[#FCA5A5]", border: "border-[#EF4444]/25" },
-  "semi-discretionary": { label: "Semi-disc", tip: "Semi-discretionary — needed but the amount or frequency is flexible (e.g. groceries, transit)", bg: "bg-[#ECAA0B]/10", text: "text-[#FDE68A]", border: "border-[#ECAA0B]/25" },
-  discretionary:        { label: "Discretionary", tip: "Discretionary — fully optional, nice-to-have spending (e.g. dining out, streaming, travel)", bg: "bg-[#22C55E]/10", text: "text-[#86EFAC]", border: "border-[#22C55E]/25" },
+  "non-discretionary":  { label: "Non-disc",  tip: "Non-discretionary - essential expense you can't avoid (e.g. rent, insurance, utilities)", bg: "bg-[#EF4444]/10 dark:bg-[#EF4444]/10", text: "text-[#B91C1C] dark:text-[#FCA5A5]", border: "border-[#EF4444]/30 dark:border-[#EF4444]/25" },
+  "semi-discretionary": { label: "Semi-disc", tip: "Semi-discretionary - needed but the amount or frequency is flexible (e.g. groceries, transit)", bg: "bg-[#ECAA0B]/12 dark:bg-[#ECAA0B]/10", text: "text-[#A66708] dark:text-[#FDE68A]", border: "border-[#ECAA0B]/35 dark:border-[#ECAA0B]/25" },
+  discretionary:        { label: "Discretionary", tip: "Discretionary - fully optional, nice-to-have spending (e.g. dining out, streaming, travel)", bg: "bg-[#22C55E]/10 dark:bg-[#22C55E]/10", text: "text-[#15803D] dark:text-[#86EFAC]", border: "border-[#22C55E]/30 dark:border-[#22C55E]/25" },
 };
 
 /** Category Mapping cards only: catch-all subs named like "Other…" render last. */
@@ -100,7 +100,7 @@ function subcategoryPillClasses(
     const m = SUBCAT_TYPE_META[subcategoryType];
     return `${m.bg} ${m.text} ${m.border}`;
   }
-  return "bg-white/[0.05] text-white/50 border-white/[0.08]";
+  return "bg-foreground/[0.04] text-muted-foreground border-chart-border dark:bg-white/[0.05]";
 }
 
 function InlineInput({
@@ -161,20 +161,20 @@ function InlineInput({
         onKeyDown={onKey}
         onBlur={commit}
         placeholder={placeholder}
-        className="h-7 px-2 rounded-md text-sm bg-white/[0.06] text-white/90 outline-none transition-colors focus:bg-white/[0.10] min-w-[140px] max-w-[280px]"
+        className="h-7 px-2 rounded-md text-sm bg-chart-muted text-foreground outline-none transition-colors focus:bg-chart-hover min-w-[140px] max-w-[280px]"
         style={{ border: `1px solid ${color}40` }}
       />
       <button
         type="button"
         onMouseDown={(e) => { e.preventDefault(); commit(); }}
-        className="p-1 rounded hover:bg-white/10 text-emerald-400 transition-colors"
+        className="p-1 rounded hover:bg-foreground/10 dark:hover:bg-white/10 text-emerald-600 dark:text-emerald-400 transition-colors"
       >
         <Check className="w-3.5 h-3.5" />
       </button>
       <button
         type="button"
         onMouseDown={(e) => { e.preventDefault(); onCancel(); }}
-        className="p-1 rounded hover:bg-white/10 text-white/40 transition-colors"
+        className="p-1 rounded hover:bg-foreground/10 dark:hover:bg-white/10 text-muted-foreground transition-colors"
       >
         <X className="w-3.5 h-3.5" />
       </button>
@@ -224,20 +224,20 @@ function NewItemInput({
         onKeyDown={onKey}
         onBlur={commit}
         placeholder={placeholder}
-        className="h-7 px-2 rounded-md text-sm bg-white/[0.06] text-white/90 outline-none transition-colors focus:bg-white/[0.10] min-w-[140px] max-w-[280px]"
+        className="h-7 px-2 rounded-md text-sm bg-chart-muted text-foreground outline-none transition-colors focus:bg-chart-hover min-w-[140px] max-w-[280px]"
         style={{ border: `1px solid ${color}40` }}
       />
       <button
         type="button"
         onMouseDown={(e) => { e.preventDefault(); commit(); }}
-        className="p-1 rounded hover:bg-white/10 text-emerald-400 transition-colors"
+        className="p-1 rounded hover:bg-foreground/10 dark:hover:bg-white/10 text-emerald-600 dark:text-emerald-400 transition-colors"
       >
         <Check className="w-3.5 h-3.5" />
       </button>
       <button
         type="button"
         onMouseDown={(e) => { e.preventDefault(); onCancel(); }}
-        className="p-1 rounded hover:bg-white/10 text-white/40 transition-colors"
+        className="p-1 rounded hover:bg-foreground/10 dark:hover:bg-white/10 text-muted-foreground transition-colors"
       >
         <X className="w-3.5 h-3.5" />
       </button>
@@ -269,18 +269,13 @@ function DeleteConfirm({
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.9, opacity: 0 }}
         transition={{ type: "spring", stiffness: 320, damping: 26 }}
-        className="w-[340px] rounded-2xl p-6"
-        style={{
-          background: "rgba(12,12,28,0.96)",
-          border: "1px solid rgba(248,70,70,0.25)",
-          boxShadow: "0 0 50px rgba(248,70,70,0.08), 0 30px 60px rgba(0,0,0,0.55)",
-        }}
+        className="w-[340px] rounded-2xl p-6 border border-[#EF4444]/30 bg-white shadow-[0_24px_60px_rgba(0,0,0,0.18)] dark:border-[rgba(248,70,70,0.25)] dark:bg-[rgba(12,12,28,0.96)] dark:shadow-[0_0_50px_rgba(248,70,70,0.08),0_30px_60px_rgba(0,0,0,0.55)]"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="text-sm font-semibold text-red-400 mb-2">
+        <h3 className="text-sm font-semibold text-red-600 dark:text-red-400 mb-2">
           Delete &ldquo;{label}&rdquo;?
         </h3>
-        <p className="text-xs text-white/40 mb-5">
+        <p className="text-xs text-muted-foreground mb-5">
           {hasChildren
             ? "This will remove it and all its subcategories."
             : "This action cannot be undone."}
@@ -288,13 +283,13 @@ function DeleteConfirm({
         <div className="flex justify-end gap-2">
           <button
             onClick={onCancel}
-            className="px-4 py-2 text-xs font-medium rounded-lg text-white/50 hover:text-white/80 hover:bg-white/5 cursor-pointer transition-colors"
+            className="px-4 py-2 text-xs font-medium rounded-lg text-muted-foreground hover:text-foreground hover:bg-chart-muted/40 cursor-pointer transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={onConfirm}
-            className="px-4 py-2 text-xs font-semibold rounded-lg bg-red-500/25 text-red-300 border border-red-500/35 hover:bg-red-500/40 cursor-pointer transition-colors"
+            className="px-4 py-2 text-xs font-semibold rounded-lg bg-red-500/15 text-red-700 border border-red-500/30 hover:bg-red-500/25 dark:bg-red-500/25 dark:text-red-300 dark:border-red-500/35 dark:hover:bg-red-500/40 cursor-pointer transition-colors"
           >
             <Trash2 className="w-3.5 h-3.5 inline mr-1 -mt-0.5" />
             Delete
@@ -316,7 +311,7 @@ function NewCategoryFlowPicker({ onSelect }: { onSelect: (ft: FlowType) => void 
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-white/[0.08] text-xs text-white/25 transition-colors hover:border-white/[0.15] hover:text-white/50 cursor-pointer"
+        className="flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-chart-border text-xs text-muted-foreground/60 transition-colors hover:border-foreground/20 dark:hover:border-white/[0.15] hover:text-muted-foreground cursor-pointer"
       >
         <Plus className="w-3.5 h-3.5" />
         Add category
@@ -325,8 +320,8 @@ function NewCategoryFlowPicker({ onSelect }: { onSelect: (ft: FlowType) => void 
   }
 
   return (
-    <div className="rounded-xl border border-white/[0.12] bg-white/[0.04] p-3 space-y-2">
-      <p className="text-xs font-medium text-white/50">Pick a flow for the new category</p>
+    <div className="rounded-xl border border-chart-border bg-chart-muted p-3 space-y-2">
+      <p className="text-xs font-medium text-muted-foreground">Pick a flow for the new category</p>
       <div className="flex flex-wrap gap-2">
         {USER_SELECTABLE_FLOWS.map((ft) => (
           <button
@@ -342,7 +337,7 @@ function NewCategoryFlowPicker({ onSelect }: { onSelect: (ft: FlowType) => void 
             }}
           >
             {FLOW_LABELS[ft]}
-            <span className="pointer-events-none absolute -bottom-7 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-black/90 px-2 py-1 text-[10px] text-white/60 opacity-0 transition-opacity group-hover/flow:opacity-100 z-10">
+            <span className="pointer-events-none absolute -bottom-7 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-black/90 px-2 py-1 text-[10px] text-white/90 opacity-0 transition-opacity group-hover/flow:opacity-100 z-10">
               {FLOW_TOOLTIPS[ft]}
             </span>
           </button>
@@ -351,7 +346,7 @@ function NewCategoryFlowPicker({ onSelect }: { onSelect: (ft: FlowType) => void 
       <button
         type="button"
         onClick={() => setOpen(false)}
-        className="text-[11px] text-white/30 hover:text-white/50 transition-colors cursor-pointer"
+        className="text-[11px] text-muted-foreground/70 hover:text-muted-foreground transition-colors cursor-pointer"
       >
         Cancel
       </button>
@@ -696,14 +691,14 @@ export function CategoryTableManager() {
 
   const expenseSubtypeSummary = (
     <>
-      <span className="text-white/35"> · </span>
-      <span className="text-white/40">
+      <span className="text-muted-foreground/80"> · </span>
+      <span className="text-muted-foreground">
         (
-        <span className="font-medium tabular-nums text-[#FCA5A5]">{outflowExpenseSubtypeTotals.non}</span>
+        <span className="font-medium tabular-nums text-[#B91C1C] dark:text-[#FCA5A5]">{outflowExpenseSubtypeTotals.non}</span>
         {" Non-discretionary, "}
-        <span className="font-medium tabular-nums text-[#FDE68A]">{outflowExpenseSubtypeTotals.semi}</span>
+        <span className="font-medium tabular-nums text-[#A66708] dark:text-[#FDE68A]">{outflowExpenseSubtypeTotals.semi}</span>
         {" Semi-discretionary, "}
-        <span className="font-medium tabular-nums text-[#86EFAC]">{outflowExpenseSubtypeTotals.disc}</span>
+        <span className="font-medium tabular-nums text-[#15803D] dark:text-[#86EFAC]">{outflowExpenseSubtypeTotals.disc}</span>
         {" Discretionary )"}
       </span>
     </>
@@ -712,7 +707,7 @@ export function CategoryTableManager() {
   if (loading) {
     return (
       <div className="min-h-[60vh] bg-app-canvas flex items-center justify-center">
-        <Loader2 className="w-5 h-5 text-white/20 animate-spin" />
+        <Loader2 className="w-5 h-5 text-muted-foreground/50 animate-spin" />
       </div>
     );
   }
@@ -757,8 +752,8 @@ export function CategoryTableManager() {
         {/* Toolbar */}
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-white sm:text-3xl">Category Mapping</h1>
-            <p className="mt-1 flex flex-wrap items-baseline gap-x-0 text-sm text-white/50">
+            <h1 className="text-2xl font-bold text-foreground sm:text-3xl">Category Mapping</h1>
+            <p className="mt-1 flex flex-wrap items-baseline gap-x-0 text-sm text-muted-foreground">
               {metaFlowFilter === null && flowFilterId === null && !subcategoryTypeFilter ? (
                 <>
                   {totalCats} categories · {totalSubs} subcategories
@@ -768,18 +763,18 @@ export function CategoryTableManager() {
                 <>
                   Showing{" "}
                   {metaFlowFilter !== null && (
-                    <span className="text-white/70">{META_FLOW_LABEL[metaFlowFilter]}</span>
+                    <span className="text-muted-foreground">{META_FLOW_LABEL[metaFlowFilter]}</span>
                   )}
                   {subcategoryTypeFilter ? (
                     <>
                       {metaFlowFilter !== null ? " · " : null}
-                      <span className="text-white/70">{SUBCAT_FILTER_LABEL[subcategoryTypeFilter]}</span>
+                      <span className="text-muted-foreground">{SUBCAT_FILTER_LABEL[subcategoryTypeFilter]}</span>
                     </>
                   ) : null}
                   {flowFilterId !== null ? (
                     <>
                       {(metaFlowFilter !== null || subcategoryTypeFilter) ? " · " : null}
-                      <span className="text-white/70">
+                      <span className="text-muted-foreground">
                         {categories.find((c) => c.id === flowFilterId)?.name ?? "—"}
                       </span>
                       {" · "}
@@ -789,7 +784,7 @@ export function CategoryTableManager() {
                   ) : (
                     <>
                       {(metaFlowFilter !== null || subcategoryTypeFilter) ? " — " : null}
-                      <span className="text-white/70 tabular-nums">
+                      <span className="text-muted-foreground tabular-nums">
                         {displayCategories.length} categories · {visibleSubs} subcategories
                       </span>
                     </>
@@ -811,10 +806,10 @@ export function CategoryTableManager() {
             return (
               <div
                 key={cat.id}
-                className="min-w-0 rounded-xl overflow-hidden border border-white/[0.10] bg-white/[0.04]"
+                className="min-w-0 rounded-xl overflow-hidden border border-chart-border dark:border-white/[0.10] bg-chart-muted"
               >
                 {/* Category header */}
-                <div className="group/cat flex min-h-11 min-w-0 flex-wrap items-center gap-x-3 gap-y-1 px-4 py-1.5 hover:bg-white/[0.03] transition-colors">
+                <div className="group/cat flex min-h-11 min-w-0 flex-wrap items-center gap-x-3 gap-y-1 px-4 py-1.5 hover:bg-chart-muted/60 transition-colors">
                   {editId === cat.id && !cardLocked ? (
                     <InlineInput
                       value={cat.name}
@@ -824,9 +819,9 @@ export function CategoryTableManager() {
                     />
                   ) : (
                     <>
-                      <span className="min-w-0 truncate text-sm font-medium text-white/80">
+                      <span className="min-w-0 truncate text-sm font-medium text-foreground">
                         {cat.name}
-                        <span className="font-medium text-white/45 tabular-nums">
+                        <span className="font-medium text-muted-foreground tabular-nums">
                           {" "}
                           ({cat.subcategories.length})
                         </span>
@@ -835,7 +830,7 @@ export function CategoryTableManager() {
                         <button
                           type="button"
                           onClick={() => setAddingSubParentId(cat.id)}
-                          className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-[11px] text-white/25 transition-colors hover:bg-white/[0.06] hover:text-white/50 cursor-pointer"
+                          className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-[11px] text-muted-foreground/60 transition-colors hover:bg-chart-muted hover:text-muted-foreground cursor-pointer"
                           title="Add subcategory"
                         >
                           <Plus className="w-3 h-3" />
@@ -848,7 +843,7 @@ export function CategoryTableManager() {
                           <button
                             type="button"
                             onClick={() => setEditId(cat.id)}
-                            className="p-1 rounded hover:bg-white/10 text-white/25 hover:text-white/60 transition-colors cursor-pointer"
+                            className="p-1 rounded hover:bg-foreground/10 dark:hover:bg-white/10 text-muted-foreground/60 hover:text-muted-foreground transition-colors cursor-pointer"
                             title="Rename"
                           >
                             <Pencil className="w-3 h-3" />
@@ -860,7 +855,7 @@ export function CategoryTableManager() {
                               label: cat.name,
                               hasChildren: cat.subcategories.length > 0,
                             })}
-                            className="p-1 rounded hover:bg-red-500/20 text-white/25 hover:text-red-400 transition-colors cursor-pointer"
+                            className="p-1 rounded hover:bg-red-500/20 text-muted-foreground/60 hover:text-red-400 transition-colors cursor-pointer"
                             title="Delete"
                           >
                             <Trash2 className="w-3 h-3" />
@@ -880,7 +875,7 @@ export function CategoryTableManager() {
                             key={sub.id}
                             title="Built-in category (not editable)"
                             className={[
-                              "inline-flex max-w-[200px] cursor-default items-center truncate rounded-full border px-2 py-0.5 text-[11px] text-white/70",
+                              "inline-flex max-w-[200px] cursor-default items-center truncate rounded-full border px-2 py-0.5 text-[11px] text-muted-foreground",
                               subcategoryPillClasses(sub.subcategoryType, isOutflow),
                             ].join(" ")}
                           >
@@ -890,7 +885,7 @@ export function CategoryTableManager() {
                           <div
                             key={sub.id}
                             ref={activePillPanelRef}
-                            className="w-full min-w-0 basis-full rounded-lg border border-white/[0.12] bg-black/20 p-2 space-y-2"
+                            className="w-full min-w-0 basis-full rounded-lg border border-chart-border bg-foreground/[0.03] dark:bg-black/20 p-2 space-y-2"
                           >
                             <div className="flex min-w-0 items-start gap-1.5">
                               <div className="min-w-0 flex-1">
@@ -915,7 +910,7 @@ export function CategoryTableManager() {
                                   label: sub.name,
                                   hasChildren: false,
                                 })}
-                                className="shrink-0 rounded p-1.5 text-white/25 hover:bg-red-500/20 hover:text-red-400 transition-colors cursor-pointer"
+                                className="shrink-0 rounded p-1.5 text-muted-foreground/60 hover:bg-red-500/20 hover:text-red-400 transition-colors cursor-pointer"
                                 title="Delete subcategory"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -965,7 +960,7 @@ export function CategoryTableManager() {
           {addingCatFlow ? (
             <div className="col-span-full px-4 py-2 space-y-2">
               <div className="flex items-center gap-2">
-                <span className="text-xs text-white/40">Flow:</span>
+                <span className="text-xs text-muted-foreground">Flow:</span>
                 <span
                   className="rounded-full px-2.5 py-0.5 text-xs font-medium"
                   style={{ background: `${FLOW_COLORS[addingCatFlow]}25`, color: FLOW_COLORS[addingCatFlow] }}

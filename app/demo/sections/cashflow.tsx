@@ -23,7 +23,7 @@ export function DemoCashflowSection() {
             24-month cashflow
           </h2>
           <p className="text-[11px] text-white/55">
-            Income vs expenses for every month — full Sterling-family history.
+            Income vs expenses for every month - full Sterling-family history.
           </p>
         </div>
         <div className="flex flex-wrap gap-3 text-[11px]">

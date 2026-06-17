@@ -7,6 +7,7 @@ import { eq, and, gte, sql, desc } from "drizzle-orm";
 import { ai, GEMINI_MODEL } from "@/lib/gemini";
 import { logAiCost } from "@/lib/ai-cost";
 import { logServerError } from "@/lib/safe-error";
+import { ef, efJson } from "@/lib/crypto/encryption";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -91,10 +92,10 @@ Return a JSON object with:
         db.insert(aiInsights).values({
           userId,
           insightType: "monthly_summary",
-          title: "Monthly Financial Summary",
-          body: parsed.summary,
+          title: ef("Monthly Financial Summary") ?? "",
+          body: ef(parsed.summary) ?? "",
           severity: "info",
-          metadata: parsed,
+          metadata: efJson(parsed) as unknown as Record<string, unknown>,
         }),
       );
     }
@@ -105,8 +106,8 @@ Return a JSON object with:
           db.insert(aiInsights).values({
             userId,
             insightType: "anomaly",
-            title: anomaly.title,
-            body: anomaly.description,
+            title: ef(anomaly.title) ?? "",
+            body: ef(anomaly.description) ?? "",
             severity: anomaly.severity ?? "info",
           }),
         );
@@ -119,10 +120,10 @@ Return a JSON object with:
           db.insert(aiInsights).values({
             userId,
             insightType: "savings_opportunity",
-            title: opp.title,
-            body: opp.description,
+            title: ef(opp.title) ?? "",
+            body: ef(opp.description) ?? "",
             severity: "positive",
-            metadata: { potential_monthly_savings: opp.potential_monthly_savings },
+            metadata: efJson({ potential_monthly_savings: opp.potential_monthly_savings }) as unknown as Record<string, unknown>,
           }),
         );
       }

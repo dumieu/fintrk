@@ -3,6 +3,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
 import { accounts, statements, transactions } from "@/lib/db/schema";
+import { df } from "@/lib/crypto/encryption";
 
 export const dynamic = "force-dynamic";
 
@@ -57,8 +58,8 @@ export async function GET() {
         name: row.fileName,
         account: row.accountName
           ? {
-              name: row.accountName,
-              institutionName: row.institutionName,
+              name: df(row.accountName),
+              institutionName: df(row.institutionName),
               type: row.accountType,
             }
           : null,

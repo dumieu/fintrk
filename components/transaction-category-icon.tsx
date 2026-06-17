@@ -73,7 +73,7 @@ const VARIANT: Record<
   slate: {
     ring: "from-white/25 via-white/12 to-white/[0.07]",
     inner: "bg-[#0b0d12]/92 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]",
-    icon: "text-white/70 drop-shadow-[0_0_8px_rgba(255,255,255,0.15)]",
+    icon: "text-muted-foreground drop-shadow-[0_0_8px_rgba(255,255,255,0.15)]",
     glow: "shadow-[0_0_18px_-8px_rgba(148,163,184,0.35)]",
   },
 };
@@ -131,7 +131,7 @@ export function TransactionCategoryIcon(props: TransactionCategoryIconProps) {
         className={cn(
           "flex shrink-0 bg-gradient-to-br p-px",
           box.outer,
-          mono ? "from-white/20 via-white/10 to-white/[0.06] shadow-none" : v.ring,
+          mono ? "from-foreground/15 via-foreground/10 to-foreground/[0.05] shadow-none dark:from-white/20 dark:via-white/10 dark:to-white/[0.06]" : v.ring,
           mono ? "" : v.glow,
           className,
         )}
@@ -141,11 +141,11 @@ export function TransactionCategoryIcon(props: TransactionCategoryIconProps) {
           className={cn(
             "flex h-full w-full items-center justify-center backdrop-blur-sm",
             box.inner,
-            mono ? "bg-[#0b0d12]/95 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]" : v.inner,
+            mono ? "bg-foreground/[0.06] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] dark:bg-[#0b0d12]/95" : v.inner,
           )}
         >
           <Icon
-            className={cn(mono ? "text-white/55 drop-shadow-none" : v.icon, box.icon)}
+            className={cn(mono ? "text-muted-foreground drop-shadow-none" : v.icon, box.icon)}
             strokeWidth={2}
           />
         </div>
@@ -168,7 +168,7 @@ export function TransactionCategoryIcon(props: TransactionCategoryIconProps) {
       className={cn(
         "flex shrink-0 bg-gradient-to-br p-px",
         box.outer,
-        mono ? "from-white/20 via-white/10 to-white/[0.06] shadow-none" : v.ring,
+        mono ? "from-foreground/15 via-foreground/10 to-foreground/[0.05] shadow-none dark:from-white/20 dark:via-white/10 dark:to-white/[0.06]" : v.ring,
         mono ? "" : v.glow,
         className,
       )}
@@ -178,11 +178,11 @@ export function TransactionCategoryIcon(props: TransactionCategoryIconProps) {
         className={cn(
           "flex h-full w-full items-center justify-center backdrop-blur-sm",
           box.inner,
-          mono ? "bg-[#0b0d12]/95 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]" : v.inner,
+          mono ? "bg-foreground/[0.06] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] dark:bg-[#0b0d12]/95" : v.inner,
         )}
       >
         <Icon
-          className={cn(mono ? "text-white/55 drop-shadow-none" : v.icon, box.icon)}
+          className={cn(mono ? "text-muted-foreground drop-shadow-none" : v.icon, box.icon)}
           strokeWidth={2}
         />
       </div>

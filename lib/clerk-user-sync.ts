@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 
 import { db, resilientQuery } from "@/lib/db";
 import { users } from "@/lib/db/schema";
+import { ef, efJson } from "@/lib/crypto/encryption";
 
 function primaryEmailFromUserJson(data: UserJSON): string | null {
   const pid = data.primary_email_address_id;
@@ -18,30 +19,31 @@ export async function upsertUserFromUserJson(data: UserJSON): Promise<void> {
   const primaryEmail = primaryEmailFromUserJson(data);
   const now = new Date();
 
+  // PII is encrypted at rest (AES-256-GCM). clerk_snapshot stays jsonb but
+  // stores ciphertext as a JSON string scalar via efJson.
+  const encrypted = {
+    primaryEmail: ef(primaryEmail),
+    firstName: ef(data.first_name),
+    lastName: ef(data.last_name),
+    username: ef(data.username),
+    imageUrl: ef(data.image_url),
+    clerkSnapshot: efJson(data) as unknown as UserJSON,
+  };
+
   await resilientQuery(() =>
     db
       .insert(users)
       .values({
         clerkUserId: data.id,
         clerkUpdatedAtMs: data.updated_at,
-        primaryEmail,
-        firstName: data.first_name,
-        lastName: data.last_name,
-        username: data.username,
-        imageUrl: data.image_url,
-        clerkSnapshot: data,
+        ...encrypted,
         updatedAt: now,
       })
       .onConflictDoUpdate({
         target: users.clerkUserId,
         set: {
           clerkUpdatedAtMs: data.updated_at,
-          primaryEmail,
-          firstName: data.first_name,
-          lastName: data.last_name,
-          username: data.username,
-          imageUrl: data.image_url,
-          clerkSnapshot: data,
+          ...encrypted,
           updatedAt: now,
         },
       }),

@@ -11,6 +11,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
   CashflowSankey,
+  computeCashflowSankeyDisplayHeight,
   type CashflowSankeyCategorySelection,
   type CashflowSankeyData,
 } from "@/components/cashflow-sankey";
@@ -27,6 +28,8 @@ import {
   type TimePresetId,
 } from "@/lib/time-range-presets";
 import { FINTRK_TRANSACTIONS_CHANGED } from "@/lib/notify-transactions-changed";
+import { chartOverlayPillClass } from "@/lib/chart-ui";
+import { cn } from "@/lib/utils";
 
 interface Filters {
   dateFrom: string;
@@ -48,6 +51,10 @@ export default function CashflowPage() {
   const sankeySelectionRef = useRef<HTMLDivElement | null>(null);
   const sankeyAreaRef = useRef<HTMLDivElement | null>(null);
   const [sankeyAreaSize, setSankeyAreaSize] = useState({ w: 1280, h: 720 });
+  const sankeyHeight = computeCashflowSankeyDisplayHeight(
+    sankeyAreaSize.w,
+    sankeyAreaSize.h,
+  );
   const [filters, setFilters] = useState<Filters>({
     dateFrom: "",
     dateTo: "",
@@ -231,9 +238,12 @@ export default function CashflowPage() {
       ref={sankeySelectionRef}
       className={`flex min-h-0 flex-1 flex-col bg-app-canvas ${selectedCategory ? "overflow-y-auto" : "overflow-hidden"}`}
     >
-      <div ref={sankeyAreaRef} className="relative min-h-0 w-full flex-1">
+      <div
+        ref={sankeyAreaRef}
+        className="relative flex min-h-0 w-full flex-1 items-center justify-center"
+      >
         {refreshing && (
-          <div className="absolute right-3 top-3 z-20 flex items-center gap-1.5 rounded-full bg-white/[0.08] px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider text-white/65 backdrop-blur sm:right-4 sm:top-4">
+          <div className={cn(chartOverlayPillClass, "absolute right-3 top-3 z-20 flex items-center gap-1.5 rounded-full uppercase tracking-wider sm:right-4 sm:top-4")}>
             <RefreshCw className="h-3 w-3 animate-spin" />
             Updating
           </div>
@@ -245,15 +255,15 @@ export default function CashflowPage() {
               <div className="absolute inset-0 animate-pulse rounded-full bg-[#0BC18D]/20 blur-xl" />
               <Loader2 className="relative h-10 w-10 animate-spin text-[#34E6B0]" />
             </div>
-            <p className="text-sm text-white/65">Mapping your money flow…</p>
+            <p className="text-sm text-muted-foreground">Mapping your money flow…</p>
           </div>
         ) : !hasData ? (
           <div className="flex h-full min-h-[280px] flex-col items-center justify-center px-4 text-center">
-            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-[#0BC18D]/20 to-[#AD74FF]/20 ring-1 ring-white/10">
+            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-[#0BC18D]/20 to-[#AD74FF]/20 ring-1 ring-chart-border">
               <Waves className="h-8 w-8 text-[#34E6B0]" />
             </div>
-            <p className="text-lg font-semibold text-white/90">Your cashflow story is waiting</p>
-            <p className="mt-2 max-w-md text-sm text-white/55">
+            <p className="text-lg font-semibold text-foreground">Your cashflow story is waiting</p>
+            <p className="mt-2 max-w-md text-sm text-muted-foreground">
               Upload a statement to see income, spending, and savings flow as a
               living, breathing diagram.
             </p>
@@ -267,7 +277,7 @@ export default function CashflowPage() {
         ) : (
           <CashflowSankey
             data={data!}
-            height={Math.max(280, sankeyAreaSize.h)}
+            height={sankeyHeight}
             selectedCategory={selectedCategory}
             onCategorySelect={toggleSelectedCategory}
           />
@@ -277,7 +287,7 @@ export default function CashflowPage() {
       {selectedCategory ? (
         <div
           ref={categoryTableRef}
-          className="scrollbar-slim-dark max-h-[min(45vh,480px)] shrink-0 overflow-y-auto border-t border-white/[0.08] px-3 py-3 sm:px-4"
+          className="scrollbar-slim max-h-[min(45vh,480px)] shrink-0 overflow-y-auto border-t border-chart-border px-3 py-3 sm:px-4"
         >
           <CategoryTransactionsTable
             title={`${selectedCategory.name} transactions`}

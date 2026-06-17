@@ -6,6 +6,7 @@ import { eq, and, gte, lte, ilike, or, desc, asc, sql, count, isNull, isNotNull,
 import { alias } from "drizzle-orm/pg-core";
 import { transactionFiltersSchema, updateCategorySchema, deleteTransactionsSchema, patchTransactionSchema } from "@/lib/validations/transaction";
 import { logServerError } from "@/lib/safe-error";
+import { ef, df } from "@/lib/crypto/encryption";
 import { ensureTransactionWarningFlagColumn } from "@/lib/ensure-transaction-warning-flag";
 import { excludeCardPaymentsSql } from "@/lib/db/excluded-transactions";
 import {
@@ -168,12 +169,12 @@ export async function GET(request: NextRequest) {
     }
 
     if (f.search) {
+      // note is encrypted at rest, so it is excluded from substring search.
       conditions.push(
         or(
           ilike(transactions.rawDescription, `%${f.search}%`),
           ilike(transactions.merchantName, `%${f.search}%`),
           ilike(transactions.referenceId, `%${f.search}%`),
-          ilike(transactions.note, `%${f.search}%`),
           ilike(transactions.label, `%${f.search}%`),
         )!,
       );
@@ -311,6 +312,9 @@ export async function GET(request: NextRequest) {
           const src = doubleChargeCandidatesById?.get(row.id);
           return {
             ...row,
+            note: df(row.note),
+            accountInstitutionName: df(row.accountInstitutionName),
+            accountName: df(row.accountName),
             ...(suspect
               ? {
                   doubleChargeSuspect: {
@@ -369,10 +373,13 @@ export async function PATCH(request: NextRequest) {
     let bulkNoteCount = 0;
     let bulkLabelCount = 0;
     let bulkWarningCount = 0;
+    // Plaintext note echoed back to the client (DB stores the encrypted form).
+    let notePlain: string | null = null;
 
     if (parsed.data.note !== undefined) {
       const t = parsed.data.note.trim();
-      setPayload.note = t === "" ? null : t;
+      notePlain = t === "" ? null : t;
+      setPayload.note = ef(notePlain);
 
       if (parsed.data.noteApplyScope === "merchant" && parsed.data.noteMerchantName) {
         const mName = parsed.data.noteMerchantName.trim().toLowerCase();
@@ -569,7 +576,7 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json(
       {
         success: true,
-        ...(parsed.data.note !== undefined ? { note: setPayload.note ?? null, bulkNoteCount } : {}),
+        ...(parsed.data.note !== undefined ? { note: notePlain, bulkNoteCount } : {}),
         ...(parsed.data.label !== undefined ? { label: setPayload.label ?? null, bulkLabelCount } : {}),
         ...(parsed.data.merchantName !== undefined ? { merchantName: setPayload.merchantName ?? null, bulkMerchantCount } : {}),
         ...(parsed.data.categoryId !== undefined ? { categoryId: parsed.data.categoryId, bulkCategoryCount } : {}),

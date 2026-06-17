@@ -74,23 +74,23 @@ export default function MyProfilePage() {
       <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col px-4 py-5 sm:px-6 sm:py-6">
         <div className="mb-4 flex items-center justify-end">
           <Link href="/dashboard/transactions">
-            <Button variant="ghost" className="text-white/80 hover:bg-white/10">
+            <Button variant="ghost" className="text-foreground hover:bg-white/10">
               Back
             </Button>
           </Link>
         </div>
 
-        <Card className="border-white/10 bg-white/[0.04] text-white">
+        <Card className="border-chart-border bg-chart-muted text-white">
           <CardHeader>
             <CardTitle className="text-lg">AI Travel Detection</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <p className="text-sm text-white/65">
+            <p className="text-sm text-muted-foreground">
               Control whether FX/main-currency travel override rules are applied during AI transaction categorization.
             </p>
 
             {loading ? (
-              <div className="flex items-center gap-2 text-white/60">
+              <div className="flex items-center gap-2 text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Loading settings...
               </div>
@@ -99,13 +99,13 @@ export default function MyProfilePage() {
                 <div className="flex items-center gap-1.5">
                   <label
                     htmlFor="detect-travel"
-                    className="text-sm font-medium text-white/90"
+                    className="text-sm font-medium text-foreground"
                   >
                     Detect Travel from Currency
                   </label>
                   <button
                     type="button"
-                    className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-white/45 transition-colors hover:bg-white/10 hover:text-white/80 focus-visible:outline focus-visible:ring-2 focus-visible:ring-[#0BC18D]/40"
+                    className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground focus-visible:outline focus-visible:ring-2 focus-visible:ring-[#0BC18D]/40"
                     title={DETECT_TRAVEL_CURRENCY_HELP}
                     aria-label={DETECT_TRAVEL_CURRENCY_HELP}
                   >
@@ -116,7 +116,7 @@ export default function MyProfilePage() {
                   id="detect-travel"
                   value={detectTravel}
                   onChange={(e) => setDetectTravel((e.target.value === "No" ? "No" : "Yes"))}
-                  className="w-full rounded-md border border-white/15 bg-[#121212] px-3 py-2 text-sm text-white outline-none focus:border-[#0BC18D]/50 focus:ring-1 focus:ring-[#0BC18D]/30"
+                  className="w-full rounded-md border border-chart-border bg-card px-3 py-2 text-sm text-foreground outline-none focus:border-[#0BC18D]/50 focus:ring-1 focus:ring-[#0BC18D]/30"
                 >
                   <option value="Yes">Yes</option>
                   <option value="No">No</option>

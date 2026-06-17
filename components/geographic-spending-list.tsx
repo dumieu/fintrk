@@ -10,6 +10,8 @@ import { createPortal } from "react-dom";
 import { formatCurrency } from "@/lib/format";
 import { AnalyticsDetailTooltip, detailTipAnchorFromEvent } from "@/components/analytics-detail-tooltip";
 import { useAnalyticsDetail } from "@/components/use-analytics-detail";
+import { chartListRowClass, chartMutedClass } from "@/lib/chart-ui";
+import { cn } from "@/lib/utils";
 
 export interface CountrySpendRow {
   country: string;
@@ -22,7 +24,7 @@ const PAGE = 20;
 /** Same fixed viewport as Merchants — scroll inside; rows are NOT flex children (avoids flex-shrink clipping). */
 /** Fills the parent flex container (set via `flex-1` on CardContent). */
 const LIST_HEIGHT = "h-full min-h-[200px] w-full";
-const LIST_SCROLL = `${LIST_HEIGHT} min-h-0 flex-1 flex flex-col overflow-y-auto overscroll-contain pr-0.5 [scrollbar-gutter:stable]`;
+const LIST_SCROLL = `${LIST_HEIGHT} scrollbar-slim min-h-0 flex-1 flex flex-col overflow-y-auto overscroll-contain pr-0.5 [scrollbar-gutter:stable]`;
 
 export function GeographicSpendingList() {
   const [countries, setCountries] = useState<CountrySpendRow[]>([]);
@@ -129,9 +131,9 @@ export function GeographicSpendingList() {
   if (error) {
     return (
       <div
-        className={`flex ${LIST_HEIGHT} items-center justify-center rounded-xl border border-white/[0.04] bg-white/[0.02]`}
+        className={`flex ${LIST_HEIGHT} items-center justify-center rounded-xl border border-chart-border bg-chart-muted/40`}
       >
-        <p className="px-4 text-center text-sm text-white/50">{error}</p>
+        <p className={cn("px-4 text-center", chartMutedClass)}>{error}</p>
       </div>
     );
   }
@@ -139,9 +141,9 @@ export function GeographicSpendingList() {
   if (!loading && countries.length === 0) {
     return (
       <div
-        className={`flex ${LIST_HEIGHT} items-center justify-center rounded-xl border border-white/[0.04] bg-white/[0.02]`}
+        className={`flex ${LIST_HEIGHT} items-center justify-center rounded-xl border border-chart-border bg-chart-muted/40`}
       >
-        <p className="px-4 text-center text-sm text-white/50">No geographic data yet</p>
+        <p className={cn("px-4 text-center", chartMutedClass)}>No geographic data yet</p>
       </div>
     );
   }
@@ -155,7 +157,7 @@ export function GeographicSpendingList() {
       <div ref={scrollRef} className={LIST_SCROLL}>
         {centerInitialLoad ? (
           <div className="flex flex-1 items-center justify-center py-8">
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/15 border-t-[#AD74FF]" />
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-chart-border border-t-[#AD74FF]" />
           </div>
         ) : (
           <>
@@ -168,7 +170,7 @@ export function GeographicSpendingList() {
                 return (
                   <div
                     key={`${c.country}-${idx}`}
-                    className="group relative shrink-0 cursor-default rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 backdrop-blur-sm transition-colors hover:border-white/20 hover:bg-white/[0.07]"
+                    className={cn(chartListRowClass, "group relative shrink-0 cursor-default px-3 py-2.5")}
                     onMouseEnter={(e) =>
                       void open({
                         ...detailTipAnchorFromEvent(e),
@@ -191,22 +193,22 @@ export function GeographicSpendingList() {
                       />
                     </div>
                     <div className="relative flex items-start gap-2.5">
-                      <span className="w-4 shrink-0 pt-0.5 text-right text-[10px] font-semibold tabular-nums text-white/35">
+                      <span className="w-4 shrink-0 pt-0.5 text-right text-[10px] font-semibold tabular-nums text-muted-foreground">
                         {rank}
                       </span>
                       <span className="mt-0.5 shrink-0 text-base leading-none">
                         {countryFlag(iso)}
                       </span>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-xs font-semibold leading-snug text-white/90">
+                        <p className="truncate text-xs font-semibold leading-snug text-foreground">
                           {c.country}
                         </p>
-                        <p className="mt-0.5 text-[9px] leading-snug text-white/45">
+                        <p className="mt-0.5 text-[9px] leading-snug text-muted-foreground">
                           {c.count} {c.count === 1 ? "txn" : "txns"} ·{" "}
                           {share.toFixed(1)}%
                         </p>
                       </div>
-                      <span className="shrink-0 pt-0.5 text-right text-[12px] font-bold tabular-nums text-white">
+                      <span className="shrink-0 pt-0.5 text-right text-[12px] font-bold tabular-nums text-foreground">
                         {formatCurrency(c.total, primaryCurrency)}
                       </span>
                     </div>
@@ -217,11 +219,11 @@ export function GeographicSpendingList() {
             <div ref={sentinelRef} className="h-4 w-full shrink-0" aria-hidden />
             {loading && countries.length > 0 && (
               <div className="flex justify-center py-3">
-                <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/15 border-t-[#AD74FF]" />
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-chart-border border-t-[#AD74FF]" />
               </div>
             )}
             {!hasMore && countries.length > 0 && (
-              <p className="pb-2 pt-1 text-center text-[10px] text-white/35">
+              <p className="pb-2 pt-1 text-center text-[10px] text-muted-foreground">
                 End of list
               </p>
             )}

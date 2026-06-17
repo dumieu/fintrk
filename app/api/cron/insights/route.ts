@@ -5,6 +5,7 @@ import { excludeCardPaymentsSql, excludeRecurringCardPaymentsSql } from "@/lib/d
 import { ai, GEMINI_MODEL } from "@/lib/gemini";
 import { logAiCost } from "@/lib/ai-cost";
 import { logServerError } from "@/lib/safe-error";
+import { ef, efJson } from "@/lib/crypto/encryption";
 import { eq, and, gte, sql } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
@@ -100,10 +101,10 @@ Return JSON: {"summary":"string","tip":"string","anomaly":{"title":"string","des
             db.insert(aiInsights).values({
               userId,
               insightType: "weekly_summary",
-              title: "Weekly Financial Summary",
-              body: parsed.summary,
+              title: ef("Weekly Financial Summary") ?? "",
+              body: ef(parsed.summary) ?? "",
               severity: "info",
-              metadata: parsed,
+              metadata: efJson(parsed) as unknown as Record<string, unknown>,
             }),
           );
           generated++;

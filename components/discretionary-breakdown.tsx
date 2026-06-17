@@ -10,6 +10,8 @@ import { formatCurrency } from "@/lib/format";
 import { AnalyticsDetailTooltip, detailTipAnchorFromEvent } from "@/components/analytics-detail-tooltip";
 import { useAnalyticsDetail } from "@/components/use-analytics-detail";
 import { CategoryTransactionsModal } from "@/components/category-transactions-modal";
+import { chartMutedClass } from "@/lib/chart-ui";
+import { cn } from "@/lib/utils";
 
 const DEFAULT_MONTHS = 12;
 
@@ -56,7 +58,7 @@ export function DiscretionaryBreakdown({ months = DEFAULT_MONTHS }: { months?: n
 
   if (loading && !data) {
     return (
-      <div className="flex min-h-0 flex-1 items-center justify-center text-sm text-white/40">
+      <div className={cn("flex min-h-0 flex-1 items-center justify-center", chartMutedClass)}>
         Loading discretionary breakdown…
       </div>
     );
@@ -70,9 +72,9 @@ export function DiscretionaryBreakdown({ months = DEFAULT_MONTHS }: { months?: n
   }
   if (data.total <= 0) {
     return (
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 text-sm text-white/40">
+      <div className={cn("flex min-h-0 flex-1 flex-col items-center justify-center gap-2", chartMutedClass)}>
         <p>No discretionary data yet.</p>
-        <p className="text-[11px] text-white/30">
+        <p className="text-[11px] text-muted-foreground/70">
           Tag categories with a discretionary type to populate this view.
         </p>
       </div>
@@ -163,7 +165,7 @@ function BucketCard({
           >
             {bucket.share.toFixed(0)}%
           </span>
-          <span className="whitespace-nowrap text-[13px] font-extrabold leading-none tabular-nums text-white/95">
+          <span className="whitespace-nowrap text-[13px] font-extrabold leading-none tabular-nums text-foreground">
             {compactCurrency(bucket.total, currency)}
           </span>
         </div>
@@ -174,21 +176,21 @@ function BucketCard({
       <div
         className="min-h-0 flex-1 overflow-hidden rounded-xl border backdrop-blur-md"
         style={{
-          background: `linear-gradient(180deg, ${bucket.bg} 0%, rgba(255,255,255,0.02) 100%)`,
+          background: `linear-gradient(180deg, ${bucket.bg} 0%, var(--chart-muted) 100%)`,
           borderColor: `${accent}33`,
-          boxShadow: `inset 0 0 0 1px rgba(255,255,255,0.04), 0 8px 22px -14px ${accent}55`,
+          boxShadow: `inset 0 0 0 1px var(--chart-border), 0 8px 22px -14px ${accent}55`,
         }}
       >
         {bucket.leaves.length === 0 ? (
-          <div className="flex h-full items-center justify-center px-2 py-4 text-center text-[10px] text-white/40">
+          <div className="flex h-full items-center justify-center px-2 py-4 text-center text-[10px] text-muted-foreground">
             No spending in this bucket.
           </div>
         ) : (
-          <ul className="scrollbar-slim-dark h-full divide-y divide-white/5 overflow-y-auto overscroll-contain px-2 py-1 [scrollbar-gutter:stable]">
+          <ul className="scrollbar-slim h-full divide-y divide-chart-border overflow-y-auto overscroll-contain px-2 py-1 [scrollbar-gutter:stable]">
             {bucket.leaves.map((leaf) => (
               <li
                 key={leaf.name}
-                className="group flex cursor-pointer flex-col items-center gap-0.5 py-1.5 transition-colors hover:bg-white/[0.04]"
+                className="group flex cursor-pointer flex-col items-center gap-0.5 py-1.5 transition-colors hover:bg-chart-hover"
                 onClick={() => onLeafClick(leaf.name)}
                 onMouseEnter={(e) =>
                   void open({
@@ -202,12 +204,11 @@ function BucketCard({
                 onMouseLeave={scheduleClose}
               >
                 <span
-                  className="text-[15px] font-extrabold leading-none tabular-nums tracking-tight text-white/95"
-                  style={{ textShadow: "0 1px 2px rgba(0,0,0,0.45)" }}
+                  className="text-[15px] font-extrabold leading-none tabular-nums tracking-tight text-foreground"
                 >
                   {compactK(leaf.monthlyAvg)}
                 </span>
-                <span className="line-clamp-2 px-1 text-center text-[9px] leading-tight text-white/55">
+                <span className="line-clamp-2 px-1 text-center text-[9px] leading-tight text-muted-foreground">
                   {leaf.name}
                 </span>
               </li>
@@ -217,7 +218,7 @@ function BucketCard({
       </div>
 
       {/* Footer — bucket-level monthly average */}
-      <div className="text-center text-[9px] text-white/45">
+      <div className="text-center text-[9px] text-muted-foreground">
         ≈ {compactCurrency(bucket.monthlyAvg, currency)} / mo · {monthsCovered}mo
       </div>
     </div>

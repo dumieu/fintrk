@@ -70,7 +70,7 @@ export default function AccountsPage() {
     <div className="min-h-[80vh] bg-app-canvas">
       <div className="mx-auto max-w-7xl px-4 py-8">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm text-white/70">
+          <p className="text-sm text-muted-foreground">
             {accounts.length > 0 ? `${accounts.length} linked account${accounts.length !== 1 ? "s" : ""}` : "No accounts yet — they are auto-created when you upload statements"}
           </p>
           <Button onClick={() => setShowCreate(true)} variant="ghost" className="text-[#0BC18D] hover:bg-[#0BC18D]/10 border border-[#0BC18D]/20">
@@ -85,20 +85,20 @@ export default function AccountsPage() {
               <Card className="border-[#0BC18D]/25 bg-[#0BC18D]/[0.05] text-white">
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-sm">Add Account</CardTitle>
-                  <Button variant="ghost" size="icon" onClick={() => setShowCreate(false)} className="text-white/40 hover:text-white w-8 h-8"><X className="w-4 h-4" /></Button>
+                  <Button variant="ghost" size="icon" onClick={() => setShowCreate(false)} className="text-muted-foreground hover:text-white w-8 h-8"><X className="w-4 h-4" /></Button>
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
-                    <input type="text" placeholder="Account name" value={form.accountName} onChange={(e) => setForm((f) => ({ ...f, accountName: e.target.value }))} className="rounded-lg border border-white/15 bg-white/[0.05] px-3 py-2.5 text-sm text-white placeholder:text-white/45 focus:border-[#0BC18D]/40 focus:outline-none" />
-                    <input type="text" placeholder="Bank name (optional)" value={form.institutionName} onChange={(e) => setForm((f) => ({ ...f, institutionName: e.target.value }))} className="rounded-lg border border-white/15 bg-white/[0.05] px-3 py-2.5 text-sm text-white placeholder:text-white/45 focus:border-[#0BC18D]/40 focus:outline-none" />
-                    <select value={form.accountType} onChange={(e) => setForm((f) => ({ ...f, accountType: e.target.value }))} className="rounded-lg border border-white/15 bg-white/[0.05] px-3 py-2.5 text-sm text-white focus:outline-none">
+                    <input type="text" placeholder="Account name" value={form.accountName} onChange={(e) => setForm((f) => ({ ...f, accountName: e.target.value }))} className="rounded-lg border border-chart-border bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-[#0BC18D]/40 focus:outline-none" />
+                    <input type="text" placeholder="Bank name (optional)" value={form.institutionName} onChange={(e) => setForm((f) => ({ ...f, institutionName: e.target.value }))} className="rounded-lg border border-chart-border bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-[#0BC18D]/40 focus:outline-none" />
+                    <select value={form.accountType} onChange={(e) => setForm((f) => ({ ...f, accountType: e.target.value }))} className="rounded-lg border border-chart-border bg-background px-3 py-2.5 text-sm text-foreground focus:outline-none">
                       <option value="checking">Checking</option>
                       <option value="savings">Savings</option>
                       <option value="credit">Credit Card</option>
                       <option value="investment">Investment</option>
                       <option value="loan">Loan</option>
                     </select>
-                    <input type="text" placeholder="Currency (USD)" value={form.primaryCurrency} onChange={(e) => setForm((f) => ({ ...f, primaryCurrency: e.target.value.toUpperCase().slice(0, 3) }))} maxLength={3} className="rounded-lg border border-white/15 bg-white/[0.05] px-3 py-2.5 text-sm text-white placeholder:text-white/45 focus:border-[#0BC18D]/40 focus:outline-none" />
+                    <input type="text" placeholder="Currency (USD)" value={form.primaryCurrency} onChange={(e) => setForm((f) => ({ ...f, primaryCurrency: e.target.value.toUpperCase().slice(0, 3) }))} maxLength={3} className="rounded-lg border border-chart-border bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-[#0BC18D]/40 focus:outline-none" />
                     <Button onClick={createAccount} className="bg-[#0BC18D] text-white hover:bg-[#0BC18D]/90">Create</Button>
                   </div>
                 </CardContent>
@@ -114,25 +114,25 @@ export default function AccountsPage() {
 
             return (
               <motion.div key={acct.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
-                <Card className="border-white/[0.10] bg-white/[0.04] text-white hover:border-white/[0.18] transition-colors">
+                <Card className="border-chart-border bg-chart-surface text-card-foreground shadow-chart hover:border-white/[0.18] transition-colors">
                   <CardContent className="p-5">
                     <div className="flex items-center gap-3 mb-3">
                       <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${color}15` }}>
                         <Icon className="w-5 h-5" style={{ color }} />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold text-white/95 truncate">{acct.accountName}</p>
+                        <p className="text-sm font-semibold text-foreground truncate">{acct.accountName}</p>
                         {acct.institutionName && (
-                          <p className="text-[10px] text-white/50 truncate">{acct.institutionName}</p>
+                          <p className="text-[10px] text-muted-foreground truncate">{acct.institutionName}</p>
                         )}
                       </div>
                     </div>
 
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/8 text-white/65 capitalize">{acct.accountType}</span>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/8 text-white/65 font-mono">{acct.primaryCurrency}</span>
-                      {acct.countryIso && <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/8 text-white/65">{acct.countryIso}</span>}
-                      {acct.maskedNumber && <span className="text-[10px] text-white/45 font-mono">•••• {acct.maskedNumber}</span>}
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-chart-muted text-muted-foreground capitalize">{acct.accountType}</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-chart-muted text-muted-foreground font-mono">{acct.primaryCurrency}</span>
+                      {acct.countryIso && <span className="text-[10px] px-2 py-0.5 rounded-full bg-chart-muted text-muted-foreground">{acct.countryIso}</span>}
+                      {acct.maskedNumber && <span className="text-[10px] text-muted-foreground font-mono">•••• {acct.maskedNumber}</span>}
                     </div>
                   </CardContent>
                 </Card>
@@ -143,9 +143,9 @@ export default function AccountsPage() {
 
         {accounts.length === 0 && !loading && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center justify-center py-20 text-center">
-            <Landmark className="w-10 h-10 text-white/20 mb-4" />
-            <p className="text-sm text-white/60 mb-2">No accounts yet</p>
-            <p className="text-xs text-white/45 max-w-xs">Accounts are automatically created when you upload bank statements, or you can add them manually</p>
+            <Landmark className="w-10 h-10 text-muted-foreground/50 mb-4" />
+            <p className="text-sm text-muted-foreground mb-2">No accounts yet</p>
+            <p className="text-xs text-muted-foreground max-w-xs">Accounts are automatically created when you upload bank statements, or you can add them manually</p>
           </motion.div>
         )}
       </div>

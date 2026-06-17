@@ -16,6 +16,14 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import {
+  chartIconBadgeClass,
+  chartInputClass,
+  chartMutedClass,
+  chartPanelClass,
+  chartTitleClass,
+} from "@/lib/chart-ui";
+import { cn } from "@/lib/utils";
 
 interface AnalyticsData {
   categoryBreakdown: { label: string; amount: number; color: string }[];
@@ -40,7 +48,7 @@ export default function AnalyticsPage() {
     return (
       <div className="min-h-[80vh] bg-app-canvas">
         <div className="mx-auto max-w-7xl px-4 py-8">
-          <p className="text-sm text-white/70 mb-8">Import statements to unlock spending intelligence</p>
+          <p className={cn(chartMutedClass, "mb-8")}>Import statements to unlock spending intelligence</p>
           <div className="flex justify-center py-20">
             <Link href="/dashboard/upload">
               <Button className="bg-gradient-to-r from-[#0BC18D] to-[#2CA2FF] text-white">
@@ -76,10 +84,10 @@ export default function AnalyticsPage() {
                 transition={{ delay: 0.08 }}
                 className="flex min-w-0"
               >
-                <Card className="flex h-[504px] w-full flex-col border-white/[0.10] bg-white/[0.04] text-white">
+                <Card className={cn(chartPanelClass, "flex h-[504px] w-full flex-col")}>
                   <CardHeader className="pb-2">
-                    <CardTitle className="flex items-center gap-2 text-sm font-semibold text-white/85">
-                      <span className="grid h-7 w-7 place-items-center rounded-lg bg-gradient-to-br from-[#FF6F69]/30 to-[#5DD3F3]/20 ring-1 ring-white/10">
+                    <CardTitle className={cn(chartTitleClass, "flex items-center gap-2")}>
+                      <span className={cn(chartIconBadgeClass, "bg-gradient-to-br from-[#FF6F69]/30 to-[#5DD3F3]/20")}>
                         <PieChart className="h-4 w-4 text-[#F2C94C]" />
                       </span>
                       Discretionary vs Non-discretionary
@@ -98,9 +106,9 @@ export default function AnalyticsPage() {
                 transition={{ delay: 0.1 }}
                 className="flex min-w-0"
               >
-                <Card className="flex h-[504px] w-full flex-col border-white/[0.10] bg-white/[0.04] text-white">
+                <Card className={cn(chartPanelClass, "flex h-[504px] w-full flex-col")}>
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-semibold text-white/85">
+                    <CardTitle className={chartTitleClass}>
                       <BarChart3 className="w-4 h-4 inline mr-2 text-[#ECAA0B]" />
                       Category Breakdown
                     </CardTitle>
@@ -118,23 +126,23 @@ export default function AnalyticsPage() {
                 transition={{ delay: 0.2 }}
                 className="flex min-w-0"
               >
-                <Card className="flex h-[504px] w-full flex-col border-white/[0.10] bg-white/[0.04] text-white">
+                <Card className={cn(chartPanelClass, "flex h-[504px] w-full flex-col")}>
                   <CardHeader className="pb-2">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
                       <div className="min-w-0">
-                        <CardTitle className="text-sm font-semibold text-white/85">
+                        <CardTitle className={chartTitleClass}>
                           <Store className="w-4 h-4 inline mr-2 text-[#0BC18D]" />
                           Merchants
                         </CardTitle>
                         {merchantDateRange ? (
-                          <p className="mt-0.5 pl-6 text-[10px] font-normal text-white/40">
+                          <p className="mt-0.5 pl-6 text-[10px] font-normal text-muted-foreground">
                             {merchantDateRange}
                           </p>
                         ) : null}
                       </div>
                       <label className="relative flex min-w-0 sm:max-w-[220px]">
                         <Search
-                          className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/35"
+                          className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
                           aria-hidden
                         />
                         <input
@@ -142,7 +150,7 @@ export default function AnalyticsPage() {
                           value={merchantFilter}
                           onChange={(e) => setMerchantFilter(e.target.value)}
                           placeholder="Filter…"
-                          className="h-8 w-full rounded-lg border border-white/10 bg-white/[0.06] py-1 pl-8 pr-2 text-xs text-white placeholder:text-white/35 outline-none ring-0 transition-colors focus:border-[#0BC18D]/45 focus:bg-white/[0.08]"
+                          className={chartInputClass}
                           aria-label="Filter merchants by name"
                           autoComplete="off"
                         />

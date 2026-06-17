@@ -209,7 +209,7 @@ function TransactionSourceSubtitle({ txn }: { txn: Transaction }) {
       <span className="inline-flex items-center gap-1 align-middle">
         {showLogo ? <CardNetworkLogo network={network} className="relative top-px" /> : null}
         {masked ? (
-          <span className="font-mono tabular-nums tracking-tight text-white/55">{masked}</span>
+          <span className="font-mono tabular-nums tracking-tight text-muted-foreground">{masked}</span>
         ) : null}
       </span>,
     );
@@ -222,7 +222,7 @@ function TransactionSourceSubtitle({ txn }: { txn: Transaction }) {
 
   return (
     <p className="mt-0.5 min-w-0 max-w-full text-[9px] leading-snug" title={title}>
-      <span className="block min-w-0 truncate text-white/45">
+      <span className="block min-w-0 truncate text-muted-foreground">
         {segments.map((node, i) => (
           <Fragment key={i}>
             {i > 0 ? sep : null}
@@ -318,14 +318,14 @@ function DoubleChargeMerchantSlicer({
                 "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-all",
                 active
                   ? "border-[#FF6F69]/75 bg-[#FF6F69]/18 text-white shadow-[0_0_20px_-8px_rgba(255,111,105,0.55)] ring-1 ring-[#FF6F69]/35"
-                  : "border-white/12 bg-black/25 text-white/85 hover:border-[#FF6F69]/40 hover:bg-[#FF6F69]/10",
+                  : "border-chart-border bg-black/25 text-foreground hover:border-[#FF6F69]/40 hover:bg-[#FF6F69]/10",
               )}
             >
               <span className="max-w-[12rem] truncate">{m.label}</span>
               <span
                 className={cn(
                   "rounded-full px-1.5 py-0.5 text-[10px] tabular-nums",
-                  active ? "bg-[#FF6F69]/25 text-white" : "bg-white/10 text-white/60",
+                  active ? "bg-[#FF6F69]/25 text-white" : "bg-white/10 text-muted-foreground",
                 )}
               >
                 {m.count}
@@ -366,7 +366,7 @@ function FlagsCell({
             {flag}
           </span>
         ) : (
-          <span className="flex h-5 w-5 items-center justify-center rounded bg-white/[0.06] text-[9px] text-white/35">
+          <span className="flex h-5 w-5 items-center justify-center rounded bg-chart-muted text-[9px] text-muted-foreground/80">
             —
           </span>
         )}
@@ -374,10 +374,10 @@ function FlagsCell({
         {hasFx && <Globe className="h-3 w-3 shrink-0 text-[#AD74FF]/70" aria-hidden />}
 
         <div className="pointer-events-none absolute bottom-[calc(100%+8px)] left-1/2 z-50 w-max max-w-[min(240px,calc(100vw-2rem))] -translate-x-1/2 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
-          <div className="rounded-lg border border-white/15 bg-[#1a1a1a]/98 px-2.5 py-2 text-left text-[10px] leading-snug text-white/90 shadow-xl backdrop-blur-md">
+          <div className="rounded-lg border border-chart-border bg-popover px-2.5 py-2 text-left text-[10px] leading-snug text-foreground shadow-xl backdrop-blur-md">
             {countryLine && <p className="font-medium text-white">{countryLine}</p>}
-            <p className={cn("text-white/75", countryLine && "mt-1")}>
-              <span className="text-white/50">Type: </span>
+            <p className={cn("text-foreground", countryLine && "mt-1")}>
+              <span className="text-muted-foreground">Type: </span>
               {typeLine}
             </p>
           </div>
@@ -527,7 +527,7 @@ function TransactionLabelCell({
       ? createPortal(
           <div
             data-label-editor-floating
-            className="flex flex-col gap-1.5 overflow-y-auto rounded-lg border border-white/20 bg-[#161616] p-2 shadow-2xl shadow-black/70 ring-1 ring-black/50"
+            className="flex flex-col gap-1.5 overflow-y-auto rounded-lg border border-chart-border bg-popover p-2 shadow-2xl shadow-black/70 ring-1 ring-black/50"
             style={{
               position: "fixed",
               top: panelRect.top,
@@ -557,7 +557,7 @@ function TransactionLabelCell({
                   setEditing(false);
                 }
               }}
-              className="w-full min-w-0 rounded-md border border-white/20 bg-white/[0.06] px-1.5 py-1 font-mono text-[11px] tabular-nums text-white/90 outline-none focus:border-[#0BC18D]/60 focus:ring-1 focus:ring-[#0BC18D]/30"
+              className="w-full min-w-0 rounded-md border border-chart-border bg-chart-muted px-1.5 py-1 font-mono text-[11px] tabular-nums text-foreground outline-none focus:border-[#0BC18D]/60 focus:ring-1 focus:ring-[#0BC18D]/30"
               placeholder="Label…"
               aria-label="Transaction label"
               aria-expanded={filteredSuggestions.length > 0}
@@ -566,8 +566,8 @@ function TransactionLabelCell({
               className="flex flex-nowrap items-center gap-1.5 whitespace-nowrap"
               data-label-toggle
             >
-              <span className="shrink-0 text-[9px] text-white/35">Update for:</span>
-              <div className="inline-flex h-[20px] shrink-0 rounded-full border border-white/10 bg-white/[0.04] p-px text-[9px] font-medium">
+              <span className="shrink-0 text-[9px] text-muted-foreground/80">Update for:</span>
+              <div className="inline-flex h-[20px] shrink-0 rounded-full border border-chart-border bg-chart-muted p-px text-[9px] font-medium">
                 <button
                   type="button"
                   onMouseDown={(e) => e.preventDefault()}
@@ -576,7 +576,7 @@ function TransactionLabelCell({
                     "rounded-full px-2 transition-colors whitespace-nowrap cursor-pointer",
                     effectiveScope === "this"
                       ? "bg-[#0BC18D]/20 text-[#0BC18D]"
-                      : "text-white/40 hover:text-white/60",
+                      : "text-muted-foreground hover:text-muted-foreground",
                   )}
                 >
                   This item
@@ -588,10 +588,10 @@ function TransactionLabelCell({
                   className={cn(
                     "rounded-full px-2 transition-colors whitespace-nowrap",
                     !hasMerchantName
-                      ? "text-white/15 cursor-not-allowed"
+                      ? "text-muted-foreground/40 cursor-not-allowed"
                       : effectiveScope === "merchant"
                         ? "bg-[#0BC18D]/20 text-[#0BC18D] cursor-pointer"
-                        : "text-white/40 hover:text-white/60 cursor-pointer",
+                        : "text-muted-foreground hover:text-muted-foreground cursor-pointer",
                   )}
                   title={hasMerchantName ? "Apply to matching merchant names" : "This transaction has no saved merchant name"}
                 >
@@ -604,7 +604,7 @@ function TransactionLabelCell({
                 data-label-suggest
                 role="listbox"
                 aria-label="Existing labels"
-                className="min-h-0 border-t border-white/10 pt-1.5"
+                className="min-h-0 border-t border-chart-border pt-1.5"
               >
                 <ul className="max-h-[min(200px,35vh)] overflow-y-auto overscroll-contain px-0.5">
                   {filteredSuggestions.map((lbl) => (
@@ -612,7 +612,7 @@ function TransactionLabelCell({
                       <button
                         type="button"
                         role="option"
-                        className="w-full cursor-pointer rounded-md px-2 py-1.5 text-left font-mono text-[11px] text-white/85 outline-none hover:bg-white/[0.08] focus-visible:bg-white/[0.1] focus-visible:ring-1 focus-visible:ring-[#0BC18D]/40"
+                        className="w-full cursor-pointer rounded-md px-2 py-1.5 text-left font-mono text-[11px] text-foreground outline-none hover:bg-chart-hover focus-visible:bg-white/[0.1] focus-visible:ring-1 focus-visible:ring-[#0BC18D]/40"
                         onMouseDown={(e) => {
                           e.preventDefault();
                           skipBlurPersistRef.current = true;
@@ -643,7 +643,7 @@ function TransactionLabelCell({
       {editorPortal}
       {editing ? (
         <div
-          className="min-h-[4.5rem] w-full rounded-md border border-dashed border-white/10 bg-white/[0.02]"
+          className="min-h-[4.5rem] w-full rounded-md border border-dashed border-chart-border bg-white/[0.02]"
           aria-hidden
         />
       ) : (
@@ -654,8 +654,8 @@ function TransactionLabelCell({
           className={cn(
             "w-full max-w-full truncate text-left font-mono text-[11px] tabular-nums transition-[background-color,border-color,box-shadow]",
             value?.trim()
-              ? "rounded-md px-1.5 py-1 text-white/75 hover:bg-white/[0.06]"
-              : "min-h-[1.75rem] rounded-full bg-white/[0.015] px-3 py-1.5 hover:bg-white/[0.04]",
+              ? "rounded-md px-1.5 py-1 text-foreground hover:bg-chart-muted"
+              : "min-h-[1.75rem] rounded-full bg-white/[0.015] px-3 py-1.5 hover:bg-chart-muted",
           )}
         >
           {value?.trim() ? value : null}
@@ -737,13 +737,13 @@ function TransactionNoteCell({
               }
             }}
             rows={2}
-            className="w-full min-h-[2.25rem] resize-y rounded-md border border-white/20 bg-white/[0.06] px-1.5 py-1 text-[11px] leading-snug text-white/90 placeholder:text-white/35 outline-none focus:border-[#0BC18D]/60 focus:ring-1 focus:ring-[#0BC18D]/30"
+            className="w-full min-h-[2.25rem] resize-y rounded-md border border-chart-border bg-chart-muted px-1.5 py-1 text-[11px] leading-snug text-foreground placeholder:text-muted-foreground/80 outline-none focus:border-[#0BC18D]/60 focus:ring-1 focus:ring-[#0BC18D]/30"
             placeholder="Note…"
             aria-label="Transaction note"
           />
           <div className="flex items-center gap-1.5" data-note-toggle>
-            <span className="shrink-0 text-[9px] text-white/35">Update for:</span>
-            <div className="inline-flex h-[20px] rounded-full border border-white/10 bg-white/[0.04] p-px text-[9px] font-medium">
+            <span className="shrink-0 text-[9px] text-muted-foreground/80">Update for:</span>
+            <div className="inline-flex h-[20px] rounded-full border border-chart-border bg-chart-muted p-px text-[9px] font-medium">
               <button
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
@@ -752,7 +752,7 @@ function TransactionNoteCell({
                   "rounded-full px-2 transition-colors whitespace-nowrap cursor-pointer",
                   scope === "this"
                     ? "bg-[#0BC18D]/20 text-[#0BC18D]"
-                    : "text-white/40 hover:text-white/60",
+                    : "text-muted-foreground hover:text-muted-foreground",
                 )}
               >
                 This item
@@ -764,10 +764,10 @@ function TransactionNoteCell({
                 className={cn(
                   "rounded-full px-2 transition-colors whitespace-nowrap",
                   !hasMerchantName
-                    ? "text-white/15 cursor-not-allowed"
+                    ? "text-muted-foreground/40 cursor-not-allowed"
                     : effectiveScope === "merchant"
                       ? "bg-[#0BC18D]/20 text-[#0BC18D] cursor-pointer"
-                      : "text-white/40 hover:text-white/60 cursor-pointer",
+                      : "text-muted-foreground hover:text-muted-foreground cursor-pointer",
                 )}
                 title={hasMerchantName ? "Apply to matching merchant names" : "This transaction has no saved merchant name"}
               >
@@ -784,8 +784,8 @@ function TransactionNoteCell({
           className={cn(
             "w-full max-w-full text-left text-[11px] leading-snug transition-[background-color,border-color,box-shadow]",
             value?.trim()
-              ? "rounded-md px-1.5 py-1 text-white/75 hover:bg-white/[0.06]"
-              : "min-h-[1.75rem] rounded-full bg-white/[0.015] px-3 py-1.5 hover:bg-white/[0.04]",
+              ? "rounded-md px-1.5 py-1 text-foreground hover:bg-chart-muted"
+              : "min-h-[1.75rem] rounded-full bg-white/[0.015] px-3 py-1.5 hover:bg-chart-muted",
           )}
         >
           {value?.trim() ? <span className="line-clamp-3 break-words">{value}</span> : null}
@@ -839,14 +839,14 @@ function MerchantNameEditor({
     return (
       <div className="min-w-0">
         <div
-          className="min-w-0 cursor-pointer rounded-md py-0.5 -my-0.5 pr-1 ring-0 hover:ring-1 hover:ring-white/15 hover:bg-white/[0.04] transition-[box-shadow,background]"
+          className="min-w-0 cursor-pointer rounded-md py-0.5 -my-0.5 pr-1 ring-0 hover:ring-1 hover:ring-chart-border hover:bg-chart-muted transition-[box-shadow,background]"
           onClick={(e) => {
             e.stopPropagation();
             setEditing(true);
             setApplyAll(true);
           }}
         >
-          <p className="text-xs font-medium text-white/90 truncate">
+          <p className="text-xs font-medium text-foreground truncate">
             {txn.merchantName ?? txn.rawDescription}
           </p>
           <TransactionSourceSubtitle txn={txn} />
@@ -855,7 +855,7 @@ function MerchantNameEditor({
               className="mt-0.5 min-w-0 max-w-full text-[9px] leading-snug"
               title={transactionReferenceTitle(txn)}
             >
-              <span className="block min-w-0 truncate text-white/45">
+              <span className="block min-w-0 truncate text-muted-foreground">
                 {transactionReferenceDisplay(txn)}
               </span>
             </p>
@@ -880,12 +880,12 @@ function MerchantNameEditor({
           if (e.key === "Enter") { e.preventDefault(); save(); }
           if (e.key === "Escape") { e.preventDefault(); setDraft(txn.merchantName ?? ""); setEditing(false); }
         }}
-        className="w-full min-w-0 rounded-md border border-white/20 bg-white/[0.06] px-2 py-1 text-xs font-medium text-white/90 outline-none focus:border-[#0BC18D]/60 focus:ring-1 focus:ring-[#0BC18D]/30"
+        className="w-full min-w-0 rounded-md border border-chart-border bg-chart-muted px-2 py-1 text-xs font-medium text-foreground outline-none focus:border-[#0BC18D]/60 focus:ring-1 focus:ring-[#0BC18D]/30"
         aria-label="Merchant name"
       />
       <div className="flex items-center gap-1.5">
-        <span className="shrink-0 text-[9px] text-white/35">Apply to:</span>
-        <div className="inline-flex h-[22px] rounded-full border border-white/10 bg-white/[0.04] p-px text-[9px] font-medium">
+        <span className="shrink-0 text-[9px] text-muted-foreground/80">Apply to:</span>
+        <div className="inline-flex h-[22px] rounded-full border border-chart-border bg-chart-muted p-px text-[9px] font-medium">
           <button
             type="button"
             onMouseDown={(e) => e.preventDefault()}
@@ -894,7 +894,7 @@ function MerchantNameEditor({
               "rounded-full px-2 transition-colors whitespace-nowrap cursor-pointer",
               applyAll
                 ? "bg-[#0BC18D]/20 text-[#0BC18D]"
-                : "text-white/40 hover:text-white/60",
+                : "text-muted-foreground hover:text-muted-foreground",
             )}
           >
             All with this name
@@ -907,7 +907,7 @@ function MerchantNameEditor({
               "rounded-full px-2 transition-colors whitespace-nowrap cursor-pointer",
               !applyAll
                 ? "bg-[#0BC18D]/20 text-[#0BC18D]"
-                : "text-white/40 hover:text-white/60",
+                : "text-muted-foreground hover:text-muted-foreground",
             )}
           >
             Only this
@@ -1010,7 +1010,7 @@ function CategoryCellEditor({
   if (!open) {
     return (
       <div
-        className="flex min-w-0 w-full h-full items-center gap-2.5 cursor-pointer rounded-md py-0.5 -my-0.5 pr-1 ring-0 hover:ring-1 hover:ring-white/15 hover:bg-white/[0.04] transition-[box-shadow,background]"
+        className="flex min-w-0 w-full h-full items-center gap-2.5 cursor-pointer rounded-md py-0.5 -my-0.5 pr-1 ring-0 hover:ring-1 hover:ring-chart-border hover:bg-chart-muted transition-[box-shadow,background]"
         onClick={(e) => { e.stopPropagation(); setOpen(true); }}
       >
         <TransactionCategoryIcon
@@ -1019,16 +1019,16 @@ function CategoryCellEditor({
           size="md"
         />
         <div className="flex min-w-0 flex-1 flex-col items-start justify-center gap-0.5 text-left">
-          <span className="block w-full max-w-full truncate text-[12px] text-white/75">
+          <span className="block w-full max-w-full truncate text-[12px] text-foreground">
             {txn.categoryName ?? "Uncategorized"}
           </span>
           {txn.subcategoryName ? (
-            <span className="block w-full max-w-full truncate text-[11px] text-white/45">
+            <span className="block w-full max-w-full truncate text-[11px] text-muted-foreground">
               {txn.subcategoryName}
             </span>
           ) : null}
         </div>
-        <ChevronDown className="w-3 h-3 shrink-0 text-white/20" />
+        <ChevronDown className="w-3 h-3 shrink-0 text-muted-foreground/50" />
       </div>
     );
   }
@@ -1043,7 +1043,7 @@ function CategoryCellEditor({
       <button
         type="button"
         onClick={() => setOpen(false)}
-        className="flex min-w-0 w-full items-center gap-2.5 rounded-md py-0.5 pr-1 ring-1 ring-[#0BC18D]/40 bg-white/[0.04] cursor-pointer"
+        className="flex min-w-0 w-full items-center gap-2.5 rounded-md py-0.5 pr-1 ring-1 ring-[#0BC18D]/40 bg-chart-muted cursor-pointer"
       >
         <TransactionCategoryIcon
           categoryName={txn.categoryName}
@@ -1051,11 +1051,11 @@ function CategoryCellEditor({
           size="md"
         />
         <div className="flex min-w-0 flex-1 flex-col items-start justify-center gap-0.5 text-left">
-          <span className="block w-full max-w-full truncate text-[12px] text-white/75">
+          <span className="block w-full max-w-full truncate text-[12px] text-foreground">
             {txn.categoryName ?? "Uncategorized"}
           </span>
           {txn.subcategoryName ? (
-            <span className="block w-full max-w-full truncate text-[11px] text-white/45">
+            <span className="block w-full max-w-full truncate text-[11px] text-muted-foreground">
               {txn.subcategoryName}
             </span>
           ) : null}
@@ -1066,28 +1066,28 @@ function CategoryCellEditor({
       {/* Dropdown */}
       <div
         ref={dropdownRef}
-        className="absolute left-0 top-[calc(100%+4px)] z-50 w-[280px] max-h-[340px] flex flex-col rounded-xl border border-white/15 bg-[#161616]/98 shadow-2xl backdrop-blur-lg overflow-hidden"
+        className="absolute left-0 top-[calc(100%+4px)] z-50 w-[280px] max-h-[340px] flex flex-col rounded-xl border border-chart-border bg-popover shadow-2xl backdrop-blur-lg overflow-hidden"
       >
         {/* Search */}
         <div className="shrink-0 px-2.5 pt-2 pb-1.5">
           <div className="relative">
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-white/30" />
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground/70" />
             <input
               ref={searchRef}
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search categories…"
-              className="w-full rounded-md border border-white/10 bg-white/[0.04] py-1.5 pl-7 pr-2 text-[11px] text-white/90 placeholder:text-white/30 outline-none focus:border-[#0BC18D]/40 focus:ring-1 focus:ring-[#0BC18D]/20"
+              className="w-full rounded-md border border-chart-border bg-chart-muted py-1.5 pl-7 pr-2 text-[11px] text-foreground placeholder:text-muted-foreground/70 outline-none focus:border-[#0BC18D]/40 focus:ring-1 focus:ring-[#0BC18D]/20"
             />
           </div>
         </div>
 
         {/* Triple toggle — directly under search */}
-        <div className="shrink-0 border-b border-white/10 px-2.5 pb-2 pt-0">
+        <div className="shrink-0 border-b border-chart-border px-2.5 pb-2 pt-0">
           <div className="flex items-center gap-1.5">
-            <span className="shrink-0 text-[9px] text-white/35">Apply to:</span>
-            <div className="inline-flex h-[22px] rounded-full border border-white/10 bg-white/[0.04] p-px text-[9px] font-medium">
+            <span className="shrink-0 text-[9px] text-muted-foreground/80">Apply to:</span>
+            <div className="inline-flex h-[22px] rounded-full border border-chart-border bg-chart-muted p-px text-[9px] font-medium">
               <button
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
@@ -1096,7 +1096,7 @@ function CategoryCellEditor({
                   "rounded-full px-2 transition-colors whitespace-nowrap cursor-pointer",
                   scope === "merchant"
                     ? "bg-[#0BC18D]/20 text-[#0BC18D]"
-                    : "text-white/40 hover:text-white/60",
+                    : "text-muted-foreground hover:text-muted-foreground",
                 )}
               >
                 All with this name
@@ -1108,10 +1108,10 @@ function CategoryCellEditor({
                 className={cn(
                   "rounded-full px-2 transition-colors whitespace-nowrap",
                   !hasLabel
-                    ? "text-white/15 cursor-not-allowed"
+                    ? "text-muted-foreground/40 cursor-not-allowed"
                     : effectiveScope === "label"
                       ? "bg-[#0BC18D]/20 text-[#0BC18D] cursor-pointer"
-                      : "text-white/40 hover:text-white/60 cursor-pointer",
+                      : "text-muted-foreground hover:text-muted-foreground cursor-pointer",
                 )}
                 title={hasLabel ? `Label: ${txn.label}` : "No label assigned"}
               >
@@ -1125,7 +1125,7 @@ function CategoryCellEditor({
                   "rounded-full px-2 transition-colors whitespace-nowrap cursor-pointer",
                   effectiveScope === "this"
                     ? "bg-[#0BC18D]/20 text-[#0BC18D]"
-                    : "text-white/40 hover:text-white/60",
+                    : "text-muted-foreground hover:text-muted-foreground",
                 )}
               >
                 Only this
@@ -1137,7 +1137,7 @@ function CategoryCellEditor({
         {/* Grouped list */}
         <div className="flex-1 overflow-y-auto overscroll-contain py-1">
           {filtered.length === 0 ? (
-            <p className="px-3 py-4 text-center text-[11px] text-white/30">No categories found</p>
+            <p className="px-3 py-4 text-center text-[11px] text-muted-foreground/70">No categories found</p>
           ) : (
             filtered.map((cat) => (
               <div key={cat.id}>
@@ -1150,8 +1150,8 @@ function CategoryCellEditor({
                   className={cn(
                     "w-full flex items-center gap-2 px-3 py-1.5 text-left text-[11px] font-semibold tracking-wide",
                     cat.subcategories.length === 0
-                      ? "text-white/70 hover:bg-white/[0.06] cursor-pointer"
-                      : "text-white/40 cursor-default",
+                      ? "text-muted-foreground hover:bg-chart-muted cursor-pointer"
+                      : "text-muted-foreground cursor-default",
                   )}
                 >
                   <div
@@ -1172,7 +1172,7 @@ function CategoryCellEditor({
                         "w-full flex items-center gap-2 pl-7 pr-3 py-1.5 text-left text-[11px] transition-colors cursor-pointer",
                         isActive
                           ? "bg-[#0BC18D]/10 text-[#0BC18D]"
-                          : "text-white/60 hover:bg-white/[0.06] hover:text-white/80",
+                          : "text-muted-foreground hover:bg-chart-muted hover:text-foreground",
                       )}
                     >
                       <div
@@ -1226,7 +1226,7 @@ function AmountRangeSlider({
     <div className="relative min-w-0 w-full">
       {/* Title + reset — positioned above the track so they don't affect flex alignment height */}
       <div className="absolute inset-x-0 -top-4 flex items-center justify-between px-0.5">
-        <span className="text-[8px] font-medium uppercase tracking-wider text-white/40 sm:text-[9px]">
+        <span className="text-[8px] font-medium uppercase tracking-wider text-muted-foreground sm:text-[9px]">
           Amount range
         </span>
         {!isDefault && (
@@ -1297,7 +1297,7 @@ function AmountRangeSlider({
           className={cn(
             "text-[10px] font-semibold tabular-nums transition-colors",
             valueMin === min
-              ? "text-white/30"
+              ? "text-muted-foreground/70"
               : valueMin >= 0
                 ? "text-[#A7F3D0]"
                 : "text-[#FCA5A5]",
@@ -1309,7 +1309,7 @@ function AmountRangeSlider({
           className={cn(
             "text-[10px] font-semibold tabular-nums transition-colors",
             valueMax === max
-              ? "text-white/30"
+              ? "text-muted-foreground/70"
               : valueMax >= 0
                 ? "text-[#A7F3D0]"
                 : "text-[#FCA5A5]",
@@ -1826,14 +1826,14 @@ export default function TransactionsPage() {
           className="mb-3 flex shrink-0 flex-col gap-3 sm:mb-4 sm:flex-row sm:items-end sm:justify-between sm:gap-4"
         >
           <div className="min-w-0">
-            <p className="flex flex-wrap items-center gap-x-1 text-xs leading-snug text-white/70 sm:text-sm">
+            <p className="flex flex-wrap items-center gap-x-1 text-xs leading-snug text-muted-foreground sm:text-sm">
               <span>
                 {total > 0 ? (
                   <>
                     {total.toLocaleString()} transactions
                     {statementCount > 0 && (
                       <>
-                        <span className="text-white/35 select-none" aria-hidden>
+                        <span className="text-muted-foreground/80 select-none" aria-hidden>
                           {"\u00A0\u00A0·\u00A0\u00A0"}
                         </span>
                         {statementCount.toLocaleString()} {statementCount === 1 ? "statement" : "statements"}
@@ -1850,7 +1850,7 @@ export default function TransactionsPage() {
             <Link href="/dashboard/profile">
               <Button
                 variant="ghost"
-                className="w-full justify-center text-white/85 hover:bg-white/10 sm:w-auto"
+                className="w-full justify-center text-foreground hover:bg-white/10 sm:w-auto"
               >
                 My Profile
               </Button>
@@ -1873,7 +1873,7 @@ export default function TransactionsPage() {
             animate={{ opacity: 1, y: 0 }}
             className="mb-3 flex shrink-0 flex-col gap-2 rounded-lg border border-red-500/25 bg-red-500/[0.08] px-2.5 py-2.5 sm:mb-4 sm:flex-row sm:items-center sm:justify-between sm:rounded-xl sm:px-4 sm:py-3"
           >
-            <p className="text-sm text-white/85">
+            <p className="text-sm text-foreground">
               <span className="font-medium text-white">{selectedCount}</span>
               {" "}transaction{selectedCount === 1 ? "" : "s"} selected
             </p>
@@ -1907,13 +1907,13 @@ export default function TransactionsPage() {
             }}
           >
             <div
-              className="w-full max-w-md rounded-xl border border-white/15 bg-[#161616] p-6 shadow-2xl"
+              className="w-full max-w-md rounded-xl border border-chart-border bg-popover p-6 shadow-2xl"
               onClick={(e) => e.stopPropagation()}
             >
               <h2 id="txn-delete-title" className="text-lg font-semibold text-white">
                 Delete {selectedCount} transaction{selectedCount === 1 ? "" : "s"}?
               </h2>
-              <p className="mt-3 text-sm leading-relaxed text-white/65">
+              <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
                 This will permanently remove the selected transaction{selectedCount === 1 ? "" : "s"} from your
                 database. This action cannot be undone.
               </p>
@@ -1931,7 +1931,7 @@ export default function TransactionsPage() {
                     setDeleteConfirmOpen(false);
                     setDeleteError(null);
                   }}
-                  className="text-white/80"
+                  className="text-foreground"
                 >
                   Cancel
                 </Button>
@@ -1962,7 +1962,7 @@ export default function TransactionsPage() {
             }}
           >
             <div
-              className="w-full max-w-md rounded-xl border border-white/15 bg-[#161616] p-6 shadow-2xl"
+              className="w-full max-w-md rounded-xl border border-chart-border bg-popover p-6 shadow-2xl"
               onClick={(e) => e.stopPropagation()}
             >
               {watchlistDialog.step === "review" ? (
@@ -1970,7 +1970,7 @@ export default function TransactionsPage() {
                   <h2 id="double-charge-watchlist-title" className="text-lg font-semibold text-white">
                     Review double-charge suspect
                   </h2>
-                  <p className="mt-3 text-sm leading-relaxed text-white/65">
+                  <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
                     <span className="font-medium text-white">{watchlistDialog.displayName}</span> matched
                     as a possible duplicate charge. Keep monitoring this merchant, or remove them from your
                     double-charge watchlist.
@@ -1984,7 +1984,7 @@ export default function TransactionsPage() {
                     <Button
                       type="button"
                       variant="ghost"
-                      className="text-white/80"
+                      className="text-foreground"
                       onClick={() => setWatchlistDialog({ step: "idle" })}
                     >
                       Cancel
@@ -2016,7 +2016,7 @@ export default function TransactionsPage() {
                   <h2 id="double-charge-watchlist-title" className="text-lg font-semibold text-white">
                     Remove from watchlist permanently?
                   </h2>
-                  <p className="mt-3 text-sm leading-relaxed text-white/65">
+                  <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
                     Are you sure?{" "}
                     <span className="font-medium text-white">{watchlistDialog.displayName}</span> will be
                     permanently removed from your double-charge watchlist and will never appear in Double-charge
@@ -2032,7 +2032,7 @@ export default function TransactionsPage() {
                       type="button"
                       variant="ghost"
                       disabled={watchlistRemoving}
-                      className="text-white/80"
+                      className="text-foreground"
                       onClick={() =>
                         setWatchlistDialog({
                           step: "review",
@@ -2067,13 +2067,13 @@ export default function TransactionsPage() {
             className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3"
           >
             <div className="relative w-full min-w-0 shrink-0 sm:w-[16.666%]">
-              <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-white/50 sm:left-3" />
+              <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground sm:left-3" />
               <input
                 type="text"
                 placeholder="Search…"
                 value={filters.search}
                 onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
-                className="w-full rounded-lg border border-white/15 bg-white/[0.05] py-2 pl-9 pr-3 text-sm text-white placeholder:text-white/45 focus:border-[#0BC18D]/40 focus:outline-none focus:ring-1 focus:ring-[#0BC18D]/20 sm:py-2.5 sm:pl-10"
+                className="w-full rounded-lg border border-chart-border bg-background py-2 pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-[#0BC18D]/40 focus:outline-none focus:ring-1 focus:ring-[#0BC18D]/20 sm:py-2.5 sm:pl-10"
               />
             </div>
             <div className="min-w-0 w-full sm:max-w-[22%] sm:flex-none">
@@ -2106,7 +2106,7 @@ export default function TransactionsPage() {
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6F69]/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0a]",
                   filters.doubleChargeSuspects
                     ? "border-[#FF6F69]/75 bg-[#FF6F69]/14 text-[#FF6F69] shadow-[0_0_24px_-8px_rgba(255,111,105,0.65)]"
-                    : "border-white/15 bg-white/[0.045] text-white/55 hover:border-[#FF6F69]/40 hover:bg-[#FF6F69]/10 hover:text-[#FF6F69]/85",
+                    : "border-chart-border bg-white/[0.045] text-muted-foreground hover:border-[#FF6F69]/40 hover:bg-[#FF6F69]/10 hover:text-[#FF6F69]/85",
                 )}
               >
                 <Copy className="h-3.5 w-3.5 shrink-0" aria-hidden />
@@ -2131,7 +2131,7 @@ export default function TransactionsPage() {
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ECAA0B]/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0a]",
                   filters.warningOnly
                     ? "border-[#ECAA0B]/80 bg-[#ECAA0B]/15 text-[#ECAA0B] shadow-[0_0_24px_-8px_rgba(236,170,11,0.75)]"
-                    : "border-white/15 bg-white/[0.045] text-white/25 hover:border-[#ECAA0B]/45 hover:bg-[#ECAA0B]/10 hover:text-[#ECAA0B]/75",
+                    : "border-chart-border bg-white/[0.045] text-muted-foreground/60 hover:border-[#ECAA0B]/45 hover:bg-[#ECAA0B]/10 hover:text-[#ECAA0B]/75",
                 )}
               >
                 <AlertTriangle
@@ -2169,7 +2169,7 @@ export default function TransactionsPage() {
                 <span className="relative">Filters</span>
                 <ChevronDown
                   className={cn(
-                    "relative h-4 w-4 shrink-0 text-white/50 transition-transform duration-200",
+                    "relative h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
                     filtersSheetOpen && "rotate-180",
                   )}
                   aria-hidden
@@ -2187,7 +2187,7 @@ export default function TransactionsPage() {
             <div className="min-h-0 overflow-hidden">
               <div
                 id="txn-filters-panel"
-                className="mt-3 rounded-xl border border-white/[0.10] bg-white/[0.04] px-3 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] sm:px-4"
+                className="mt-3 rounded-xl border border-white/[0.10] bg-chart-muted px-3 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] sm:px-4"
               >
                 <div className="flex max-h-[min(70vh,560px)] flex-col gap-3 overflow-y-auto overscroll-y-contain pr-0.5 [scrollbar-gutter:stable]">
                   {/* Period + Flow + expense type: stacked on small screens, one row from lg */}
@@ -2242,12 +2242,12 @@ export default function TransactionsPage() {
         )}
 
         {/* Transaction Table — fills remaining viewport; list scrolls inside */}
-        <Card className="flex min-h-0 flex-1 flex-col overflow-hidden border-white/[0.10] bg-white/[0.04] py-0 text-white rounded-xl sm:rounded-2xl">
+        <Card className="flex min-h-0 flex-1 flex-col overflow-hidden border-chart-border bg-chart-surface py-0 text-card-foreground shadow-chart rounded-xl sm:rounded-2xl">
           <CardContent className="flex min-h-0 flex-1 flex-col p-0">
             {loading && txns.length === 0 ? (
               <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-4 py-8">
                 <Loader2 className="h-8 w-8 animate-spin text-[#0BC18D]/90" aria-hidden />
-                <p className="text-xs text-white/50">Loading transactions…</p>
+                <p className="text-xs text-muted-foreground">Loading transactions…</p>
               </div>
             ) : txns.length > 0 ? (
               <div
@@ -2255,31 +2255,31 @@ export default function TransactionsPage() {
                 className="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-auto overscroll-y-contain [scrollbar-gutter:stable]"
               >
                 {/* Desktop header — sticky within scroll area */}
-                <div className="sticky top-0 z-10 hidden sm:grid sm:grid-cols-[auto_minmax(0,1.65fr)_minmax(4.5rem,6.5rem)_minmax(0,12rem)_minmax(7.5rem,10rem)_80px_minmax(7rem,1.25fr)_64px] sm:items-center sm:justify-items-stretch gap-2 border-b border-white/10 bg-[#121212]/95 px-3 py-2.5 backdrop-blur-md sm:px-4 sm:py-3">
+                <div className="sticky top-0 z-10 hidden sm:grid sm:grid-cols-[auto_minmax(0,1.65fr)_minmax(4.5rem,6.5rem)_minmax(0,12rem)_minmax(7.5rem,10rem)_80px_minmax(7rem,1.25fr)_64px] sm:items-center sm:justify-items-stretch gap-2 border-b border-chart-border bg-chart-surface/98 px-3 py-2.5 backdrop-blur-md sm:px-4 sm:py-3">
                   <div className="flex min-w-0 items-center justify-center gap-1">
                     <span className="inline-flex h-7 w-7 shrink-0" aria-hidden />
                     <button
                       type="button"
                       onClick={() => toggleSort("posted_date")}
-                      className="flex min-w-0 flex-1 items-center justify-center gap-1 whitespace-nowrap text-center text-[10px] font-medium tracking-wide text-white/50 hover:text-white/70"
+                      className="flex min-w-0 flex-1 items-center justify-center gap-1 whitespace-nowrap text-center text-[10px] font-medium tracking-wide text-muted-foreground hover:text-muted-foreground"
                     >
                       Date <ArrowUpDown className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
                     </button>
                   </div>
-                  <span className="block w-full min-w-0 text-center text-[10px] font-medium tracking-wide text-white/50">Description</span>
-                  <span className="block w-full min-w-0 truncate text-center text-[10px] font-medium tracking-wide text-white/50">Label</span>
+                  <span className="block w-full min-w-0 text-center text-[10px] font-medium tracking-wide text-muted-foreground">Description</span>
+                  <span className="block w-full min-w-0 truncate text-center text-[10px] font-medium tracking-wide text-muted-foreground">Label</span>
                   <div className="flex min-w-0 w-full justify-center px-0.5 text-center">
-                    <span className="line-clamp-2 max-w-full text-[10px] font-medium leading-tight tracking-wide text-white/50">Category / Subcategory</span>
+                    <span className="line-clamp-2 max-w-full text-[10px] font-medium leading-tight tracking-wide text-muted-foreground">Category / Subcategory</span>
                   </div>
                   <button
                     type="button"
                     onClick={() => toggleSort("base_amount")}
-                    className="flex w-full min-w-0 items-center justify-center gap-1 text-center text-[10px] font-medium tracking-wide text-white/50 hover:text-white/70"
+                    className="flex w-full min-w-0 items-center justify-center gap-1 text-center text-[10px] font-medium tracking-wide text-muted-foreground hover:text-muted-foreground"
                   >
                     Amount <ArrowUpDown className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
                   </button>
-                  <span className="block w-full text-center text-[10px] font-medium tracking-wide text-white/50">Flags</span>
-                  <span className="block w-full min-w-0 text-center text-[10px] font-medium tracking-wide text-white/50">Note</span>
+                  <span className="block w-full text-center text-[10px] font-medium tracking-wide text-muted-foreground">Flags</span>
+                  <span className="block w-full min-w-0 text-center text-[10px] font-medium tracking-wide text-muted-foreground">Note</span>
                   <span className="sr-only">Select and warning</span>
                 </div>
 
@@ -2297,7 +2297,7 @@ export default function TransactionsPage() {
                         animate={{ opacity: 1 }}
                         transition={{ delay: Math.min(i, 24) * 0.015 }}
                         className={cn(
-                          "relative grid grid-cols-[auto_1fr] gap-1.5 border border-transparent px-2.5 py-2.5 pr-16 transition-colors hover:bg-white/[0.06] sm:grid-cols-[auto_minmax(0,1.65fr)_minmax(4.5rem,6.5rem)_minmax(0,12rem)_minmax(7.5rem,10rem)_80px_minmax(7rem,1.25fr)_64px] sm:justify-items-stretch sm:gap-2 sm:px-4 sm:py-3 sm:pr-4",
+                          "relative grid grid-cols-[auto_1fr] gap-1.5 border border-transparent px-2.5 py-2.5 pr-16 transition-colors hover:bg-chart-muted sm:grid-cols-[auto_minmax(0,1.65fr)_minmax(4.5rem,6.5rem)_minmax(0,12rem)_minmax(7.5rem,10rem)_80px_minmax(7rem,1.25fr)_64px] sm:justify-items-stretch sm:gap-2 sm:px-4 sm:py-3 sm:pr-4",
                           txn.warningFlag && "border-dotted border-[#ECAA0B]/80 bg-[#ECAA0B]/[0.035] shadow-[inset_0_0_0_1px_rgba(236,170,11,0.12)]",
                           txn.doubleChargeSuspect?.verdict === "strong" &&
                             "border-dotted border-[#FF6F69]/70 bg-[#FF6F69]/[0.04] shadow-[inset_0_0_0_1px_rgba(255,111,105,0.14)]",
@@ -2308,7 +2308,7 @@ export default function TransactionsPage() {
                         <TransactionInsightHover txn={txn}>
                           <div className="flex min-w-0 items-center gap-0.5 sm:gap-1">
                             <TransactionGeminiHintButton txn={txn} />
-                            <div className="min-w-0 text-xs text-white/65 tabular-nums whitespace-nowrap py-0.5 -my-0.5 rounded-md pr-1 ring-0 group-hover/txninsight:ring-1 group-hover/txninsight:ring-white/15 group-hover/txninsight:bg-white/[0.04] transition-[box-shadow,background]">
+                            <div className="min-w-0 text-xs text-muted-foreground tabular-nums whitespace-nowrap py-0.5 -my-0.5 rounded-md pr-1 ring-0 group-hover/txninsight:ring-1 group-hover/txninsight:ring-chart-border group-hover/txninsight:bg-chart-muted transition-[box-shadow,background]">
                               {formatDate(txn.postedDate, "ddMmmYy")}
                             </div>
                           </div>
@@ -2328,7 +2328,7 @@ export default function TransactionsPage() {
                               />
                             ) : null}
                           </div>
-                          <div className="mt-0.5 flex items-start gap-2 text-[12px] text-white/50 sm:hidden">
+                          <div className="mt-0.5 flex items-start gap-2 text-[12px] text-muted-foreground sm:hidden">
                             <TransactionCategoryIcon
                               categoryName={txn.categoryName}
                               subcategoryName={txn.subcategoryName}
@@ -2363,7 +2363,7 @@ export default function TransactionsPage() {
                             "min-w-0 whitespace-nowrap text-xs font-bold tabular-nums",
                             isPositive && "text-[#A7F3D0]",
                             isNegative && "text-[#FCA5A5]",
-                            !isPositive && !isNegative && "text-white/70",
+                            !isPositive && !isNegative && "text-muted-foreground",
                           )}>
                             {isPositive ? "+" : isNegative ? "−" : ""}{formatCurrency(Math.abs(amt), txn.baseCurrency)}
                           </span>
@@ -2395,7 +2395,7 @@ export default function TransactionsPage() {
                             checked={selectedIds.has(txn.id)}
                             onChange={() => toggleSelect(txn.id)}
                             aria-label={`Select transaction ${txn.merchantName ?? txn.rawDescription}`}
-                            className="h-3.5 w-3.5 cursor-pointer rounded border-white/35 bg-white/[0.06] text-[#0BC18D] focus:ring-1 focus:ring-[#0BC18D]/50"
+                            className="h-3.5 w-3.5 cursor-pointer rounded border-chart-border bg-chart-muted text-[#0BC18D] focus:ring-1 focus:ring-[#0BC18D]/50"
                           />
                           <button
                             type="button"
@@ -2406,7 +2406,7 @@ export default function TransactionsPage() {
                               "inline-flex h-6 w-6 items-center justify-center rounded-md transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#ECAA0B]/70",
                               txn.warningFlag
                                 ? "bg-[#ECAA0B]/15 text-[#ECAA0B] shadow-[0_0_14px_rgba(236,170,11,0.45)]"
-                                : "text-white/20 hover:bg-[#ECAA0B]/10 hover:text-[#ECAA0B]/75",
+                                : "text-muted-foreground/50 hover:bg-[#ECAA0B]/10 hover:text-[#ECAA0B]/75",
                             )}
                             title={txn.warningFlag ? "Warning on — click to turn off" : "Warning off — click to turn on"}
                           >
@@ -2430,12 +2430,12 @@ export default function TransactionsPage() {
                 {hasMore ? (
                   <div
                     ref={scrollSentinelRef}
-                    className="flex min-h-[48px] shrink-0 items-center justify-center gap-2 border-t border-white/10 px-4 py-2"
+                    className="flex min-h-[48px] shrink-0 items-center justify-center gap-2 border-t border-chart-border px-4 py-2"
                   >
                     {loadingMore ? (
                       <>
                         <Loader2 className="h-5 w-5 shrink-0 animate-spin text-[#0BC18D]/85" aria-hidden />
-                        <span className="text-[10px] text-white/45">Loading more…</span>
+                        <span className="text-[10px] text-muted-foreground">Loading more…</span>
                       </>
                     ) : null}
                   </div>
@@ -2443,8 +2443,8 @@ export default function TransactionsPage() {
               </div>
             ) : (
               <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-2 py-8 text-center sm:py-12">
-                <ArrowLeftRight className="mb-3 h-7 w-7 text-white/20 sm:mb-4 sm:h-8 sm:w-8" />
-                <p className="mb-3 text-xs text-white/60 sm:mb-4 sm:text-sm">No transactions found</p>
+                <ArrowLeftRight className="mb-3 h-7 w-7 text-muted-foreground/50 sm:mb-4 sm:h-8 sm:w-8" />
+                <p className="mb-3 text-xs text-muted-foreground sm:mb-4 sm:text-sm">No transactions found</p>
                 <Link href="/dashboard/upload">
                   <Button className="bg-[#0BC18D] text-white hover:bg-[#0BC18D]/90">
                     <Upload className="w-4 h-4 mr-2" /> Upload Statement

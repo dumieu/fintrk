@@ -511,9 +511,9 @@ export const netWorthSettings = pgTable("net_worth_settings", {
     .notNull(),
   currentAge: integer("current_age").default(35).notNull(),
   retirementAge: integer("retirement_age").default(65).notNull(),
-  /** Date of birth (month + year only, intentionally low-friction). */
-  birthMonth: integer("birth_month"),
-  birthYear: integer("birth_year"),
+  /** Date of birth (month + year only). Encrypted at rest -> stored as text. */
+  birthMonth: text("birth_month"),
+  birthYear: text("birth_year"),
   /** Annual drawdown post-retirement (today's $). */
   annualDrawdown: numeric("annual_drawdown", { precision: 15, scale: 2 })
     .default("0")
@@ -524,6 +524,20 @@ export const netWorthSettings = pgTable("net_worth_settings", {
     .notNull(),
   /** "real" subtracts inflation from growth; "nominal" leaves it raw. */
   showInflationAdjusted: boolean("show_inflation_adjusted").default(false).notNull(),
+  /** Take-home annual income today (earning curve anchor). Encrypted at rest -> text. */
+  annualIncome: text("annual_income"),
+  /** Nominal annual raise rate; contributions are indexed to it. */
+  incomeGrowthRate: numeric("income_growth_rate", { precision: 6, scale: 4 })
+    .default("0.0300")
+    .notNull(),
+  /** Pension / Social Security annual income (today's $). */
+  postRetirementIncome: numeric("post_retirement_income", { precision: 15, scale: 2 })
+    .default("0")
+    .notNull(),
+  /** Age at which the pension/SS starts paying out. */
+  postRetirementIncomeStartAge: integer("post_retirement_income_start_age")
+    .default(67)
+    .notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

@@ -6,7 +6,9 @@ import {
   SERVER_VERSION,
   SUPPORTED_PROTOCOL_VERSIONS,
 } from "@/lib/mcp/config";
-import { TOOL_DEFS, runTool, type ToolMeta } from "@/lib/mcp/tools";
+import { MCP_INSTRUCTIONS } from "@/lib/mcp/instructions";
+import { McpGuardError } from "@/lib/mcp/guard";
+import { TOOL_DEFS, runTool, type ToolMeta } from "@/lib/mcp/registry";
 
 interface JsonRpcRequest {
   jsonrpc: "2.0";
@@ -17,11 +19,11 @@ interface JsonRpcRequest {
 
 export interface RpcContext {
   userId: string;
+  scope: string;
   meta: ToolMeta;
 }
 
-const INSTRUCTIONS =
-  "FinTRK is the user's personal finance tracker. Use these tools to read their accounts, transactions, cashflow, spending categories, and top merchants so you can answer money questions with their real numbers. All data is read-only and private to this user. Always cite specific amounts and dates you used. You are not a substitute for a licensed financial advisor.";
+const INSTRUCTIONS = MCP_INSTRUCTIONS;
 
 function rpcResult(id: string | number | null | undefined, result: unknown) {
   return { jsonrpc: "2.0" as const, id: id ?? null, result };
@@ -86,13 +88,16 @@ export async function handleRpcMessage(
           : {};
       if (!name) return rpcError(msg.id, -32602, "Missing tool name");
       try {
-        const result = await runTool(name, args, ctx.userId, ctx.meta);
+        const result = await runTool(name, args, ctx.userId, ctx.scope, ctx.meta);
         return rpcResult(msg.id, {
           content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
           structuredContent: result,
           isError: false,
         });
       } catch (err) {
+        if (err instanceof McpGuardError) {
+          return rpcError(msg.id, -32001, err.message);
+        }
         const message = err instanceof Error ? err.message : "Tool execution failed";
         return rpcResult(msg.id, {
           content: [{ type: "text", text: `Error: ${message}` }],

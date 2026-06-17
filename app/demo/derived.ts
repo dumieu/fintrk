@@ -220,11 +220,13 @@ export interface AccountBalance {
 // "Accounts" section so users see numbers a real upper-middle-class household
 // would actually carry, not the cumulative sum of every demo transaction.
 const FIXED_BALANCE_BY_ACCOUNT_NAME: Record<string, number> = {
-  "Sterling Joint Checking": 18_412,
-  "Emergency Fund Plus":     32_500,
-  "Vanguard Brokerage":     184_300,
-  "Ava — 529 College":       42_000,
-  "Noah — 529 College":      24_500,
+  "Sterling Joint Checking": 22_400,
+  "Emergency Fund (HYSA)":   58_000,
+  "Vanguard Brokerage":     312_000,
+  "Fidelity 401(k)":        438_000,
+  "Ava - 529 College":       52_000,
+  "Noah - 529 College":      39_000,
+  "Mia - 529 College":       28_000,
 };
 
 export function accountBalances(snap: DemoSnapshot): AccountBalance[] {

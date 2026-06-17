@@ -2,21 +2,26 @@
 
 import { useMemo } from "react";
 import { Layers } from "lucide-react";
-import { project, type NetWorthItem, type NetWorthSettings } from "@/lib/net-worth";
-import { formatCurrencyInteger } from "@/lib/format";
+import {
+  monteCarlo,
+  project,
+  type NetWorthItem,
+  type NetWorthSettings,
+} from "@/lib/net-worth";
 
 const SCENARIOS = [
-  { id: "conservative", label: "Conservative", rate: 0.06, color: "#2CA2FF" },
-  { id: "expected",     label: "Expected",     rate: 0.10, color: "#0BC18D" },
-  { id: "aggressive",   label: "Aggressive",   rate: 0.13, color: "#ECAA0B" },
+  { id: "cautious",   label: "Cautious",   shift: -0.03, color: "#2CA2FF", note: "all returns −3%" },
+  { id: "expected",   label: "Your plan",  shift: 0,     color: "#0BC18D", note: "current assumptions" },
+  { id: "optimistic", label: "Optimistic", shift: 0.03,  color: "#ECAA0B", note: "all returns +3%" },
 ];
 
 /**
- * Quick A/B/C side-by-side: how much does the 30-year outcome change if
- * you nudge the default growth rate? Powerful narrative tool that pairs
- * with the slider above — answers "what if I'm wrong about returns?"
+ * Three full worlds, side by side. The shift applies to every asset's return
+ * (including per-item overrides), so the comparison is honest even when the
+ * balance sheet uses custom rates. Each row runs the deterministic engine
+ * plus a Monte Carlo pass.
  */
-export function ScenarioStrip({
+export function ScenarioMatrix({
   items,
   settings,
 }: {
@@ -26,55 +31,74 @@ export function ScenarioStrip({
   const rows = useMemo(
     () =>
       SCENARIOS.map((s) => {
-        const proj = project(items, { ...settings, defaultGrowthRate: s.rate });
+        const shiftedItems = items.map((it) =>
+          it.kind === "asset"
+            ? { ...it, growthRate: (it.growthRate ?? settings.defaultGrowthRate) + s.shift }
+            : it,
+        );
+        const shiftedSettings = {
+          ...settings,
+          defaultGrowthRate: settings.defaultGrowthRate + s.shift,
+        };
+        const proj = project(shiftedItems, shiftedSettings);
+        const mc = monteCarlo(shiftedItems, shiftedSettings, { runs: 150, seed: 7 });
         return {
           ...s,
-          at5:  proj.milestones.find((m) => m.years === 5)?.point?.netWorth ?? 0,
-          at10: proj.milestones.find((m) => m.years === 10)?.point?.netWorth ?? 0,
-          at20: proj.milestones.find((m) => m.years === 20)?.point?.netWorth ?? 0,
+          fiAge: proj.fiAge,
+          atRetirement: proj.atRetirement?.nominal ?? 0,
           at30: proj.milestones.find((m) => m.years === 30)?.point?.netWorth ?? 0,
+          lastsTo: proj.depletionAge,
+          success: mc.successProbability,
         };
       }),
     [items, settings],
   );
 
   return (
-    <div className="rounded-3xl border border-white/[0.08] bg-white/[0.025] p-5 backdrop-blur-sm sm:p-7">
+    <div className="rounded-3xl border border-chart-border bg-chart-muted/40 p-5 backdrop-blur-sm sm:p-7">
       <div className="flex items-center gap-2">
         <Layers className="h-4 w-4 text-[#2CA2FF]" />
-        <h2 className="text-lg font-bold text-white sm:text-xl">Scenario compare</h2>
+        <h2 className="text-lg font-bold text-foreground sm:text-xl">Three futures</h2>
       </div>
-      <p className="mt-1 text-xs text-white/55">
-        Same balance sheet, three different growth assumptions. The gap tells you how much your
-        retirement depends on returns vs. contributions.
+      <p className="mt-1 text-xs text-muted-foreground">
+        Your exact plan run through colder and hotter markets - every asset&rsquo;s return shifted, full simulation each.
       </p>
 
       <div className="mt-5 overflow-x-auto">
-        <div className="min-w-[640px]">
-          <div className="grid grid-cols-[1fr_repeat(4,1fr)] gap-2 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-white/45">
+        <div className="min-w-[720px]">
+          <div className="grid grid-cols-[1.2fr_repeat(5,1fr)] gap-2 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
             <span>Scenario</span>
-            <span className="text-right">+5y</span>
-            <span className="text-right">+10y</span>
-            <span className="text-right">+20y</span>
+            <span className="text-right">Freedom age</span>
+            <span className="text-right">At retirement</span>
             <span className="text-right">+30y</span>
+            <span className="text-right">Lasts to</span>
+            <span className="text-right">Success</span>
           </div>
           {rows.map((r) => (
             <div
               key={r.id}
-              className="grid grid-cols-[1fr_repeat(4,1fr)] items-center gap-2 rounded-xl border border-white/[0.06] bg-white/[0.03] px-2 py-2.5 text-sm text-white"
-              style={{ borderColor: `${r.color}25` }}
+              className="grid grid-cols-[1.2fr_repeat(5,1fr)] items-center gap-2 rounded-xl border bg-chart-muted/60 px-2 py-2.5 text-sm text-foreground"
+              style={{ borderColor: `${r.color}28` }}
             >
               <div className="flex items-center gap-2">
                 <span className="h-2.5 w-2.5 rounded-full" style={{ background: r.color }} />
                 <div>
                   <div className="text-sm font-bold">{r.label}</div>
-                  <div className="text-[10px] text-white/45">{Math.round(r.rate * 100)}% / yr</div>
+                  <div className="text-[10px] text-muted-foreground">{r.note}</div>
                 </div>
               </div>
-              <Cell value={r.at5}  currency={settings.currency} />
-              <Cell value={r.at10} currency={settings.currency} />
-              <Cell value={r.at20} currency={settings.currency} />
-              <Cell value={r.at30} currency={settings.currency} accent={r.color} bold />
+              <Cell text={r.fiAge != null ? `${r.fiAge}` : "—"} />
+              <Cell text={money(r.atRetirement, settings.currency)} />
+              <Cell text={money(r.at30, settings.currency)} />
+              <Cell
+                text={r.lastsTo != null ? `${r.lastsTo}` : "100+"}
+                color={r.lastsTo != null ? "#FF6F69" : "#0BC18D"}
+              />
+              <Cell
+                text={`${Math.round(r.success * 100)}%`}
+                color={r.success >= 0.8 ? "#0BC18D" : r.success >= 0.6 ? "#ECAA0B" : "#FF6F69"}
+                bold
+              />
             </div>
           ))}
         </div>
@@ -83,20 +107,32 @@ export function ScenarioStrip({
   );
 }
 
-function Cell({
-  value, currency, accent, bold,
-}: {
-  value: number;
-  currency: string;
-  accent?: string;
-  bold?: boolean;
-}) {
+function Cell({ text, color, bold }: { text: string; color?: string; bold?: boolean }) {
   return (
     <span
-      className={`text-right tabular-nums ${bold ? "text-base font-black" : "font-semibold text-white/85"}`}
-      style={accent ? { color: accent } : undefined}
+      className={`text-right tabular-nums ${bold ? "text-base font-black" : "font-semibold"}`}
+      style={color ? { color } : undefined}
     >
-      {formatCurrencyInteger(value, currency)}
+      {text}
     </span>
   );
+}
+
+function money(v: number, currency: string): string {
+  const abs = Math.abs(v);
+  const sign = v < 0 ? "-" : "";
+  let s: string;
+  if (abs >= 1_000_000_000) s = `${(abs / 1_000_000_000).toFixed(1)}B`;
+  else if (abs >= 1_000_000) s = `${(abs / 1_000_000).toFixed(abs >= 10_000_000 ? 1 : 2)}M`;
+  else if (abs >= 1_000) s = `${Math.round(abs / 1_000)}K`;
+  else s = String(Math.round(abs));
+  try {
+    const sym =
+      new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 0 })
+        .formatToParts(0)
+        .find((p) => p.type === "currency")?.value ?? "$";
+    return `${sign}${sym}${s}`;
+  } catch {
+    return `${sign}$${s}`;
+  }
 }

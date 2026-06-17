@@ -16,7 +16,7 @@ export function DemoBanner() {
               Live demo · Sterling family
             </p>
             <p className="hidden truncate text-[10px] text-white/60 sm:block">
-              Click anything. Edit anything. Nothing saves — refresh resets the demo to its baseline.
+              Click anything. Edit anything. Nothing saves - refresh resets the demo to its baseline.
             </p>
           </div>
         </div>

@@ -8,6 +8,7 @@ import { ai, GEMINI_MODEL } from "@/lib/gemini";
 import { logAiCost } from "@/lib/ai-cost";
 import { logServerError } from "@/lib/safe-error";
 import { aiResponseSchema } from "@/lib/validations/ingest";
+import { ef, df } from "@/lib/crypto/encryption";
 import { eq, and, asc, desc, sql } from "drizzle-orm";
 
 /**
@@ -582,9 +583,9 @@ export async function processStatement(statementId: number) {
   if (!stmt || stmt.status !== "processing") return;
 
   const userId = stmt.userId;
-  const payload = stmt.fileData;
+  const payload = df(stmt.fileData);
   if (!payload) {
-    await db.update(statements).set({ status: "failed", aiError: "No file data", aiProcessedAt: new Date() }).where(eq(statements.id, statementId));
+    await db.update(statements).set({ status: "failed", aiError: ef("No file data"), aiProcessedAt: new Date() }).where(eq(statements.id, statementId));
     await markUploadLogFailed(userId, stmt.fileName, stmt.fileSize, stmt.fileHash);
     return;
   }
@@ -661,7 +662,7 @@ export async function processStatement(statementId: number) {
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : "AI call failed";
-    await db.update(statements).set({ status: "failed", aiError: msg, aiProcessedAt: new Date() }).where(eq(statements.id, statementId));
+    await db.update(statements).set({ status: "failed", aiError: ef(msg), aiProcessedAt: new Date() }).where(eq(statements.id, statementId));
     await markUploadLogFailed(userId, stmt.fileName, stmt.fileSize, stmt.fileHash);
     logServerError(`process-statement/${statementId}`, err);
     return;
@@ -673,7 +674,7 @@ export async function processStatement(statementId: number) {
   try {
     aiParsed = JSON.parse(aiText);
   } catch {
-    await db.update(statements).set({ status: "failed", aiError: "AI returned invalid JSON", aiProcessedAt: new Date() }).where(eq(statements.id, statementId));
+    await db.update(statements).set({ status: "failed", aiError: ef("AI returned invalid JSON"), aiProcessedAt: new Date() }).where(eq(statements.id, statementId));
     await markUploadLogFailed(userId, stmt.fileName, stmt.fileSize, stmt.fileHash);
     return;
   }
@@ -687,7 +688,7 @@ export async function processStatement(statementId: number) {
         .join("; ") || "Schema validation failed";
     await db
       .update(statements)
-      .set({ status: "failed", aiError: `Schema validation failed (${brief})`, aiProcessedAt: new Date() })
+      .set({ status: "failed", aiError: ef(`Schema validation failed (${brief})`), aiProcessedAt: new Date() })
       .where(eq(statements.id, statementId));
     await markUploadLogFailed(userId, stmt.fileName, stmt.fileSize, stmt.fileHash);
     return;
@@ -719,7 +720,7 @@ export async function processStatement(statementId: number) {
   const maskedFromAi = lastFourDigits ? `••••${lastFourDigits}` : undefined;
   const cardNetworkFromAi = meta.card_network ?? undefined;
 
-  const [currencyAccounts, allCategories] = await Promise.all([
+  const [currencyAccountsRaw, allCategories] = await Promise.all([
     resilientQuery(() =>
       db.select({
         id: accounts.id,
@@ -745,6 +746,12 @@ export async function processStatement(statementId: number) {
     ),
   ]);
 
+  // institution_name is encrypted at rest; decrypt before account matching.
+  const currencyAccounts = currencyAccountsRaw.map((a) => ({
+    ...a,
+    institutionName: df(a.institutionName),
+  }));
+
   const picked = pickAccountForStatement(currencyAccounts, meta, lastFourDigits);
 
   let accountId: string;
@@ -754,7 +761,7 @@ export async function processStatement(statementId: number) {
     if (maskedFromAi && !picked.maskedNumber) updates.maskedNumber = maskedFromAi;
     if (cardNetworkFromAi && !picked.cardNetwork) updates.cardNetwork = cardNetworkFromAi;
     if (meta.institution_name && !picked.institutionName) {
-      updates.institutionName = meta.institution_name;
+      updates.institutionName = ef(meta.institution_name) ?? meta.institution_name;
     }
     if (Object.keys(updates).length > 0) {
       db.update(accounts).set(updates).where(eq(accounts.id, accountId)).catch(() => {});
@@ -783,12 +790,12 @@ export async function processStatement(statementId: number) {
         const [newAccount] = await resilientQuery(() =>
           db.insert(accounts).values({
             userId,
-            accountName: meta.institution_name ?? `${meta.primary_currency} Account`,
+            accountName: ef(meta.institution_name ?? `${meta.primary_currency} Account`) ?? `${meta.primary_currency} Account`,
             accountType: meta.account_type,
             cardNetwork: cardNetworkFromAi,
             primaryCurrency: meta.primary_currency,
             countryIso: meta.country_iso ?? undefined,
-            institutionName: meta.institution_name ?? undefined,
+            institutionName: ef(meta.institution_name ?? null) ?? undefined,
             maskedNumber: maskedFromAi,
           }).returning({ id: accounts.id }),
         );
@@ -1010,7 +1017,7 @@ export async function processStatement(statementId: number) {
   if (extractedCount === 0) {
     await db.update(statements).set({
       status: "failed",
-      aiError: "No transactions extracted from this statement",
+      aiError: ef("No transactions extracted from this statement"),
       aiProcessedAt: new Date(),
     }).where(eq(statements.id, statementId));
     await markUploadLogFailed(userId, stmt.fileName, stmt.fileSize, stmt.fileHash);
@@ -1020,7 +1027,7 @@ export async function processStatement(statementId: number) {
   if (imported === 0 && duplicates === 0) {
     await db.update(statements).set({
       status: "failed",
-      aiError: "Could not import any transactions from this statement",
+      aiError: ef("Could not import any transactions from this statement"),
       aiProcessedAt: new Date(),
     }).where(eq(statements.id, statementId));
     await markUploadLogFailed(userId, stmt.fileName, stmt.fileSize, stmt.fileHash);
@@ -1039,7 +1046,7 @@ export async function processStatement(statementId: number) {
     const truncated = msg.length > 2000 ? `${msg.slice(0, 2000)}…` : msg;
     await db
       .update(statements)
-      .set({ status: "failed", aiError: truncated, aiProcessedAt: new Date() })
+      .set({ status: "failed", aiError: ef(truncated), aiProcessedAt: new Date() })
       .where(eq(statements.id, statementId));
     await markUploadLogFailed(userId, stmt.fileName, stmt.fileSize, stmt.fileHash);
     logServerError(`process-statement/${statementId}`, persistErr);

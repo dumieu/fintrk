@@ -9,6 +9,7 @@
 
 import { NextResponse } from "next/server";
 import { neon } from "@neondatabase/serverless";
+import { df, dfJson } from "@/lib/crypto/encryption";
 
 const sql = neon(process.env.DATABASE_URL!);
 const DEMO = "demo";
@@ -94,23 +95,39 @@ export async function GET() {
       `,
     ]);
 
+    // Decrypt the encrypted-at-rest columns. Demo rows are plaintext today so
+    // df() is a passthrough, but this keeps the demo correct if the dataset is
+    // ever re-seeded with encryption enabled.
+    const decAccounts = accounts.map((a) => ({
+      ...a,
+      account_name: df(a.account_name),
+      institution_name: df(a.institution_name),
+    }));
+    const decTransactions = transactions.map((t) => ({ ...t, note: df(t.note) }));
+    const decInsights = insights.map((i) => ({
+      ...i,
+      title: df(i.title),
+      body: df(i.body),
+      metadata: dfJson(i.metadata),
+    }));
+
     return NextResponse.json(
       {
         family: {
           name: "The Sterling Family",
           city: "Austin, TX",
-          adults: ["Marcus Sterling, 41 — Engineering Manager", "Elena Sterling, 39 — Marketing Director"],
-          kids: ["Ava, 12", "Noah, 8"],
-          tagline: "Two incomes, one mortgage, two college funds — three years of real life.",
+          adults: ["Marcus Sterling, 43 - Engineering Manager", "Elena Sterling, 41 - Marketing Director"],
+          kids: ["Ava, 14", "Noah, 11", "Mia, 7"],
+          tagline: "Two incomes, one mortgage, three kids, three college funds - five years of real life.",
           homeCurrency: "USD",
         },
-        accounts,
+        accounts: decAccounts,
         categories,
-        transactions,
+        transactions: decTransactions,
         recurring,
         goals,
         budgets,
-        insights,
+        insights: decInsights,
         statements,
         generatedAt: new Date().toISOString(),
       },

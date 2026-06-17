@@ -289,14 +289,14 @@ export function CategoryTransactionsTable({
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       className={cn(
-        "overflow-hidden rounded-2xl border border-white/[0.10] bg-white/[0.04] text-white shadow-[0_30px_80px_-20px_rgba(0,0,0,0.55)]",
+        "overflow-hidden rounded-2xl border border-chart-border bg-chart-surface text-card-foreground shadow-chart shadow-[0_30px_80px_-20px_rgba(0,0,0,0.55)]",
         fillHeight && "flex min-h-0 flex-1 flex-col",
       )}
     >
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-white/10 bg-[#121212]/80 px-4 py-3 backdrop-blur-md">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-chart-border bg-chart-surface/95 px-4 py-3 backdrop-blur-md">
         <div>
           <p className="text-sm font-semibold text-white">{title}</p>
-          <p className="mt-0.5 text-[11px] text-white/45">{subtitle}</p>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">{subtitle}</p>
         </div>
         <div className="flex items-center gap-2">
           {selectedIds.size > 0 ? (
@@ -309,7 +309,7 @@ export function CategoryTransactionsTable({
               {" "}· Delete
             </button>
           ) : null}
-          <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider text-white/55">
+          <span className="rounded-full border border-chart-border bg-chart-muted px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
             {loading ? "Loading" : `${rows.length.toLocaleString()} shown`}
           </span>
         </div>
@@ -323,12 +323,12 @@ export function CategoryTransactionsTable({
           )}
         >
           <Loader2 className="h-6 w-6 animate-spin text-[#0BC18D]" />
-          <span className="text-xs text-white/50">Loading transactions…</span>
+          <span className="text-xs text-muted-foreground">Loading transactions…</span>
         </div>
       ) : rows.length === 0 ? (
         <div
           className={cn(
-            "flex items-center justify-center px-4 py-10 text-center text-sm text-white/55",
+            "flex items-center justify-center px-4 py-10 text-center text-sm text-muted-foreground",
             fillHeight ? "min-h-0 flex-1" : "min-h-40",
           )}
         >
@@ -341,7 +341,7 @@ export function CategoryTransactionsTable({
             fillHeight ? "min-h-0 flex-1" : "max-h-[520px]",
           )}
         >
-          <div className="sticky top-0 z-10 hidden min-w-[1040px] grid-cols-[6.5rem_minmax(0,1.6fr)_7rem_minmax(0,12rem)_8rem_5rem_minmax(0,1fr)_4rem] gap-2 border-b border-white/10 bg-[#121212]/95 px-4 py-3 text-center text-[10px] font-medium tracking-wide text-white/50 backdrop-blur-md sm:grid">
+          <div className="sticky top-0 z-10 hidden min-w-[1040px] grid-cols-[6.5rem_minmax(0,1.6fr)_7rem_minmax(0,12rem)_8rem_5rem_minmax(0,1fr)_4rem] gap-2 border-b border-chart-border bg-chart-surface/98 px-4 py-3 text-center text-[10px] font-medium tracking-wide text-muted-foreground backdrop-blur-md sm:grid">
             <SortableCategoryHeader label="Date" sortKey="postedDate" activeSort={sort} onSort={toggleSort} />
             <SortableCategoryHeader label="Description" sortKey="description" activeSort={sort} onSort={toggleSort} />
             <SortableCategoryHeader label="Label" sortKey="label" activeSort={sort} onSort={toggleSort} />
@@ -365,7 +365,7 @@ export function CategoryTransactionsTable({
                     txn.warningFlag && "border-dotted border-[#ECAA0B]/80 bg-[#ECAA0B]/[0.035] shadow-[inset_0_0_0_1px_rgba(236,170,11,0.12)]",
                   )}
                 >
-                  <span className="text-center text-xs tabular-nums text-white/65">
+                  <span className="text-center text-xs tabular-nums text-muted-foreground">
                     {formatDate(txn.postedDate, "ddMmmYy")}
                   </span>
                   <div className="min-w-0">
@@ -406,7 +406,7 @@ export function CategoryTransactionsTable({
                         "whitespace-nowrap text-xs font-bold tabular-nums",
                         isPositive && "text-[#A7F3D0]",
                         isNegative && "text-[#FCA5A5]",
-                        !isPositive && !isNegative && "text-white/70",
+                        !isPositive && !isNegative && "text-muted-foreground",
                       )}
                     >
                       {isPositive ? "+" : isNegative ? "-" : ""}
@@ -450,7 +450,7 @@ export function CategoryTransactionsTable({
                         })
                       }
                       aria-label={`Select transaction ${txn.merchantName ?? txn.rawDescription}`}
-                      className="h-3.5 w-3.5 cursor-pointer rounded border-white/35 bg-white/[0.06] text-[#0BC18D] focus:ring-1 focus:ring-[#0BC18D]/50"
+                      className="h-3.5 w-3.5 cursor-pointer rounded border-chart-border bg-chart-muted text-[#0BC18D] focus:ring-1 focus:ring-[#0BC18D]/50"
                     />
                     <button
                       type="button"
@@ -467,7 +467,7 @@ export function CategoryTransactionsTable({
                         "inline-flex h-6 w-6 items-center justify-center rounded-md transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#ECAA0B]/70",
                         txn.warningFlag
                           ? "bg-[#ECAA0B]/15 text-[#ECAA0B] shadow-[0_0_14px_rgba(236,170,11,0.45)]"
-                          : "text-white/20 hover:bg-[#ECAA0B]/10 hover:text-[#ECAA0B]/75",
+                          : "text-muted-foreground/50 hover:bg-[#ECAA0B]/10 hover:text-[#ECAA0B]/75",
                       )}
                       title={txn.warningFlag ? "Warning on — click to turn off" : "Warning off — click to turn on"}
                     >
@@ -514,7 +514,7 @@ function CategorySourceSubtitle({ txn }: { txn: CategoryTransaction }) {
     showLogo || masked ? (
       <span key="masked" className="inline-flex items-center gap-1 align-middle">
         {showLogo ? <CardNetworkLogo network={network} className="relative top-px" /> : null}
-        {masked ? <span className="font-mono tabular-nums tracking-tight text-white/55">{masked}</span> : null}
+        {masked ? <span className="font-mono tabular-nums tracking-tight text-muted-foreground">{masked}</span> : null}
       </span>
     ) : null,
     bank ? <span key="bank">{bank}</span> : null,
@@ -522,7 +522,7 @@ function CategorySourceSubtitle({ txn }: { txn: CategoryTransaction }) {
   if (segments.length === 0) return null;
   return (
     <p className="mt-0.5 min-w-0 max-w-full text-[9px] leading-snug" title={categorySourceSubtitleTitle(txn)}>
-      <span className="block min-w-0 truncate text-white/45">
+      <span className="block min-w-0 truncate text-muted-foreground">
         {segments.map((node, i) => (
           <span key={i}>
             {i > 0 ? <span className="inline-block shrink-0" aria-hidden>{TRANSACTION_SUBTITLE_SEPARATOR}</span> : null}
@@ -567,7 +567,7 @@ function CategoryMerchantCell({
               setEditing(false);
             }
           }}
-          className="w-full min-w-0 rounded-md border border-white/20 bg-white/[0.06] px-2 py-1 text-xs font-medium text-white/90 outline-none focus:border-[#0BC18D]/60"
+          className="w-full min-w-0 rounded-md border border-chart-border bg-chart-muted px-2 py-1 text-xs font-medium text-foreground outline-none focus:border-[#0BC18D]/60"
           aria-label="Merchant name"
         />
         <ScopeToggle
@@ -590,12 +590,12 @@ function CategoryMerchantCell({
         setEditing(true);
         setApplyAll(true);
       }}
-      className="min-w-0 w-full rounded-md py-0.5 pr-1 text-left transition hover:bg-white/[0.04] hover:ring-1 hover:ring-white/15"
+      className="min-w-0 w-full rounded-md py-0.5 pr-1 text-left transition hover:bg-chart-muted hover:ring-1 hover:ring-chart-border"
     >
-      <p className="truncate text-xs font-medium text-white/90">{txn.merchantName ?? txn.rawDescription}</p>
+      <p className="truncate text-xs font-medium text-foreground">{txn.merchantName ?? txn.rawDescription}</p>
       <CategorySourceSubtitle txn={txn} />
       {categoryReferenceDisplay(txn) ? (
-        <p className="mt-0.5 truncate text-[9px] leading-snug text-white/45" title={txn.referenceId ?? undefined}>
+        <p className="mt-0.5 truncate text-[9px] leading-snug text-muted-foreground" title={txn.referenceId ?? undefined}>
           {categoryReferenceDisplay(txn)}
         </p>
       ) : null}
@@ -653,10 +653,10 @@ function CategoryLabelCell({
               setEditing(false);
             }
           }}
-          className="w-full rounded-md border border-white/20 bg-white/[0.06] px-2 py-1 font-mono text-[11px] text-white/90 outline-none focus:border-[#0BC18D]/60"
+          className="w-full rounded-md border border-chart-border bg-chart-muted px-2 py-1 font-mono text-[11px] text-foreground outline-none focus:border-[#0BC18D]/60"
           placeholder="Label..."
         />
-        <div data-category-label-editor className="absolute left-0 top-[calc(100%+4px)] z-50 w-64 rounded-lg border border-white/15 bg-[#161616] p-2 shadow-2xl">
+        <div data-category-label-editor className="absolute left-0 top-[calc(100%+4px)] z-50 w-64 rounded-lg border border-chart-border bg-popover p-2 shadow-2xl">
           <ScopeToggle
             label="Update for:"
             options={[
@@ -667,12 +667,12 @@ function CategoryLabelCell({
             onChange={(next) => setScope(next as "this" | "merchant")}
           />
           {suggestions.length > 0 ? (
-            <div className="mt-2 border-t border-white/10 pt-1.5">
+            <div className="mt-2 border-t border-chart-border pt-1.5">
               {suggestions.map((label) => (
                 <button
                   key={label}
                   type="button"
-                  className="block w-full rounded-md px-2 py-1.5 text-left font-mono text-[11px] text-white/85 hover:bg-white/[0.08]"
+                  className="block w-full rounded-md px-2 py-1.5 text-left font-mono text-[11px] text-foreground hover:bg-chart-hover"
                   onMouseDown={(event) => {
                     event.preventDefault();
                     save(label);
@@ -694,7 +694,7 @@ function CategoryLabelCell({
         event.stopPropagation();
         setEditing(true);
       }}
-      className="w-full truncate rounded-md bg-white/[0.04] px-2 py-1.5 text-center font-mono text-[11px] text-white/70 transition hover:bg-white/[0.07]"
+      className="w-full truncate rounded-md bg-chart-muted px-2 py-1.5 text-center font-mono text-[11px] text-muted-foreground transition hover:bg-chart-hover"
       title={hasMerchant ? "Default: update all with this merchant name" : "This transaction has no merchant name"}
     >
       {txn.label?.trim() || "Label"}
@@ -736,7 +736,7 @@ function CategoryNoteCell({
             save();
           }}
           rows={2}
-          className="w-full min-h-[2.25rem] resize-y rounded-md border border-white/20 bg-white/[0.06] px-1.5 py-1 text-[11px] text-white/90 outline-none focus:border-[#0BC18D]/60"
+          className="w-full min-h-[2.25rem] resize-y rounded-md border border-chart-border bg-chart-muted px-1.5 py-1 text-[11px] text-foreground outline-none focus:border-[#0BC18D]/60"
           placeholder="Note..."
         />
         <div data-category-note-scope>
@@ -760,7 +760,7 @@ function CategoryNoteCell({
         event.stopPropagation();
         setEditing(true);
       }}
-      className="w-full rounded-md bg-white/[0.04] px-2 py-1.5 text-left text-[11px] leading-snug text-white/60 transition hover:bg-white/[0.07]"
+      className="w-full rounded-md bg-chart-muted px-2 py-1.5 text-left text-[11px] leading-snug text-muted-foreground transition hover:bg-chart-hover"
     >
       {txn.note?.trim() ? <span className="line-clamp-2">{txn.note}</span> : "Note"}
     </button>
@@ -799,30 +799,30 @@ function CategoryCategoryCell({
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className="flex min-w-0 w-full items-center gap-2 rounded-md py-0.5 pr-1 text-left transition hover:bg-white/[0.04] hover:ring-1 hover:ring-white/15"
+        className="flex min-w-0 w-full items-center gap-2 rounded-md py-0.5 pr-1 text-left transition hover:bg-chart-muted hover:ring-1 hover:ring-chart-border"
       >
         <TransactionCategoryIcon categoryName={txn.categoryName} subcategoryName={txn.subcategoryName} size="md" />
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[12px] text-white/75">{txn.categoryName ?? "Uncategorized"}</span>
-          {txn.subcategoryName ? <span className="block truncate text-[11px] text-white/45">{txn.subcategoryName}</span> : null}
+          <span className="block truncate text-[12px] text-foreground">{txn.categoryName ?? "Uncategorized"}</span>
+          {txn.subcategoryName ? <span className="block truncate text-[11px] text-muted-foreground">{txn.subcategoryName}</span> : null}
         </span>
-        <ChevronDown className={cn("h-3 w-3 shrink-0 text-white/25 transition-transform", open && "rotate-180 text-[#0BC18D]")} />
+        <ChevronDown className={cn("h-3 w-3 shrink-0 text-muted-foreground/60 transition-transform", open && "rotate-180 text-[#0BC18D]")} />
       </button>
       {open ? (
-        <div className="absolute left-0 top-[calc(100%+4px)] z-50 flex max-h-[360px] w-[300px] flex-col overflow-hidden rounded-xl border border-white/15 bg-[#161616]/98 shadow-2xl backdrop-blur-lg">
+        <div className="absolute left-0 top-[calc(100%+4px)] z-50 flex max-h-[360px] w-[300px] flex-col overflow-hidden rounded-xl border border-chart-border bg-popover shadow-2xl backdrop-blur-lg">
           <div className="px-2.5 pt-2 pb-1.5">
             <div className="relative">
-              <Search className="absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-white/30" />
+              <Search className="absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground/70" />
               <input
                 autoFocus
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Search categories..."
-                className="w-full rounded-md border border-white/10 bg-white/[0.04] py-1.5 pl-7 pr-2 text-[11px] text-white/90 outline-none focus:border-[#0BC18D]/40"
+                className="w-full rounded-md border border-chart-border bg-chart-muted py-1.5 pl-7 pr-2 text-[11px] text-foreground outline-none focus:border-[#0BC18D]/40"
               />
             </div>
           </div>
-          <div className="border-b border-white/10 px-2.5 pb-2">
+          <div className="border-b border-chart-border px-2.5 pb-2">
             <ScopeToggle
               label="Apply to:"
               options={[
@@ -847,7 +847,7 @@ function CategoryCategoryCell({
                   }}
                   className={cn(
                     "flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] font-semibold",
-                    cat.subcategories?.length ? "cursor-default text-white/40" : "text-white/70 hover:bg-white/[0.06]",
+                    cat.subcategories?.length ? "cursor-default text-muted-foreground" : "text-muted-foreground hover:bg-chart-muted",
                   )}
                 >
                   {cat.name}
@@ -860,7 +860,7 @@ function CategoryCategoryCell({
                       onSave(txn, sub.id, effectiveScope);
                       setOpen(false);
                     }}
-                    className="flex w-full items-center gap-2 py-1.5 pl-7 pr-3 text-left text-[11px] text-white/60 transition hover:bg-white/[0.06] hover:text-white/85"
+                    className="flex w-full items-center gap-2 py-1.5 pl-7 pr-3 text-left text-[11px] text-muted-foreground transition hover:bg-chart-muted hover:text-foreground"
                   >
                     <span className="truncate">{sub.name}</span>
                     {txn.categoryId === sub.id ? <span className="ml-auto text-[9px] text-[#0BC18D]/70">current</span> : null}
@@ -890,14 +890,14 @@ function CategoryFlagsCell({
   const countryLine = name ? `${name}${countryIso ? ` (${countryIso.toUpperCase()})` : ""}` : null;
   return (
     <div className="group relative flex items-center justify-center gap-1.5 px-1 py-0.5">
-      {flag ? <span className="text-[1.05rem] leading-none">{flag}</span> : <span className="text-white/35">-</span>}
+      {flag ? <span className="text-[1.05rem] leading-none">{flag}</span> : <span className="text-muted-foreground/80">-</span>}
       {isRecurring ? <Repeat className="h-3 w-3 text-[#AD74FF]" aria-hidden /> : null}
       {hasFx ? <Globe className="h-3 w-3 text-[#AD74FF]/70" aria-hidden /> : null}
       <div className="pointer-events-none absolute bottom-[calc(100%+8px)] left-1/2 z-50 w-max max-w-[240px] -translate-x-1/2 opacity-0 transition-opacity group-hover:opacity-100">
-        <div className="rounded-lg border border-white/15 bg-[#1a1a1a]/98 px-2.5 py-2 text-left text-[10px] leading-snug text-white/90 shadow-xl backdrop-blur-md">
+        <div className="rounded-lg border border-chart-border bg-popover px-2.5 py-2 text-left text-[10px] leading-snug text-foreground shadow-xl backdrop-blur-md">
           {countryLine ? <p className="font-medium text-white">{countryLine}</p> : null}
-          <p className={cn("text-white/75", countryLine && "mt-1")}>
-            <span className="text-white/50">Type: </span>
+          <p className={cn("text-foreground", countryLine && "mt-1")}>
+            <span className="text-muted-foreground">Type: </span>
             {typeLine}
           </p>
         </div>
@@ -919,8 +919,8 @@ function ScopeToggle({
 }) {
   return (
     <div className="flex items-center gap-1.5">
-      <span className="shrink-0 text-[9px] text-white/35">{label}</span>
-      <div className="inline-flex min-h-[22px] flex-wrap rounded-full border border-white/10 bg-white/[0.04] p-px text-[9px] font-medium">
+      <span className="shrink-0 text-[9px] text-muted-foreground/80">{label}</span>
+      <div className="inline-flex min-h-[22px] flex-wrap rounded-full border border-chart-border bg-chart-muted p-px text-[9px] font-medium">
         {options.map((option) => (
           <button
             key={option.id}
@@ -933,10 +933,10 @@ function ScopeToggle({
             className={cn(
               "rounded-full px-2 transition-colors",
               option.disabled
-                ? "cursor-not-allowed text-white/15"
+                ? "cursor-not-allowed text-muted-foreground/40"
                 : value === option.id
                   ? "cursor-pointer bg-[#0BC18D]/20 text-[#0BC18D]"
-                  : "cursor-pointer text-white/40 hover:text-white/65",
+                  : "cursor-pointer text-muted-foreground hover:text-muted-foreground",
             )}
           >
             {option.label}
@@ -964,8 +964,8 @@ function SortableCategoryHeader({
       type="button"
       onClick={() => onSort(sortKey)}
       className={cn(
-        "flex min-w-0 items-center justify-center gap-1 text-center text-[10px] font-medium tracking-wide transition-colors hover:text-white/75",
-        active ? "text-white/85" : "text-white/50",
+        "flex min-w-0 items-center justify-center gap-1 text-center text-[10px] font-medium tracking-wide transition-colors hover:text-foreground",
+        active ? "text-foreground" : "text-muted-foreground",
       )}
       aria-sort={active ? (activeSort.dir === "asc" ? "ascending" : "descending") : "none"}
       title={`Sort by ${label}`}

@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { chartChipClass, chartPanelClass } from "@/lib/chart-ui";
+import { cn } from "@/lib/utils";
 
 const LEGEND_ITEMS = [
   { color: "#0BC18D", label: "Inflow" },
@@ -16,7 +18,7 @@ function CashflowLegendContent() {
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         {LEGEND_ITEMS.map((item) => (
-          <span key={item.label} className="inline-flex items-center gap-1.5 text-[11px] text-white/70">
+          <span key={item.label} className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
             <span
               className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
               style={{ background: item.color, boxShadow: `0 0 10px ${item.color}88` }}
@@ -26,7 +28,7 @@ function CashflowLegendContent() {
           </span>
         ))}
       </div>
-      <p className="border-t border-white/[0.08] pt-2 text-[10px] uppercase tracking-wider text-white/40">
+      <p className="border-t border-chart-border pt-2 text-[10px] uppercase tracking-wider text-muted-foreground">
         Hover a node or ribbon to trace its path
       </p>
     </div>
@@ -61,7 +63,7 @@ export function CashflowLegendHelpButton() {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="grid h-4 w-4 place-items-center rounded-full border border-white/20 bg-white/[0.06] text-[10px] font-bold leading-none text-white/45 transition-colors hover:border-white/35 hover:bg-white/[0.10] hover:text-white/80"
+        className={cn(chartChipClass, "grid h-4 w-4 place-items-center rounded-full text-[10px] font-bold leading-none")}
         aria-label={open ? "Hide diagram legend" : "Show diagram legend"}
         aria-expanded={open}
         aria-haspopup="dialog"
@@ -72,7 +74,8 @@ export function CashflowLegendHelpButton() {
         <div
           role="dialog"
           aria-label="Cashflow diagram legend"
-          className="absolute left-0 top-[calc(100%+6px)] z-[120] w-[min(420px,calc(100vw-2rem))] rounded-xl border border-white/[0.12] bg-[#111111]/[0.98] p-3 shadow-[0_16px_48px_-8px_rgba(0,0,0,0.85),inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-xl"
+          className={cn(chartPanelClass, "absolute left-0 top-[calc(100%+6px)] z-[120] w-[min(420px,calc(100vw-2rem))] p-3")}
+          style={{ boxShadow: "var(--chart-tooltip-shadow)" }}
         >
           <CashflowLegendContent />
         </div>

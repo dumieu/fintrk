@@ -5,6 +5,7 @@ import { accounts, transactions, fxRates } from "@/lib/db/schema";
 import { excludeCardPaymentsSql } from "@/lib/db/excluded-transactions";
 import { eq, and, sql, desc } from "drizzle-orm";
 import { logServerError } from "@/lib/safe-error";
+import { df } from "@/lib/crypto/encryption";
 
 export const dynamic = "force-dynamic";
 
@@ -86,8 +87,8 @@ export async function GET() {
 
       return {
         id: acct.id,
-        name: acct.accountName,
-        institution: acct.institutionName,
+        name: df(acct.accountName),
+        institution: df(acct.institutionName),
         type: acct.accountType,
         nativeBalance,
         nativeCurrency: currency,

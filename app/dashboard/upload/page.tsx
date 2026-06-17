@@ -38,14 +38,14 @@ export default function UploadPage() {
           ].map((feature) => (
             <div
               key={feature.title}
-              className="rounded-xl border border-white/10 bg-white/[0.04] p-4"
+              className="rounded-xl border border-chart-border bg-chart-muted p-4"
             >
               <div
                 className="w-2 h-2 rounded-full mb-3"
                 style={{ backgroundColor: feature.color }}
               />
-              <h3 className="text-sm font-semibold text-white/90 mb-1">{feature.title}</h3>
-              <p className="text-[11px] text-white/60 leading-relaxed">{feature.desc}</p>
+              <h3 className="text-sm font-semibold text-foreground mb-1">{feature.title}</h3>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">{feature.desc}</p>
             </div>
           ))}
         </motion.div>

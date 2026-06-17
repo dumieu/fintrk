@@ -48,6 +48,34 @@ export function analyticsCategoryColor(rollupName: string): string {
 }
 
 /**
+ * Chart-facing category color — slightly darker and richer on light surfaces
+ * so stacked bars, legends, and Sankey nodes stay legible on cream/white.
+ */
+export function analyticsCategoryColorForSurface(
+  rollupName: string,
+  surface: "light" | "dark" = typeof document !== "undefined" &&
+  document.documentElement.classList.contains("dark")
+    ? "dark"
+    : "light",
+): string {
+  const base = analyticsCategoryColor(rollupName);
+  if (surface === "dark") return base;
+  if (base.startsWith("hsl")) {
+    return base.replace(/(\d+(?:\.\d+)?)%\)/, (_, l) => {
+      const next = parseFloat(l) - 12;
+      return `${Math.max(32, Math.min(58, next))}%)`;
+    });
+  }
+  const hex = base.replace("#", "");
+  if (hex.length !== 6) return base;
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+  const darken = (c: number) => Math.round(c * 0.82);
+  return `#${darken(r).toString(16).padStart(2, "0")}${darken(g).toString(16).padStart(2, "0")}${darken(b).toString(16).padStart(2, "0")}`;
+}
+
+/**
  * Color for a subcategory row in merchant pills and similar UI.
  * Subcategories inherit their parent rollup color when a parent exists.
  */
@@ -162,17 +190,30 @@ export function analyticsCategoryGradientId(name: string): string {
   return `fintrk-cat-${slugCategory(name)}`;
 }
 
-/** Lighter stop for vertical bar gradients on dark charts. */
-export function analyticsCategoryGradientTop(base: string): string {
+/** Lighter stop for vertical bar gradients. On dark surfaces mixes toward white; on light toward black. */
+export function analyticsCategoryGradientTop(
+  base: string,
+  surface: "light" | "dark" = typeof document !== "undefined" &&
+  document.documentElement.classList.contains("dark")
+    ? "dark"
+    : "light",
+): string {
+  const mixTarget = surface === "dark" ? 255 : 0;
+  const mixAmount = surface === "dark" ? 0.28 : 0.06;
   if (base.startsWith("hsl")) {
-    return base.replace(/(\d+(?:\.\d+)?)%\)/, (_, l) => `${Math.min(72, parseFloat(l) + 14)}%)`);
+    const delta = surface === "dark" ? 14 : -8;
+    return base.replace(/(\d+(?:\.\d+)?)%\)/, (_, l) => {
+      const next = parseFloat(l) + delta;
+      return `${Math.max(18, Math.min(78, next))}%)`;
+    });
   }
   const hex = base.replace("#", "");
   if (hex.length !== 6) return base;
   const r = parseInt(hex.slice(0, 2), 16);
   const g = parseInt(hex.slice(2, 4), 16);
   const b = parseInt(hex.slice(4, 6), 16);
-  const mix = (c: number) => Math.min(255, Math.round(c + (255 - c) * 0.28));
+  const mix = (c: number) =>
+    Math.round(c + (mixTarget - c) * mixAmount);
   return `#${mix(r).toString(16).padStart(2, "0")}${mix(g).toString(16).padStart(2, "0")}${mix(b).toString(16).padStart(2, "0")}`;
 }
 

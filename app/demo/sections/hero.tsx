@@ -29,10 +29,10 @@ export function DemoHero({ family }: { family: DemoFamily }) {
                 <MapPin className="h-3 w-3 text-[#2CA2FF]" /> {family.city}
               </span>
               <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1">
-                <Users className="h-3 w-3 text-[#AD74FF]" /> 2 adults · 2 kids
+                <Users className="h-3 w-3 text-[#AD74FF]" /> 2 adults · 3 kids
               </span>
               <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#0BC18D]" /> 3 years of history · 4,729 transactions
+                <span className="h-1.5 w-1.5 rounded-full bg-[#0BC18D]" /> 5 years of history · 12,900+ transactions
               </span>
             </div>
           </div>

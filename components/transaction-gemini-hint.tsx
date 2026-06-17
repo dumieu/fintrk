@@ -46,8 +46,8 @@ export function TransactionGeminiHintButton({ txn }: { txn: GeminiMerchantQueryT
       onClick={onClick}
       className={cn(
         "group/gemini flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-transparent",
-        "text-white/40 outline-none transition-[color,background,border-color,box-shadow] duration-200",
-        "hover:bg-white/[0.06] hover:border-white/10 hover:text-[#0BC18D] hover:shadow-[0_0_20px_-8px_rgba(11,193,141,0.45)]",
+        "text-muted-foreground outline-none transition-[color,background,border-color,box-shadow] duration-200",
+        "hover:bg-chart-muted hover:border-chart-border hover:text-[#0BC18D] hover:shadow-[0_0_20px_-8px_rgba(11,193,141,0.45)]",
         "focus-visible:ring-2 focus-visible:ring-[#0BC18D]/40 focus-visible:ring-offset-2 focus-visible:ring-offset-[#121212]",
         "active:scale-95",
       )}

@@ -90,11 +90,11 @@ function buildProviders(appName: string): Provider[] {
 }
 
 const ACCESS_ITEMS = [
-  { icon: Landmark, label: "Accounts", color: GREEN },
+  { icon: Landmark, label: "Accounts & net worth", color: GREEN },
   { icon: ArrowLeftRight, label: "Transactions", color: BLUE },
-  { icon: Waves, label: "Cashflow", color: "#ECAA0B" },
-  { icon: BarChart3, label: "Spending breakdown", color: "#AD74FF" },
-  { icon: UserRound, label: "Financial profile", color: "#FF6F69" },
+  { icon: Waves, label: "Cashflow & Sankey", color: "#ECAA0B" },
+  { icon: BarChart3, label: "Spending & trends", color: "#AD74FF" },
+  { icon: UserRound, label: "Recurring charges", color: "#FF6F69" },
 ];
 
 export default function ConnectAiPage() {

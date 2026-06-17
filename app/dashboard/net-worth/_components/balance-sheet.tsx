@@ -87,14 +87,14 @@ export function BalanceSheet({
   };
 
   return (
-    <div className="rounded-3xl border border-white/[0.08] bg-white/[0.025] p-5 backdrop-blur-sm sm:p-7">
+    <div className="rounded-3xl border border-chart-border bg-chart-muted/40 p-5 backdrop-blur-sm sm:p-7">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="flex items-center gap-2 text-lg font-bold text-white sm:text-xl">
+          <h2 className="flex items-center gap-2 text-lg font-bold text-foreground sm:text-xl">
             <Wallet className="h-4 w-4 text-[#0BC18D]" />
             Balance sheet
           </h2>
-          <p className="mt-1 text-xs text-white/55">
+          <p className="mt-1 text-xs text-muted-foreground">
             Pick from a curated catalog or search for anything — icons are auto-assigned. Saves automatically.
           </p>
         </div>
@@ -102,7 +102,7 @@ export function BalanceSheet({
           <button
             type="button"
             onClick={onSeedExample}
-            className="rounded-lg border border-white/10 bg-white/[0.05] px-3 py-1.5 text-[11px] font-semibold text-white/80 transition hover:bg-white/[0.1]"
+            className="rounded-lg border border-chart-border bg-white/[0.05] px-3 py-1.5 text-[11px] font-semibold text-foreground transition hover:bg-white/[0.1]"
           >
             Load sample
           </button>
@@ -166,9 +166,9 @@ export function BalanceSheet({
       </div>
 
       {/* Net worth strip */}
-      <div className="mt-5 flex items-center justify-between rounded-2xl border border-white/10 bg-gradient-to-r from-[#0BC18D]/10 via-transparent to-[#FF6F69]/10 px-5 py-3">
-        <span className="text-xs font-semibold uppercase tracking-wider text-white/70">Net worth</span>
-        <span className="text-xl font-black tracking-tight text-white">
+      <div className="mt-5 flex items-center justify-between rounded-2xl border border-chart-border bg-gradient-to-r from-[#0BC18D]/10 via-transparent to-[#FF6F69]/10 px-5 py-3">
+        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Net worth</span>
+        <span className="text-xl font-black tracking-tight text-foreground">
           {formatCurrencyInteger(t.netWorth, currency)}
         </span>
       </div>
@@ -201,13 +201,13 @@ function Column({
           {icon}
           {title}
         </span>
-        <span className="text-sm font-bold tabular-nums text-white">{totalLabel}</span>
+        <span className="text-sm font-bold tabular-nums text-foreground">{totalLabel}</span>
       </div>
       <div className="flex flex-col gap-2">{children}</div>
       <button
         type="button"
         onClick={onAdd}
-        className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed px-3 py-2.5 text-[11px] font-semibold transition hover:bg-white/[0.04]"
+        className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed px-3 py-2.5 text-[11px] font-semibold transition hover:bg-chart-muted"
         style={{ borderColor: `${accent}55`, color: accent }}
       >
         <Search className="h-3.5 w-3.5" />
@@ -243,7 +243,7 @@ function Row({
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.97 }}
       transition={{ duration: 0.2 }}
-      className="group rounded-xl border border-white/10 bg-white/[0.04] p-2.5 transition hover:bg-white/[0.06]"
+      className="group rounded-xl border border-chart-border bg-chart-muted p-2.5 transition hover:bg-chart-muted"
     >
       <div className="flex items-center gap-2">
         {/* Auto-derived icon — user never picks this */}
@@ -275,24 +275,24 @@ function Row({
           type="text"
           value={item.label}
           onChange={(e) => onUpdate(idx, { label: e.target.value })}
-          className="h-8 min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-2 text-sm font-semibold text-white outline-none transition focus:border-white/15 focus:bg-white/[0.04]"
+          className="h-8 min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-2 text-sm font-semibold text-foreground outline-none transition focus:border-chart-border focus:bg-chart-muted"
           placeholder="Label"
         />
         <IntegerAmountInput
           amount={Number.isFinite(item.amount) ? item.amount : 0}
           onCommit={(n) => onUpdate(idx, { amount: n })}
-          className="h-8 w-[7.25rem] shrink-0 rounded-md border border-white/10 bg-white/[0.05] px-2 text-right text-sm font-bold tabular-nums text-white outline-none focus:border-white/30 sm:w-32"
+          className="h-8 w-[7.25rem] shrink-0 rounded-md border border-chart-border bg-white/[0.05] px-2 text-right text-sm font-bold tabular-nums text-foreground outline-none focus:border-primary/40 sm:w-32"
         />
         <button
           type="button"
           onClick={() => onRemove(idx)}
-          className="rounded-md p-1.5 text-white/30 opacity-0 transition group-hover:opacity-100 hover:bg-white/10 hover:text-[#FF6F69]"
+          className="rounded-md p-1.5 text-muted-foreground/70 opacity-0 transition group-hover:opacity-100 hover:bg-white/10 hover:text-[#FF6F69]"
           title="Delete"
         >
           <Trash2 className="h-3.5 w-3.5" />
         </button>
       </div>
-      <div className="mt-1.5 flex items-center justify-between pl-10 pr-2 text-[10px] text-white/45">
+      <div className="mt-1.5 flex items-center justify-between pl-10 pr-2 text-[10px] text-muted-foreground">
         <span className="truncate">{cat.label}</span>
         <label className="flex items-center gap-1">
           {item.kind === "liability" ? (
@@ -320,7 +320,7 @@ function Row({
               if (!Number.isFinite(pct)) return;
               onUpdate(idx, { growthRate: Math.min(100, Math.max(0, pct)) / 100 });
             }}
-            className="h-5 w-12 rounded border border-white/10 bg-transparent px-1 text-right text-[10px] tabular-nums text-white outline-none focus:border-white/30"
+            className="h-5 w-12 rounded border border-chart-border bg-transparent px-1 text-right text-[10px] tabular-nums text-foreground outline-none focus:border-primary/40"
           />
           <span>%</span>
         </label>
@@ -357,7 +357,7 @@ function NominalGrowthInfo({ inflationPct }: { inflationPct: number }) {
         aria-describedby={open ? "nominal-growth-tooltip" : undefined}
         aria-label="What nominal growth means and how inflation is handled"
         onClick={() => setOpen((o) => !o)}
-        className="rounded p-0.5 text-white/35 outline-none transition hover:text-[#0BC18D] focus-visible:ring-1 focus-visible:ring-[#0BC18D]/60"
+        className="rounded p-0.5 text-muted-foreground/80 outline-none transition hover:text-[#0BC18D] focus-visible:ring-1 focus-visible:ring-[#0BC18D]/60"
       >
         <Info className="size-3 shrink-0" strokeWidth={2.5} />
       </button>
@@ -365,20 +365,20 @@ function NominalGrowthInfo({ inflationPct }: { inflationPct: number }) {
         <span
           role="tooltip"
           id="nominal-growth-tooltip"
-          className="absolute bottom-[calc(100%+6px)] right-0 z-50 w-[min(17.5rem,calc(100vw-2rem))] rounded-lg border border-white/15 bg-[#0e0822] px-2.5 py-2 text-left text-[10px] leading-relaxed text-white/90 shadow-[0_8px_30px_rgba(0,0,0,0.45)]"
+          className="absolute bottom-[calc(100%+6px)] right-0 z-50 w-[min(17.5rem,calc(100vw-2rem))] rounded-lg border border-chart-border bg-card px-2.5 py-2 text-left text-[10px] leading-relaxed text-foreground shadow-[0_8px_30px_rgba(0,0,0,0.45)]"
         >
-          <span className="font-bold text-white">Inflation</span> is the average yearly rise in prices.
+          <span className="font-bold text-foreground">Inflation</span> is the average yearly rise in prices.
           Over time, the same dollars buy less unless returns keep pace.
           <span className="mt-1.5 block">
-            The <span className="font-semibold text-white">nominal growth %</span> on each asset is the
+            The <span className="font-semibold text-foreground">nominal growth %</span> on each asset is the
             total expected yearly return in actual dollars — it is{" "}
-            <span className="font-semibold text-white">inclusive of inflation</span>, meaning it already
+            <span className="font-semibold text-foreground">inclusive of inflation</span>, meaning it already
             contains the part of returns that merely offsets rising prices (plus any real gain on top).
           </span>
-          <span className="mt-1.5 block text-white/75">
+          <span className="mt-1.5 block text-foreground">
             Your inflation assumption in Projection controls is{" "}
-            <span className="tabular-nums font-semibold text-white">{inflationPct}%</span> per year. When
-            you turn on <span className="font-semibold text-white">Real $ (today)</span> on the wealth
+            <span className="tabular-nums font-semibold text-foreground">{inflationPct}%</span> per year. When
+            you turn on <span className="font-semibold text-foreground">Real $ (today)</span> on the wealth
             curve, we subtract that rate from nominal growth so the chart shows purchasing power after
             inflation.
           </span>
@@ -390,7 +390,7 @@ function NominalGrowthInfo({ inflationPct }: { inflationPct: number }) {
 
 function EmptyHint({ accent, text }: { accent: string; text: string }) {
   return (
-    <div className="rounded-xl border border-dashed border-white/10 px-3 py-4 text-center text-[11px] text-white/45" style={{ borderColor: `${accent}25` }}>
+    <div className="rounded-xl border border-dashed border-chart-border px-3 py-4 text-center text-[11px] text-muted-foreground" style={{ borderColor: `${accent}25` }}>
       {text}
     </div>
   );

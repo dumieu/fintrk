@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import type { CashflowSummaryResponse } from "@/app/api/analytics/cashflow-summary/route";
+import { chartChipClass, chartPanelClass } from "@/lib/chart-ui";
+import { cn } from "@/lib/utils";
 
 /** Compact short-form (e.g. 32_456 → "32.5K"). Mirrors the chart formatter. */
 function compact(n: number): string {
@@ -56,8 +58,8 @@ export function CashflowSummary({
         aria-hidden
         className={
           ribbon
-            ? "h-[46px] w-[240px] animate-pulse rounded-lg border border-white/10 bg-white/[0.03] sm:w-[280px]"
-            : "h-[58px] w-[280px] animate-pulse rounded-xl border border-white/10 bg-white/[0.03]"
+            ? "h-[46px] w-[240px] animate-pulse rounded-lg border border-chart-border bg-chart-muted sm:w-[280px]"
+            : "h-[58px] w-[280px] animate-pulse rounded-xl border border-chart-border bg-chart-muted"
         }
       />
     );
@@ -73,23 +75,25 @@ export function CashflowSummary({
 
   return (
     <div
-      className={
+      className={cn(
+        chartPanelClass,
+        "relative flex shrink-0 items-center",
         ribbon
-          ? "relative flex shrink-0 items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 pr-6 shadow-[0_2px_12px_rgba(0,0,0,0.3)] backdrop-blur-md sm:gap-2.5 sm:px-3.5"
-          : "relative flex shrink-0 items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 pr-7 shadow-[0_4px_20px_rgba(0,0,0,0.35)] backdrop-blur-md"
-      }
+          ? "gap-2 rounded-lg px-3 py-1.5 pr-6 sm:gap-2.5 sm:px-3.5"
+          : "gap-3 px-4 py-2.5 pr-7",
+      )}
     >
       <Stat
         label="Income"
         value={compact(data.avgMonthlyIncome)}
-        valueClass="text-white"
+        valueClass="text-foreground"
         compact={ribbon}
       />
       <Op compact={ribbon}>−</Op>
       <Stat
         label="Expenses"
         value={compact(data.avgMonthlyExpenses)}
-        valueClass="text-white/80"
+        valueClass="text-foreground/80"
         compact={ribbon}
       />
       <Op compact={ribbon}>=</Op>
@@ -114,13 +118,14 @@ function InfoBadge({ text }: { text: string }) {
       <button
         type="button"
         aria-label="What is this?"
-        className="grid h-4 w-4 cursor-help place-items-center rounded-full border border-white/20 bg-white/[0.04] text-[9px] font-bold leading-none text-white/55 transition-colors hover:border-white/40 hover:text-white/85"
+        className={cn(chartChipClass, "grid h-4 w-4 cursor-help place-items-center rounded-full text-[9px] font-bold leading-none")}
       >
         i
       </button>
       <span
         role="tooltip"
-        className="pointer-events-none absolute right-0 top-full z-20 mt-1.5 hidden w-56 rounded-md border border-white/10 bg-[#171717] px-2.5 py-1.5 text-[11px] leading-snug text-white/80 shadow-xl group-hover:block"
+        className="pointer-events-none absolute right-0 top-full z-20 mt-1.5 hidden w-56 rounded-md border border-chart-border bg-chart-surface px-2.5 py-1.5 text-[11px] leading-snug text-foreground shadow-chart group-hover:block"
+        style={{ boxShadow: "var(--chart-tooltip-shadow)" }}
       >
         {text}
       </span>
@@ -149,7 +154,7 @@ function Stat({
       >
         {value}
       </span>
-      <span className={`font-medium uppercase tracking-wide text-white/45 ${compact ? "text-[9px]" : "text-[10px]"}`}>
+      <span className={`font-medium uppercase tracking-wide text-muted-foreground ${compact ? "text-[9px]" : "text-[10px]"}`}>
         {label}
       </span>
     </div>
@@ -159,7 +164,7 @@ function Stat({
 function Op({ children, compact = false }: { children: React.ReactNode; compact?: boolean }) {
   return (
     <span
-      className={`select-none font-light text-white/35 ${compact ? "text-lg sm:text-xl" : "text-xl sm:text-2xl"}`}
+      className={`select-none font-light text-muted-foreground ${compact ? "text-lg sm:text-xl" : "text-xl sm:text-2xl"}`}
     >
       {children}
     </span>

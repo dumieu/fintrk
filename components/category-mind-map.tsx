@@ -829,14 +829,14 @@ function Modal({
             if (e.key === "Enter" && val.trim()) onSave(val.trim());
             if (e.key === "Escape") onClose();
           }}
-          className="w-full rounded-lg px-3 py-2.5 text-sm bg-white/[0.04] text-white/90 outline-none transition-colors focus:bg-white/[0.07]"
+          className="w-full rounded-lg px-3 py-2.5 text-sm bg-chart-muted text-foreground outline-none transition-colors focus:bg-chart-hover"
           style={{ border: `1px solid ${color}28` }}
           placeholder="Enter name\u2026"
         />
         <div className="flex justify-end gap-2 mt-5">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-xs font-medium rounded-lg text-white/50 hover:text-white/80 hover:bg-white/5 transition-colors cursor-pointer"
+            className="px-4 py-2 text-xs font-medium rounded-lg text-muted-foreground hover:text-foreground hover:bg-chart-muted/40 transition-colors cursor-pointer"
           >
             Cancel
           </button>
@@ -893,7 +893,7 @@ function ConfirmDelete({
         <h3 className="text-sm font-semibold text-red-400 mb-2">
           Delete &ldquo;{label}&rdquo;?
         </h3>
-        <p className="text-xs text-white/40 mb-5">
+        <p className="text-xs text-muted-foreground mb-5">
           {hasChildren
             ? "This will remove it and all its subcategories."
             : "This action cannot be undone."}
@@ -901,7 +901,7 @@ function ConfirmDelete({
         <div className="flex justify-end gap-2">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-xs font-medium rounded-lg text-white/50 hover:text-white/80 hover:bg-white/5 cursor-pointer"
+            className="px-4 py-2 text-xs font-medium rounded-lg text-muted-foreground hover:text-foreground hover:bg-chart-muted/40 cursor-pointer"
           >
             Cancel
           </button>
@@ -1273,7 +1273,7 @@ export function CategoryMindMap() {
               e.stopPropagation();
               b.fn();
             }}
-            className="w-9 h-9 rounded-xl bg-white/[0.04] backdrop-blur-md border border-white/[0.08] flex items-center justify-center text-white/50 hover:text-white hover:bg-white/[0.08] transition-all cursor-pointer"
+            className="w-9 h-9 rounded-xl bg-chart-muted backdrop-blur-md border border-chart-border flex items-center justify-center text-muted-foreground hover:text-white hover:bg-chart-hover transition-all cursor-pointer"
           >
             {b.icon}
           </button>
@@ -1486,7 +1486,7 @@ export function CategoryMindMap() {
                 boxShadow: `0 0 7px ${f.color}55`,
               }}
             />
-            <span className="text-[10px] font-medium text-white/40">
+            <span className="text-[10px] font-medium text-muted-foreground">
               {f.name}
             </span>
           </div>
@@ -1498,7 +1498,7 @@ export function CategoryMindMap() {
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 1.8 }}
-        className="absolute bottom-3 right-3 z-50 text-[10px] text-white/20 text-right"
+        className="absolute bottom-3 right-3 z-50 text-[10px] text-muted-foreground/50 text-right"
         onClick={(e) => e.stopPropagation()}
       >
         Scroll to zoom &middot; Drag to pan &middot; Tap category &middot; Tap outside to close

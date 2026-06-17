@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth-admin";
+import { decryptRow } from "@/lib/crypto/encrypted-fields";
+import { getActiveDecryptionSession, trackSessionAccess } from "@/lib/decryption-session";
 
 export const dynamic = "force-dynamic";
 
@@ -58,10 +60,19 @@ export async function GET(request: NextRequest) {
       LIMIT $${p} OFFSET $${p + 1}
     `;
     params.push(limit, offset);
-    const rows = await sql.query(dataQ, params);
+    let rows = await sql.query(dataQ, params);
+
+    let decrypted = false;
+    const session = await getActiveDecryptionSession();
+    if (session) {
+      rows = rows.map((r) => decryptRow("users", r as Record<string, unknown>));
+      decrypted = true;
+      await trackSessionAccess(session.id, "users");
+    }
 
     return NextResponse.json({
       rows,
+      decrypted,
       pagination: {
         page,
         limit,

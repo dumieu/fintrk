@@ -71,6 +71,7 @@ export async function POST(req: NextRequest) {
     const meta = extractRequestMeta(req);
     const result = await handleRpc(body, {
       userId: resolved.clerkUserId,
+      scope: resolved.scope,
       meta,
     });
 

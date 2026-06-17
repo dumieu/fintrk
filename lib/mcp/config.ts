@@ -29,7 +29,7 @@ export const REFRESH_TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
 
 export const SERVER_NAME = "FinTRK";
 export const SERVER_TITLE = "FinTRK Finance";
-export const SERVER_VERSION = "1.0.0";
+export const SERVER_VERSION = "1.1.0";
 
 /** MCP protocol versions we understand; we echo the client's if supported. */
 export const SUPPORTED_PROTOCOL_VERSIONS = [

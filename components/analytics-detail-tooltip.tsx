@@ -150,12 +150,12 @@ function MonthlyTrendChart({
   const avgY = padTop + ((max - avg) / max) * innerH;
 
   return (
-    <div className="min-w-0 max-w-full overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.025] p-2.5">
+    <div className="min-w-0 max-w-full overflow-hidden rounded-xl border border-chart-border bg-chart-muted/40 p-2.5">
       <div className="mb-1.5 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
-        <p className="shrink-0 text-[9px] font-semibold uppercase tracking-[0.18em] text-white/40">
+        <p className="shrink-0 text-[9px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
           Monthly trend · 12 mo
         </p>
-        <div className="flex min-w-0 flex-wrap items-center justify-end gap-x-2 gap-y-0.5 text-[9px] tabular-nums text-white/45">
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-x-2 gap-y-0.5 text-[9px] tabular-nums text-muted-foreground">
           <span className="flex items-center gap-1">
             <span className="inline-block h-1.5 w-2.5 rounded-full" style={{ background: accent }} />
             month
@@ -183,14 +183,14 @@ function MonthlyTrendChart({
         </defs>
         {ticks.map((t, i) => (
           <g key={i}>
-            <line x1={padX} x2={W - padX} y1={t.y} y2={t.y} stroke="rgba(255,255,255,0.06)" strokeDasharray="2 4" />
-            <text x={W - padX} y={t.y - 2} textAnchor="end" className="fill-white/30" style={{ fontSize: 7.5 }}>
+            <line x1={padX} x2={W - padX} y1={t.y} y2={t.y} stroke="var(--chart-grid)" strokeDasharray="2 4" />
+            <text x={W - padX} y={t.y - 2} textAnchor="end" className="fill-chart-axis" style={{ fontSize: 7.5 }}>
               {t.label}
             </text>
           </g>
         ))}
         {avg > 0 && (
-          <line x1={padX} x2={W - padX} y1={avgY} y2={avgY} stroke="rgba(255,255,255,0.55)" strokeWidth={0.7} strokeDasharray="3 3" />
+          <line x1={padX} x2={W - padX} y1={avgY} y2={avgY} stroke="var(--chart-label-muted)" strokeWidth={0.7} strokeDasharray="3 3" />
         )}
         {median > 0 && median !== avg && (
           <line x1={padX} x2={W - padX} y1={medianY} y2={medianY} stroke="rgba(110,231,183,0.6)" strokeWidth={0.7} />
@@ -231,7 +231,7 @@ function MonthlyTrendChart({
                   x={cx}
                   y={H - 6}
                   textAnchor="middle"
-                  className={isHighlighted ? "fill-white/85" : "fill-white/45"}
+                  className={isHighlighted ? "fill-chart-label" : "fill-chart-axis"}
                   style={{ fontSize: 7.5, letterSpacing: "0.04em" }}
                 >
                   {tick}
@@ -266,7 +266,7 @@ function HorizontalBars({
 }) {
   if (!rows || rows.length === 0) {
     return (
-      <p className="px-2 py-3 text-center text-[10.5px] text-white/40">{emptyMsg}</p>
+      <p className="px-2 py-3 text-center text-[10.5px] text-muted-foreground">{emptyMsg}</p>
     );
   }
   const slice = rows.slice(0, max);
@@ -281,7 +281,7 @@ function HorizontalBars({
         return (
           <li
             key={`${r.name}-${i}`}
-            className="relative overflow-hidden rounded-lg border border-white/[0.06] bg-white/[0.025] px-2 py-1.5"
+            className="relative overflow-hidden rounded-lg border border-chart-border bg-chart-muted/40 px-2 py-1.5"
           >
             <div
               className="pointer-events-none absolute inset-y-0 left-0 opacity-25"
@@ -291,19 +291,19 @@ function HorizontalBars({
               }}
             />
             <div className="relative flex items-center gap-2">
-              <span className="w-3 shrink-0 text-right text-[9px] font-semibold tabular-nums text-white/35">
+              <span className="w-3 shrink-0 text-right text-[9px] font-semibold tabular-nums text-muted-foreground/80">
                 {lead}
               </span>
               {ico && <span className="shrink-0 text-[12px] leading-none">{ico}</span>}
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[11px] font-medium leading-snug text-white/90" title={r.name}>
+                <p className="truncate text-[11px] font-medium leading-snug text-foreground" title={r.name}>
                   {r.name}
                 </p>
-                <p className="text-[9px] leading-none text-white/40 tabular-nums">
+                <p className="text-[9px] leading-none text-muted-foreground tabular-nums">
                   {r.count} {r.count === 1 ? "txn" : "txns"} · {share.toFixed(1)}%
                 </p>
               </div>
-              <span className="shrink-0 text-[11px] font-semibold tabular-nums text-white/90">
+              <span className="shrink-0 text-[11px] font-semibold tabular-nums text-foreground">
                 {formatCurrency(r.total, currency)}
               </span>
             </div>
@@ -324,15 +324,15 @@ function KpiTile({
   hint?: string;
 }) {
   return (
-    <div className="min-w-0 rounded-lg border border-white/[0.07] bg-white/[0.025] px-2 py-1.5">
-      <p className="truncate text-[9px] font-semibold uppercase tracking-[0.16em] text-white/40">
+    <div className="min-w-0 rounded-lg border border-chart-border bg-chart-muted/40 px-2 py-1.5">
+      <p className="truncate text-[9px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
         {label}
       </p>
-      <p className="mt-0.5 truncate text-[12.5px] font-semibold tabular-nums tracking-tight text-white/95" title={value}>
+      <p className="mt-0.5 truncate text-[12.5px] font-semibold tabular-nums tracking-tight text-foreground" title={value}>
         {value}
       </p>
       {hint && (
-        <p className="truncate text-[9px] leading-tight text-white/45 tabular-nums" title={hint}>
+        <p className="truncate text-[9px] leading-tight text-muted-foreground tabular-nums" title={hint}>
           {hint}
         </p>
       )}
@@ -345,7 +345,7 @@ function DeltaPill({ delta }: { delta: number | null }) {
   const up = delta > 0;
   const flat = Math.abs(delta) < 0.5;
   const color = flat
-    ? "bg-white/8 text-white/60 ring-white/15"
+    ? "bg-chart-muted text-muted-foreground ring-chart-border"
     : up
       ? "bg-rose-500/15 text-rose-300 ring-rose-400/30"
       : "bg-emerald-500/15 text-emerald-300 ring-emerald-400/30";
@@ -439,7 +439,7 @@ export function AnalyticsDetailTooltip({
   return (
     <div
       ref={ref}
-      className="pointer-events-auto fixed z-[9999] box-border overflow-x-hidden overflow-y-visible rounded-2xl border border-white/[0.12] bg-[#111111]/[0.97] shadow-[0_24px_64px_-12px_rgba(0,0,0,0.85),inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-xl"
+        className="pointer-events-auto fixed z-[9999] box-border overflow-x-hidden overflow-y-visible rounded-2xl border border-chart-border bg-chart-surface text-card-foreground shadow-[var(--chart-tooltip-shadow)] backdrop-blur-xl"
       style={style}
       role="tooltip"
       onMouseEnter={onMouseEnter}
@@ -483,7 +483,7 @@ function DetailContent({
   return (
     <div className="relative min-w-0 overflow-x-hidden overflow-y-visible rounded-2xl">
       <div
-        className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent"
+        className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-border to-transparent"
         aria-hidden
       />
       <div
@@ -493,10 +493,10 @@ function DetailContent({
       />
       <div className="relative min-w-0 space-y-3 px-3 pb-3 pt-3">
         {/* Header */}
-        <header className="flex items-start gap-2.5 border-b border-white/[0.08] pb-2.5">
+        <header className="flex items-start gap-2.5 border-b border-chart-border pb-2.5">
           {ccyMeta ? (
             <div
-              className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full ring-1 ring-white/15"
+              className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full ring-1 ring-chart-border"
               style={{
                 background: `linear-gradient(135deg, ${ccyMeta.gradient[0]} 0%, ${ccyMeta.gradient[1]} 100%)`,
                 boxShadow: `0 6px 16px -4px ${ccyMeta.gradient[1]}aa, inset 0 1px 0 rgba(255,255,255,0.18)`,
@@ -504,7 +504,7 @@ function DetailContent({
               aria-hidden
             >
               <span
-                className="font-bold leading-none text-white drop-shadow"
+                className="font-bold leading-none text-foreground drop-shadow-sm"
                 style={{
                   fontSize: ccyMeta.symbol.length > 2 ? 13 : 18,
                   textShadow: "0 1px 2px rgba(0,0,0,0.45)",
@@ -523,7 +523,7 @@ function DetailContent({
             />
           )}
           <div className="min-w-0 flex-1">
-            <p className="text-[9px] font-semibold uppercase tracking-[0.22em] text-white/40">
+            <p className="text-[9px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
               {ENTITY_TYPE_LABEL[entity]}
             </p>
             <div className="mt-0.5 flex items-center gap-1.5">
@@ -531,7 +531,7 @@ function DetailContent({
               {ccyMeta && (
                 <span className="text-[14px] leading-none">{ccyMeta.flag}</span>
               )}
-              <p className="break-words text-[14.5px] font-semibold leading-tight text-white">
+              <p className="break-words text-[14.5px] font-semibold leading-tight text-foreground">
                 {label}
               </p>
             </div>
@@ -545,13 +545,13 @@ function DetailContent({
 
         {loading && !data ? (
           <div className="flex flex-col items-center justify-center gap-2 py-10">
-            <div className="h-7 w-7 animate-spin rounded-full border-2 border-white/10 border-t-violet-400" />
-            <p className="text-[10px] uppercase tracking-[0.18em] text-white/35">Crunching numbers</p>
+            <div className="h-7 w-7 animate-spin rounded-full border-2 border-chart-border border-t-violet-400" />
+            <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/80">Crunching numbers</p>
           </div>
         ) : errorMessage ? (
           <p className="py-6 text-center text-[11px] text-rose-300/80">{errorMessage}</p>
         ) : data && data.count === 0 ? (
-          <p className="py-6 text-center text-[11px] text-white/45">
+          <p className="py-6 text-center text-[11px] text-muted-foreground">
             No outflows recorded for this slice.
           </p>
         ) : data ? (
@@ -653,7 +653,7 @@ function Body({
       </div>
 
       {dateRange && (
-        <p className="border-t border-white/[0.06] pt-2 text-center text-[9px] uppercase tracking-[0.18em] text-white/35 break-words">
+        <p className="border-t border-chart-border pt-2 text-center text-[9px] uppercase tracking-[0.18em] text-muted-foreground/80 break-words">
           {dateRange}
         </p>
       )}
@@ -673,10 +673,10 @@ function Section({
   return (
     <section>
       <div className="mb-1 flex items-baseline justify-between">
-        <h3 className="text-[9px] font-semibold uppercase tracking-[0.18em] text-white/45">
+        <h3 className="text-[9px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
           {title}
         </h3>
-        {badge && <span className="text-[9px] tabular-nums text-white/30">{badge}</span>}
+        {badge && <span className="text-[9px] tabular-nums text-muted-foreground/70">{badge}</span>}
       </div>
       {children}
     </section>
@@ -753,12 +753,12 @@ export function AnalyticsDetailDialog({
         <button
           type="button"
           onClick={onClose}
-          className="absolute right-3 top-3 z-10 grid h-8 w-8 place-items-center rounded-lg border border-white/10 bg-[#121212]/90 text-white/60 backdrop-blur-sm transition-colors hover:bg-white/[0.12] hover:text-white"
+          className="absolute right-3 top-3 z-10 grid h-8 w-8 place-items-center rounded-lg border border-chart-border bg-chart-surface text-muted-foreground backdrop-blur-sm transition-colors hover:bg-chart-hover hover:text-white"
           aria-label="Close details"
         >
           <X className="h-4 w-4" />
         </button>
-        <div className="overflow-hidden rounded-2xl border border-white/[0.12] bg-[#111111]/[0.97] shadow-[0_24px_64px_-12px_rgba(0,0,0,0.85),inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-xl">
+        <div className="overflow-hidden rounded-2xl border border-chart-border bg-chart-surface shadow-[0_24px_64px_-12px_rgba(0,0,0,0.85),inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-xl">
           <DetailContent
             entity={entity}
             label={label}

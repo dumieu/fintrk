@@ -33,7 +33,7 @@ export function CardNetworkLogo({
 }) {
   if (!network || network === "unknown" || !isNetwork(network)) return null;
 
-  const common = cn("inline-block shrink-0 align-middle rounded-[3px] shadow-sm ring-1 ring-white/15", className);
+  const common = cn("inline-block shrink-0 align-middle rounded-[3px] shadow-sm ring-1 ring-chart-border", className);
 
   switch (network) {
     case "visa":

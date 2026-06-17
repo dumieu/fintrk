@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
 import { statements } from "@/lib/db/schema";
+import { ef, df } from "@/lib/crypto/encryption";
 import { eq, and, inArray, gte, sql } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
@@ -79,7 +80,7 @@ export async function GET(request: NextRequest) {
     if (stale.length > 0) {
       for (const s of stale) {
         await db.update(statements)
-          .set({ status: "failed", aiError: "Processing timed out", aiProcessedAt: new Date() })
+          .set({ status: "failed", aiError: ef("Processing timed out"), aiProcessedAt: new Date() })
           .where(eq(statements.id, s.id))
           .catch(() => {});
       }
@@ -100,10 +101,13 @@ export async function GET(request: NextRequest) {
         )
       : [];
 
+    const decryptErr = <T extends { aiError?: string | null }>(rows: T[]): T[] =>
+      rows.map((r) => ("aiError" in r ? { ...r, aiError: df(r.aiError) } : r));
+
     return NextResponse.json({
-      processing: active,
-      recentlyFinished,
-      tracked,
+      processing: decryptErr(active),
+      recentlyFinished: decryptErr(recentlyFinished),
+      tracked: decryptErr(tracked),
     }, { headers: NO_STORE });
   } catch {
     return NextResponse.json({ processing: [], recentlyFinished: [], tracked: [] }, { headers: NO_STORE });

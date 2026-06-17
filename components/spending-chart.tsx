@@ -9,6 +9,8 @@ import {
 import { useAnalyticsDetail } from "@/components/use-analytics-detail";
 import { CategoryTransactionsModal } from "@/components/category-transactions-modal";
 import { analyticsCategoryGlow } from "@/lib/analytics-category-colors";
+import { chartMutedClass } from "@/lib/chart-ui";
+import { cn } from "@/lib/utils";
 
 interface SpendingBar {
   label: string;
@@ -34,7 +36,7 @@ export function SpendingChart({ bars, currency, maxAmount }: SpendingChartProps)
 
   if (bars.length === 0) {
     return (
-      <div className="flex items-center justify-center h-48 text-white/50 text-sm">
+      <div className={cn("flex items-center justify-center h-48", chartMutedClass)}>
         Upload a statement to see spending breakdown
       </div>
     );
@@ -42,7 +44,7 @@ export function SpendingChart({ bars, currency, maxAmount }: SpendingChartProps)
 
   return (
     <>
-      <div className="scrollbar-slim-dark min-h-0 flex-1 space-y-2.5 overflow-y-auto overscroll-contain pr-1 [scrollbar-gutter:stable]">
+      <div className="scrollbar-slim min-h-0 flex-1 space-y-2.5 overflow-y-auto overscroll-contain pr-1 [scrollbar-gutter:stable]">
         {bars.map((bar, i) => {
           const pct = (Math.abs(bar.amount) / max) * 100;
           const amt = Math.abs(bar.amount);
@@ -73,18 +75,18 @@ export function SpendingChart({ bars, currency, maxAmount }: SpendingChartProps)
               <div className="mb-1 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
                 <span className="flex min-w-0 items-start gap-2">
                   <span
-                    className="mt-1 h-2 w-2 shrink-0 rounded-[3px] ring-1 ring-white/10"
+                    className="mt-1 h-2 w-2 shrink-0 rounded-[3px] ring-1 ring-chart-border"
                     style={{
                       background: bar.color,
                       boxShadow: `0 0 8px ${analyticsCategoryGlow(bar.color, 0.4)}`,
                     }}
                     aria-hidden
                   />
-                  <span className="text-xs font-medium leading-snug text-white/85">
+                  <span className="text-xs font-medium leading-snug text-foreground">
                     {bar.label}
                   </span>
                 </span>
-                <span className="shrink-0 text-right text-xs font-bold tabular-nums text-white">
+                <span className="shrink-0 text-right text-xs font-bold tabular-nums text-foreground">
                   <span>
                     {currency}{" "}
                     {amt.toLocaleString("en-US", {
@@ -92,12 +94,12 @@ export function SpendingChart({ bars, currency, maxAmount }: SpendingChartProps)
                       maximumFractionDigits: 0,
                     })}
                   </span>
-                  <span className="ml-1.5 text-[10px] font-semibold text-white/50">
+                  <span className="ml-1.5 text-[10px] font-semibold text-muted-foreground">
                     ({pctLabel})
                   </span>
                 </span>
               </div>
-              <div className="h-2 rounded-full bg-white/[0.06] overflow-hidden ring-1 ring-inset ring-white/[0.04]">
+              <div className="h-2 rounded-full overflow-hidden bg-[var(--chart-bar-track)] ring-1 ring-inset ring-chart-border">
                 <div
                   className="h-full rounded-full transition-[width] duration-500 ease-out"
                   style={{

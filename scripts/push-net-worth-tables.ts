@@ -73,6 +73,15 @@ async function main() {
       ADD COLUMN IF NOT EXISTS birth_year                INTEGER;
   `;
 
+  console.log("→ Adding earning-curve + pension columns if missing");
+  await sql`
+    ALTER TABLE net_worth_settings
+      ADD COLUMN IF NOT EXISTS annual_income                    NUMERIC(15, 2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS income_growth_rate               NUMERIC(6, 4)  NOT NULL DEFAULT 0.0300,
+      ADD COLUMN IF NOT EXISTS post_retirement_income           NUMERIC(15, 2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS post_retirement_income_start_age INTEGER        NOT NULL DEFAULT 67;
+  `;
+
   console.log("✓ net worth tables ready");
 }
 

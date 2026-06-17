@@ -56,12 +56,12 @@ export interface TransactionInsightData {
 
 function Row({ label, children, icon: Icon }: { label: string; children: ReactNode; icon?: LucideIcon }) {
   return (
-    <div className="flex gap-2.5 py-1.5 border-b border-white/[0.06] last:border-0">
+    <div className="flex gap-2.5 py-1.5 border-b border-chart-border last:border-0">
       {Icon ? (
         <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#AD74FF]/80" aria-hidden />
       ) : null}
       <div className="min-w-0 flex-1">
-        <p className="text-[9px] font-semibold uppercase tracking-wider text-white/40">{label}</p>
+        <p className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
         <div className="mt-0.5 text-[11px] leading-snug text-white/88">{children}</div>
       </div>
     </div>
@@ -88,14 +88,14 @@ function TransactionInsightPanel({ txn }: { txn: TransactionInsightData }) {
   return (
     <div
       className={cn(
-        "w-[min(340px,calc(100vw-24px))] rounded-2xl border border-white/20 p-px shadow-2xl",
+        "w-[min(340px,calc(100vw-24px))] rounded-2xl border border-chart-border p-px shadow-2xl",
         "bg-gradient-to-br from-[#0BC18D]/35 via-[#2CA2FF]/25 to-[#AD74FF]/35",
       )}
     >
-      <div className="rounded-[0.9rem] bg-[#161616] px-3.5 py-3 backdrop-blur-xl overflow-hidden">
+      <div className="rounded-[0.9rem] bg-popover px-3.5 py-3 backdrop-blur-xl overflow-hidden">
         <section className="mb-1">
           <Row label="As on statement" icon={Receipt}>
-            <span className="whitespace-pre-wrap break-words font-mono text-[10px] text-white/70">
+            <span className="whitespace-pre-wrap break-words font-mono text-[10px] text-muted-foreground">
               {txn.rawDescription?.trim() || "—"}
             </span>
           </Row>
@@ -118,13 +118,13 @@ function TransactionInsightPanel({ txn }: { txn: TransactionInsightData }) {
                 {formatCurrency(Math.abs(parseFloat(txn.foreignAmount!)), txn.foreignCurrency!)}
               </p>
               {rate != null && !Number.isNaN(rate) ? (
-                <p className="mt-1 text-[10px] text-white/50">
-                  Implied rate: <span className="tabular-nums text-white/70">{rate.toFixed(6)}</span>{" "}
+                <p className="mt-1 text-[10px] text-muted-foreground">
+                  Implied rate: <span className="tabular-nums text-muted-foreground">{rate.toFixed(6)}</span>{" "}
                   {txn.baseCurrency}/{txn.foreignCurrency}
                 </p>
               ) : null}
               {spreadBps != null && !Number.isNaN(spreadBps) ? (
-                <p className="mt-1 text-[10px] text-white/50">
+                <p className="mt-1 text-[10px] text-muted-foreground">
                   FX spread vs mid: <span className="text-[#AD74FF]">{formatFxSpread(spreadBps)}</span>
                 </p>
               ) : null}
@@ -140,7 +140,7 @@ function TransactionInsightPanel({ txn }: { txn: TransactionInsightData }) {
                 <span>
                   {countryName ?? "—"}
                   {txn.countryIso ? (
-                    <span className="text-white/45"> ({txn.countryIso.toUpperCase()})</span>
+                    <span className="text-muted-foreground"> ({txn.countryIso.toUpperCase()})</span>
                   ) : null}
                 </span>
               </span>
@@ -156,23 +156,23 @@ function TransactionInsightPanel({ txn }: { txn: TransactionInsightData }) {
             <div className="flex flex-wrap items-center gap-2">
               {kind ? <span>{kind}</span> : null}
               {masked && txn.accountCardNetwork && txn.accountCardNetwork !== "unknown" ? (
-                <span className="inline-flex items-center gap-1 rounded-md bg-white/[0.06] px-1.5 py-0.5">
+                <span className="inline-flex items-center gap-1 rounded-md bg-chart-muted px-1.5 py-0.5">
                   <CardNetworkLogo network={txn.accountCardNetwork} className="relative top-px" />
-                  <span className="font-mono text-[10px] text-white/60">{masked}</span>
+                  <span className="font-mono text-[10px] text-muted-foreground">{masked}</span>
                 </span>
               ) : masked ? (
-                <span className="font-mono text-[10px] text-white/60">{masked}</span>
+                <span className="font-mono text-[10px] text-muted-foreground">{masked}</span>
               ) : null}
-              {netLabel && !masked ? <span className="text-white/55">{netLabel}</span> : null}
+              {netLabel && !masked ? <span className="text-muted-foreground">{netLabel}</span> : null}
             </div>
-            {bank ? <p className="mt-1 text-[10px] text-white/55">{bank}</p> : null}
+            {bank ? <p className="mt-1 text-[10px] text-muted-foreground">{bank}</p> : null}
           </Row>
           {(txn.statementFileName || stmtPeriod) ? (
             <Row label="Statement source" icon={FileStack}>
               {txn.statementFileName ? (
-                <p className="break-all font-mono text-[10px] text-white/70">{txn.statementFileName}</p>
+                <p className="break-all font-mono text-[10px] text-muted-foreground">{txn.statementFileName}</p>
               ) : null}
-              {stmtPeriod ? <p className="mt-1 text-[10px] text-white/50">Period: {stmtPeriod}</p> : null}
+              {stmtPeriod ? <p className="mt-1 text-[10px] text-muted-foreground">Period: {stmtPeriod}</p> : null}
             </Row>
           ) : null}
         </section>

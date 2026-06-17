@@ -1,9 +1,28 @@
 import { auth } from "@clerk/nextjs/server";
+import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 
 const NO_STORE = { "Cache-Control": "no-store" } as const;
 
 const RETRY_DELAYS_MS = [100, 250, 500];
+
+/**
+ * The public, no-auth demo (/demo) serves data for the synthetic "demo" user.
+ * Its client adds the `x-fintrk-demo: 1` header to read requests. Because the
+ * userId here is hard-pinned to the literal string "demo", this branch can
+ * NEVER return another user's identity, and middleware swallows demo write
+ * requests, so nothing the demo does is ever persisted.
+ */
+export const DEMO_USER_ID = "demo";
+
+async function isDemoRequest(): Promise<boolean> {
+  try {
+    const h = await headers();
+    return h.get("x-fintrk-demo") === "1";
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Clerk's auth() can transiently return userId: null when the JWT is being
@@ -12,6 +31,10 @@ const RETRY_DELAYS_MS = [100, 250, 500];
  * (~850ms total) before giving up.
  */
 export async function resilientAuth() {
+  if (await isDemoRequest()) {
+    return { userId: DEMO_USER_ID } as unknown as Awaited<ReturnType<typeof auth>>;
+  }
+
   const first = await auth();
   if (first.userId) return first;
 

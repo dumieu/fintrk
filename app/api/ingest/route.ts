@@ -4,6 +4,7 @@ import { db, resilientQuery } from "@/lib/db";
 import { statements, fileUploadLog } from "@/lib/db/schema";
 import { logServerError } from "@/lib/safe-error";
 import { blocksIngestUpload } from "@/lib/ingest-dedupe";
+import { ef } from "@/lib/crypto/encryption";
 
 export const dynamic = "force-dynamic";
 // Receiving up to 100 PDFs in one multipart request + per-file dedupe checks
@@ -69,7 +70,7 @@ export async function POST(request: NextRequest) {
             fileMimeType: file.type,
             fileHash: hash,
             status: "uploaded",
-            fileData: JSON.stringify({ type: "binary", mimeType: file.type, base64 }),
+            fileData: ef(JSON.stringify({ type: "binary", mimeType: file.type, base64 })),
           }).returning({ id: statements.id }),
         );
         submitted.push({ id: stmt.id, fileName: file.name, fileSize: file.size, fileHash: hash });
@@ -100,7 +101,7 @@ export async function POST(request: NextRequest) {
             fileMimeType: "text/csv",
             fileHash: hash,
             status: "uploaded",
-            fileData: JSON.stringify({ type: "structured", headers: hdrs, data }),
+            fileData: ef(JSON.stringify({ type: "structured", headers: hdrs, data })),
           }).returning({ id: statements.id }),
         );
         submitted.push({ id: stmt.id, fileName: name, fileSize: size, fileHash: hash });

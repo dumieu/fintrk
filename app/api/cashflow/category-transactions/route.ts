@@ -6,6 +6,7 @@ import { db, resilientQuery } from "@/lib/db";
 import { accounts, statements, transactions, userCategories } from "@/lib/db/schema";
 import { excludeCardPaymentsSql, spendingIntelligenceOutflowSql } from "@/lib/db/excluded-transactions";
 import { logServerError } from "@/lib/safe-error";
+import { df } from "@/lib/crypto/encryption";
 
 export const dynamic = "force-dynamic";
 
@@ -166,7 +167,14 @@ export async function GET(request: NextRequest) {
         .limit(200),
     );
 
-    return NextResponse.json({ data: rows, total: rows.length }, { headers: NO_STORE });
+    const data = rows.map((row) => ({
+      ...row,
+      note: df(row.note),
+      accountInstitutionName: df(row.accountInstitutionName),
+      accountName: df(row.accountName),
+    }));
+
+    return NextResponse.json({ data, total: data.length }, { headers: NO_STORE });
   } catch (err) {
     logServerError("api/cashflow/category-transactions", err);
     return NextResponse.json(

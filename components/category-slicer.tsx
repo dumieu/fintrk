@@ -17,29 +17,29 @@ export interface CategorySlicerOption {
 /** Chip tints — keep aligned with `FLOW_COLORS` in default-categories. */
 const THEME_CHIP: Record<CategoryFlowTheme, { idle: string; active: string }> = {
   inflow: {
-    idle: "border-[#22C55E]/30 bg-[#22C55E]/10 text-white/90 hover:border-[#22C55E]/50 hover:bg-[#22C55E]/16",
+    idle: "border-[#22C55E]/30 bg-[#22C55E]/10 text-foreground hover:border-[#22C55E]/50 hover:bg-[#22C55E]/16",
     active:
-      "border-[#22C55E]/70 bg-[#22C55E]/24 text-white shadow-[0_0_28px_-10px_rgba(34,197,94,0.55)] ring-1 ring-[#22C55E]/40",
+      "border-[#22C55E]/70 bg-[#22C55E]/24 text-[#15803D] shadow-[0_0_28px_-10px_rgba(34,197,94,0.55)] ring-1 ring-[#22C55E]/40 dark:text-white",
   },
   outflow: {
-    idle: "border-[#EF4444]/32 bg-[#EF4444]/10 text-white/90 hover:border-[#EF4444]/52 hover:bg-[#EF4444]/16",
+    idle: "border-[#EF4444]/32 bg-[#EF4444]/10 text-foreground hover:border-[#EF4444]/52 hover:bg-[#EF4444]/16",
     active:
-      "border-[#EF4444]/72 bg-[#EF4444]/22 text-white shadow-[0_0_28px_-10px_rgba(239,68,68,0.5)] ring-1 ring-[#EF4444]/40",
+      "border-[#EF4444]/72 bg-[#EF4444]/22 text-[#B91C1C] shadow-[0_0_28px_-10px_rgba(239,68,68,0.5)] ring-1 ring-[#EF4444]/40 dark:text-white",
   },
   savings: {
-    idle: "border-[#9333EA]/35 bg-[#9333EA]/12 text-white/90 hover:border-[#9333EA]/55 hover:bg-[#9333EA]/20",
+    idle: "border-[#9333EA]/35 bg-[#9333EA]/12 text-foreground hover:border-[#9333EA]/55 hover:bg-[#9333EA]/20",
     active:
-      "border-[#9333EA]/75 bg-[#9333EA]/24 text-white shadow-[0_0_28px_-10px_rgba(147,51,234,0.5)] ring-1 ring-[#9333EA]/45",
+      "border-[#9333EA]/75 bg-[#9333EA]/24 text-[#7E22CE] shadow-[0_0_28px_-10px_rgba(147,51,234,0.5)] ring-1 ring-[#9333EA]/45 dark:text-white",
   },
   misc: {
-    idle: "border-[#808080]/30 bg-[#808080]/10 text-white/90 hover:border-[#808080]/50 hover:bg-[#808080]/16",
+    idle: "border-[#808080]/30 bg-[#808080]/10 text-foreground hover:border-[#808080]/50 hover:bg-[#808080]/16",
     active:
-      "border-[#808080]/70 bg-[#808080]/24 text-white shadow-[0_0_28px_-10px_rgba(128,128,128,0.45)] ring-1 ring-[#808080]/40",
+      "border-[#808080]/70 bg-[#808080]/24 text-foreground shadow-[0_0_28px_-10px_rgba(128,128,128,0.45)] ring-1 ring-[#808080]/40 dark:text-white",
   },
   unknown: {
-    idle: "border-white/12 bg-black/25 text-white/85 hover:border-white/22 hover:bg-white/[0.07]",
+    idle: "border-chart-border bg-foreground/[0.05] text-foreground hover:border-foreground/20 hover:bg-chart-hover dark:bg-black/25 dark:hover:border-white/22",
     active:
-      "border-white/35 bg-white/[0.12] text-white shadow-[0_0_22px_-10px_rgba(255,255,255,0.12)] ring-1 ring-white/15",
+      "border-chart-border bg-chart-hover text-foreground ring-1 ring-chart-border dark:text-white dark:shadow-[0_0_22px_-10px_rgba(255,255,255,0.12)]",
   },
 };
 
@@ -47,13 +47,13 @@ const DRAG_THRESHOLD_PX = 8;
 const SCROLL_STEP_RATIO = 0.82;
 
 const SLICER_CHEVRON_BTN =
-  "flex h-6 w-7 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-white/12 bg-black/30 px-1 text-white/70 transition-colors hover:border-white/25 hover:bg-white/[0.06] hover:text-white disabled:cursor-not-allowed disabled:pointer-events-none disabled:opacity-25";
+  "flex h-6 w-7 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-chart-border bg-foreground/[0.04] dark:bg-black/30 px-1 text-muted-foreground transition-colors hover:border-chart-border hover:bg-chart-muted hover:text-foreground dark:hover:text-white disabled:cursor-not-allowed disabled:pointer-events-none disabled:opacity-25";
 
-/** Non–color-coded chips (Category Mapping top slicers). */
+/** Non-color-coded chips (Category Mapping top slicers). */
 const NEUTRAL_CHIP_IDLE =
-  "border-white/12 bg-black/25 text-white/85 hover:border-white/22 hover:bg-white/[0.07]";
+  "border-chart-border bg-foreground/[0.05] text-foreground hover:border-foreground/20 hover:bg-chart-hover dark:bg-black/25 dark:hover:border-white/22";
 const NEUTRAL_CHIP_ACTIVE =
-  "border-white/38 bg-white/[0.11] text-white shadow-[0_0_20px_-10px_rgba(255,255,255,0.1)] ring-1 ring-white/16";
+  "border-foreground/30 bg-foreground/[0.08] text-foreground ring-1 ring-foreground/15 dark:border-white/38 dark:bg-white/[0.11] dark:text-white dark:shadow-[0_0_20px_-10px_rgba(255,255,255,0.1)] dark:ring-white/16";
 
 function useSlicerScrollState(deps: DependencyList) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -233,10 +233,10 @@ export function CategorySlicer({
   }, [scrollRef]);
 
   return (
-    <div className="rounded-xl border border-white/[0.09] bg-gradient-to-b from-white/[0.07] to-white/[0.02] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] sm:rounded-2xl sm:p-2">
+    <div className="rounded-xl border border-chart-border bg-gradient-to-b from-chart-muted to-chart-surface p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] sm:rounded-2xl sm:p-2">
       <div className={cn("flex min-w-0 items-center", showLabel ? "gap-1.5 sm:gap-3" : "gap-0")}>
         {showLabel ? (
-          <p className="shrink-0 whitespace-nowrap px-0.5 text-[9px] font-medium uppercase tracking-wider text-white/40 sm:px-1 sm:text-[10px]">
+          <p className="shrink-0 whitespace-nowrap px-0.5 text-[9px] font-medium uppercase tracking-wider text-muted-foreground sm:px-1 sm:text-[10px]">
             Category
           </p>
         ) : null}
@@ -269,8 +269,8 @@ export function CategorySlicer({
                 neutralChips
                   ? neutralChipClass(allSelected)
                   : allSelected
-                    ? "border-[#0BC18D]/55 bg-[#0BC18D]/18 text-white shadow-[0_0_26px_-10px_rgba(11,193,141,0.6)] ring-1 ring-[#0BC18D]/30"
-                    : "border-white/12 bg-black/25 text-white/85 hover:border-white/22 hover:bg-white/[0.07]",
+                    ? "border-[#0BC18D]/55 bg-[#0BC18D]/18 text-[#0a8f68] shadow-[0_0_26px_-10px_rgba(11,193,141,0.6)] ring-1 ring-[#0BC18D]/30 dark:text-white"
+                    : "border-chart-border bg-foreground/[0.05] text-foreground hover:border-foreground/20 hover:bg-chart-hover dark:bg-black/25 dark:hover:border-white/22",
               )}
               aria-pressed={allSelected}
             >
@@ -328,19 +328,19 @@ const SUBCAT_TYPE_SLICER_OPTIONS: { value: SubcategoryTypeSlicerValue; label: st
 
 const SUBCAT_CHIP: Record<SubcategoryTypeSlicerValue, { idle: string; active: string }> = {
   "non-discretionary": {
-    idle: "border-[#EF4444]/32 bg-[#EF4444]/10 text-white/90 hover:border-[#EF4444]/50 hover:bg-[#EF4444]/16",
+    idle: "border-[#EF4444]/32 bg-[#EF4444]/10 text-foreground hover:border-[#EF4444]/50 hover:bg-[#EF4444]/16",
     active:
-      "border-[#EF4444]/72 bg-[#EF4444]/22 text-white shadow-[0_0_28px_-10px_rgba(239,68,68,0.45)] ring-1 ring-[#EF4444]/40",
+      "border-[#EF4444]/72 bg-[#EF4444]/22 text-[#B91C1C] shadow-[0_0_28px_-10px_rgba(239,68,68,0.45)] ring-1 ring-[#EF4444]/40 dark:text-white",
   },
   "semi-discretionary": {
-    idle: "border-[#ECAA0B]/35 bg-[#ECAA0B]/10 text-white/90 hover:border-[#ECAA0B]/55 hover:bg-[#ECAA0B]/18",
+    idle: "border-[#ECAA0B]/35 bg-[#ECAA0B]/10 text-foreground hover:border-[#ECAA0B]/55 hover:bg-[#ECAA0B]/18",
     active:
-      "border-[#ECAA0B]/75 bg-[#ECAA0B]/22 text-white shadow-[0_0_28px_-10px_rgba(236,170,11,0.45)] ring-1 ring-[#ECAA0B]/42",
+      "border-[#ECAA0B]/75 bg-[#ECAA0B]/22 text-[#A66708] shadow-[0_0_28px_-10px_rgba(236,170,11,0.45)] ring-1 ring-[#ECAA0B]/42 dark:text-white",
   },
   discretionary: {
-    idle: "border-[#22C55E]/30 bg-[#22C55E]/10 text-white/90 hover:border-[#22C55E]/50 hover:bg-[#22C55E]/16",
+    idle: "border-[#22C55E]/30 bg-[#22C55E]/10 text-foreground hover:border-[#22C55E]/50 hover:bg-[#22C55E]/16",
     active:
-      "border-[#22C55E]/72 bg-[#22C55E]/22 text-white shadow-[0_0_28px_-10px_rgba(34,197,94,0.5)] ring-1 ring-[#22C55E]/40",
+      "border-[#22C55E]/72 bg-[#22C55E]/22 text-[#15803D] shadow-[0_0_28px_-10px_rgba(34,197,94,0.5)] ring-1 ring-[#22C55E]/40 dark:text-white",
   },
 };
 
@@ -505,13 +505,13 @@ export function SubcategoryTypeSlicer({
   return (
     <div
       className={cn(
-        "rounded-xl border border-white/[0.09] bg-gradient-to-b from-white/[0.07] to-white/[0.02] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] sm:rounded-2xl sm:p-2",
+        "rounded-xl border border-chart-border bg-gradient-to-b from-chart-muted to-chart-surface p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] sm:rounded-2xl sm:p-2",
         compact && "w-fit max-w-full shrink-0",
       )}
     >
       <div className={cn("flex min-w-0 items-center", showExpenseTypeLabel ? "gap-1.5 sm:gap-3" : "gap-0")}>
         {showExpenseTypeLabel ? (
-          <p className="shrink-0 whitespace-nowrap px-0.5 text-[9px] font-medium uppercase tracking-wider text-white/40 sm:px-1 sm:text-[10px]">
+          <p className="shrink-0 whitespace-nowrap px-0.5 text-[9px] font-medium uppercase tracking-wider text-muted-foreground sm:px-1 sm:text-[10px]">
             Expense type
           </p>
         ) : null}
@@ -546,7 +546,7 @@ export function SubcategoryTypeInlinePicker({
   return (
     <div
       className={cn(
-        "flex min-w-0 gap-1 rounded-lg border border-white/[0.10] bg-black/30 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]",
+        "flex min-w-0 gap-1 rounded-lg border border-chart-border bg-foreground/[0.04] dark:border-white/[0.10] dark:bg-black/30 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]",
         className,
       )}
       role="group"
@@ -576,7 +576,7 @@ export function SubcategoryTypeInlinePicker({
             style={{ backgroundColor: SUBCAT_DOT[opt.value] }}
             aria-hidden
           />
-          <span className="line-clamp-2 w-full px-0.5 text-center text-[7px] font-semibold leading-[1.15] text-white/90 sm:text-[8px]">
+          <span className="line-clamp-2 w-full px-0.5 text-center text-[7px] font-semibold leading-[1.15] text-foreground sm:text-[8px]">
             {opt.label}
           </span>
         </button>
@@ -708,8 +708,8 @@ export function FlowThemeSlicer({
           neutralChips
             ? neutralChipClass(allSelected)
             : allSelected
-              ? "border-[#0BC18D]/55 bg-[#0BC18D]/18 text-white shadow-[0_0_26px_-10px_rgba(11,193,141,0.6)] ring-1 ring-[#0BC18D]/30"
-              : "border-white/12 bg-black/25 text-white/85 hover:border-white/22 hover:bg-white/[0.07]",
+              ? "border-[#0BC18D]/55 bg-[#0BC18D]/18 text-[#0a8f68] shadow-[0_0_26px_-10px_rgba(11,193,141,0.6)] ring-1 ring-[#0BC18D]/30 dark:text-white"
+              : "border-chart-border bg-foreground/[0.05] text-foreground hover:border-foreground/20 hover:bg-chart-hover dark:bg-black/25 dark:hover:border-white/22",
         )}
         aria-pressed={allSelected}
       >
@@ -750,13 +750,13 @@ export function FlowThemeSlicer({
   return (
     <div
       className={cn(
-        "rounded-xl border border-white/[0.09] bg-gradient-to-b from-white/[0.07] to-white/[0.02] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] sm:rounded-2xl sm:p-2",
+        "rounded-xl border border-chart-border bg-gradient-to-b from-chart-muted to-chart-surface p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] sm:rounded-2xl sm:p-2",
         compact && "w-fit max-w-full shrink-0",
       )}
     >
       <div className={cn("flex min-w-0 items-center", showFlowLabel ? "gap-1.5 sm:gap-3" : "gap-0")}>
         {showFlowLabel ? (
-          <p className="shrink-0 whitespace-nowrap px-0.5 text-[9px] font-medium uppercase tracking-wider text-white/40 sm:px-1 sm:text-[10px]">
+          <p className="shrink-0 whitespace-nowrap px-0.5 text-[9px] font-medium uppercase tracking-wider text-muted-foreground sm:px-1 sm:text-[10px]">
             Flow
           </p>
         ) : null}

@@ -22,7 +22,7 @@ const PRESETS: PresetRow[] = [
     ariaLabel: "All time",
     icon: InfinityIcon,
     accent:
-      "border-white/18 bg-gradient-to-br from-white/[0.09] to-white/[0.02] hover:border-white/28 hover:from-white/[0.12]",
+      "border-chart-border bg-gradient-to-br from-chart-muted to-chart-surface hover:border-chart-border hover:from-white/[0.12]",
     activeAccent:
       "border-[#0BC18D]/55 bg-gradient-to-br from-[#0BC18D]/20 to-[#0BC18D]/8 shadow-[0_0_28px_-12px_rgba(11,193,141,0.55)] ring-1 ring-[#0BC18D]/35",
   },
@@ -59,10 +59,10 @@ export function TimeSlicer({
   showLabel?: boolean;
 }) {
   return (
-    <div className="w-fit max-w-full rounded-xl border border-white/[0.09] bg-gradient-to-b from-white/[0.07] to-white/[0.02] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] sm:rounded-2xl sm:p-2">
+    <div className="w-fit max-w-full rounded-xl border border-chart-border bg-gradient-to-b from-chart-muted to-chart-surface p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] sm:rounded-2xl sm:p-2">
       <div className={cn("flex flex-nowrap items-center", showLabel ? "gap-1.5 sm:gap-2" : "gap-0")}>
         {showLabel ? (
-          <p className="shrink-0 whitespace-nowrap px-0.5 text-[9px] font-medium uppercase tracking-wider text-white/40 sm:px-1 sm:text-[10px]">
+          <p className="shrink-0 whitespace-nowrap px-0.5 text-[9px] font-medium uppercase tracking-wider text-muted-foreground sm:px-1 sm:text-[10px]">
             Period
           </p>
         ) : null}
@@ -90,11 +90,11 @@ export function TimeSlicer({
               <Icon
                 className={cn(
                   "h-3 w-3 shrink-0",
-                  selected ? "text-white" : "text-white/75",
+                  selected ? "text-white" : "text-foreground",
                 )}
                 strokeWidth={2}
               />
-              <span className="whitespace-nowrap text-[9px] font-semibold leading-none text-white/95 sm:text-[10px]">
+              <span className="whitespace-nowrap text-[9px] font-semibold leading-none text-foreground sm:text-[10px]">
                 {p.label}
               </span>
             </button>

@@ -674,7 +674,7 @@ export function StatementUpload() {
           "relative cursor-pointer rounded-2xl border-2 border-dashed p-6 sm:p-10 text-center transition-all duration-300",
           isDragging
             ? "border-[#0BC18D] bg-[#0BC18D]/5 scale-[1.02] shadow-[0_0_40px_rgba(11,193,141,0.15)]"
-            : "border-white/15 hover:border-white/25 hover:bg-white/[0.04]",
+            : "border-chart-border hover:border-chart-border hover:bg-chart-muted",
         )}
       >
         <div className="absolute inset-0 rounded-2xl overflow-hidden pointer-events-none">
@@ -709,18 +709,18 @@ export function StatementUpload() {
         <h3 className="text-lg font-semibold text-white mb-1">
           {queue.length > 0 ? "Drop more statements" : "Drop your bank statements here"}
         </h3>
-        <p className="text-sm text-white/65 mb-4">
+        <p className="text-sm text-muted-foreground mb-4">
           or click to browse — drop multiple files at once
         </p>
 
         <div className="flex flex-wrap justify-center gap-2">
           {[".CSV", ".XLS", ".XLSX", ".PDF"].map((ext) => (
-            <span key={ext} className="px-3 py-1 rounded-full text-[11px] font-mono font-medium bg-white/8 text-white/70 border border-white/15">
+            <span key={ext} className="px-3 py-1 rounded-full text-[11px] font-mono font-medium bg-chart-muted text-muted-foreground border border-chart-border">
               {ext}
             </span>
           ))}
         </div>
-        <p className="mt-3 text-[11px] text-white/50">Max 1MB per file</p>
+        <p className="mt-3 text-[11px] text-muted-foreground">Max 1MB per file</p>
       </motion.div>
 
       <AnimatePresence>
@@ -729,10 +729,10 @@ export function StatementUpload() {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            className="rounded-2xl border border-white/15 bg-white/[0.04] overflow-hidden"
+            className="rounded-2xl border border-chart-border bg-chart-muted overflow-hidden"
           >
-            <div className="shrink-0 px-5 py-3 border-b border-white/15 flex items-center justify-between">
-              <p className="text-xs font-medium text-white/70">
+            <div className="shrink-0 px-5 py-3 border-b border-chart-border flex items-center justify-between">
+              <p className="text-xs font-medium text-muted-foreground">
                 {queue.length} file{queue.length !== 1 ? "s" : ""}
                 {submittedCount > 0 && <span className="text-[#0BC18D] ml-2">{submittedCount} queued for processing</span>}
                 {deferredCount > 0 && <span className="text-[#2CA2FF] ml-2">{deferredCount} queued next</span>}
@@ -755,7 +755,7 @@ export function StatementUpload() {
                     </Button>
                   )}
                   {allDone && (
-                    <Button onClick={reset} variant="ghost" size="sm" className="text-white/60 hover:text-white h-7 text-xs">
+                    <Button onClick={reset} variant="ghost" size="sm" className="text-muted-foreground hover:text-white h-7 text-xs">
                       Clear
                     </Button>
                   )}
@@ -804,15 +804,15 @@ export function StatementUpload() {
                         {fileIcon(item.fileName)}
                       </div>
                     ) : (
-                      <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center">
+                      <div className="w-8 h-8 rounded-lg bg-chart-muted/40 flex items-center justify-center">
                         {fileIcon(item.fileName)}
                       </div>
                     )}
                   </div>
 
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-white/90 truncate">{item.fileName}</p>
-                    <p className="text-[10px] text-white/50">
+                    <p className="text-xs font-medium text-foreground truncate">{item.fileName}</p>
+                    <p className="text-[10px] text-muted-foreground">
                       {item.status === "queued" && <>{formatSize(item.fileSize)}</>}
                       {item.status === "deferred" && <span className="text-[#2CA2FF]">Waiting — next batch</span>}
                       {item.status === "checking" && "Checking for duplicates…"}
@@ -852,7 +852,7 @@ export function StatementUpload() {
                       </button>
                     )}
                     {(item.status === "queued" || item.status === "deferred" || item.status === "duplicate" || item.status === "error" || item.status === "completed" || item.status === "failed") && (
-                      <button type="button" onClick={(e) => { e.stopPropagation(); removeFile(item.id); }} className="p-1 text-white/40 hover:text-white/70 transition-colors">
+                      <button type="button" onClick={(e) => { e.stopPropagation(); removeFile(item.id); }} className="p-1 text-muted-foreground hover:text-muted-foreground transition-colors">
                         <X className="w-3.5 h-3.5" />
                       </button>
                     )}
@@ -862,38 +862,38 @@ export function StatementUpload() {
               </div>
             </div>
 
-            <div className="shrink-0 px-5 py-3 border-t border-white/15 flex items-center justify-between">
+            <div className="shrink-0 px-5 py-3 border-t border-chart-border flex items-center justify-between">
               {allDone ? (
                 <div className="flex items-center gap-2 w-full">
                   {duplicateCount > 0 && completedCount === 0 && errorCount === 0 ? (
                     <>
                       <Ban className="w-4 h-4 text-[#ECAA0B] shrink-0" />
-                      <p className="text-xs text-white/75">
+                      <p className="text-xs text-foreground">
                         {duplicateCount === 1 ? "This file was" : "All files were"} already processed — no AI costs incurred.
                       </p>
                     </>
                   ) : completedCount > 0 ? (
                     <>
                       <CheckCircle2 className="w-4 h-4 text-[#0BC18D] shrink-0" />
-                      <p className="text-xs text-white/75">
+                      <p className="text-xs text-foreground">
                         Processing complete.
                       </p>
                     </>
                   ) : (
                     <>
                       <AlertCircle className="w-4 h-4 text-[#FF6F69] shrink-0" />
-                      <p className="text-xs text-white/75">Done.</p>
+                      <p className="text-xs text-foreground">Done.</p>
                     </>
                   )}
                 </div>
               ) : hasSubmitted ? (
                 <div className="flex items-center gap-2 w-full justify-center">
                   <Loader2 className="w-4 h-4 text-[#AD74FF] animate-spin" />
-                  <p className="text-xs text-white/65">AI is processing — you can navigate away safely</p>
+                  <p className="text-xs text-muted-foreground">AI is processing — you can navigate away safely</p>
                 </div>
               ) : hasQueued && !isSubmitting && !hasChecking ? (
                 <div className="flex items-center justify-between w-full">
-                  <p className="text-[10px] text-white/50">
+                  <p className="text-[10px] text-muted-foreground">
                     {queuedCount} file{queuedCount !== 1 ? "s" : ""} ready
                     {deferredCount > 0 && ` · ${deferredCount} more in next batch`}
                   </p>
@@ -909,7 +909,7 @@ export function StatementUpload() {
               ) : (isSubmitting || hasChecking) ? (
                 <div className="flex items-center gap-2 w-full justify-center">
                   <Loader2 className="w-4 h-4 text-[#AD74FF] animate-spin" />
-                  <p className="text-xs text-white/65">{hasChecking ? "Checking files…" : "Submitting files…"}</p>
+                  <p className="text-xs text-muted-foreground">{hasChecking ? "Checking files…" : "Submitting files…"}</p>
                 </div>
               ) : null}
             </div>
