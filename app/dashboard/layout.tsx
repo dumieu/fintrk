@@ -3,6 +3,7 @@ import { DashboardShell } from "@/components/dashboard-shell";
 import { DashboardLayoutChrome } from "@/components/dashboard-layout-chrome";
 import { ProcessingBanner } from "@/components/processing-banner";
 import { UpgradeRedirectGuard } from "@/components/upgrade-redirect-guard";
+import { XrefCapture } from "@/components/xref-capture";
 import { resilientAuth } from "@/lib/auth-resilient";
 
 const CLERK_CONFIGURED = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
@@ -23,6 +24,7 @@ export default async function DashboardLayout({
   return (
     <DashboardShell>
       <UpgradeRedirectGuard />
+      <XrefCapture />
       <DashboardLayoutChrome>{children}</DashboardLayoutChrome>
       <ProcessingBanner />
     </DashboardShell>

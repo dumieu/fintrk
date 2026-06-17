@@ -1,5 +1,6 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse, type NextRequest } from "next/server";
+import { xrefClick } from "@/lib/xref";
 
 const authorizedParties =
   process.env.NODE_ENV === "development"
@@ -47,6 +48,8 @@ const isPaywallExempt = createRouteMatcher([
   "/dashboard/upgrade(.*)",
   "/dashboard/contact",
   "/dashboard/faq",
+  /** Referral attribution must record even before/without an active plan. */
+  "/api/xref/capture",
 ]);
 
 function redirectToPaywall(req: NextRequest) {
@@ -73,6 +76,38 @@ function handleDemoApi(req: NextRequest): NextResponse | undefined {
   return NextResponse.json({ ok: true, demo: true }, { status: 200 });
 }
 
+/**
+ * xTRK Referral attribution: capture `?xref=<code>` from a CSM referral link
+ * into a first-touch cookie (1 year) that the signup flow reads to attribute
+ * the new user to a seller. Runs before auth so it works on the public landing
+ * (the referral link points at https://fintrk.io/?xref=CODE).
+ */
+async function captureXref(req: NextRequest): Promise<NextResponse | undefined> {
+  const url = req.nextUrl;
+  const xref = url.searchParams.get("xref");
+  if (!xref) return undefined;
+  url.searchParams.delete("xref");
+  // Branded links (https://fintrk.io/?xref=) bypass the legacy click-logging
+  // redirect, so report the landing to xref here (best-effort, short timeout).
+  await xrefClick(xref, {
+    ip:
+      (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() ||
+      req.headers.get("x-real-ip"),
+    ua: req.headers.get("user-agent"),
+    referrer: req.headers.get("referer"),
+    country: req.headers.get("x-vercel-ip-country"),
+  });
+  const response = NextResponse.redirect(url);
+  response.cookies.set("xref", xref, {
+    maxAge: 365 * 24 * 60 * 60,
+    path: "/",
+    httpOnly: false,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+  });
+  return response;
+}
+
 function redirectUnauthenticatedToLanding(req: NextRequest) {
   const url = req.nextUrl.clone();
   url.pathname = "/unauth1";
@@ -84,9 +119,11 @@ function redirectUnauthenticatedToLanding(req: NextRequest) {
  * When Clerk env is missing (local misconfig), still block /dashboard and APIs
  * so visitors never see the authenticated shell.
  */
-function middlewareWithoutClerk(req: NextRequest) {
+async function middlewareWithoutClerk(req: NextRequest) {
   const demo = handleDemoApi(req);
   if (demo) return demo;
+  const xref = await captureXref(req);
+  if (xref) return xref;
   if (isPublicRoute(req)) {
     return NextResponse.next();
   }
@@ -101,6 +138,8 @@ export default CLERK_KEYS_PRESENT
       async (auth, req) => {
         const demo = handleDemoApi(req);
         if (demo) return demo;
+        const xref = await captureXref(req);
+        if (xref) return xref;
         if (isPublicRoute(req)) {
           return;
         }
