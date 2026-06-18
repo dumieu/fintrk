@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
+import { HamburgerAccountFooter } from "@/components/hamburger-account-footer";
 import {
   Sheet,
   SheetContent,
@@ -23,8 +24,6 @@ import {
   Mail,
   HelpCircle,
   LogIn,
-  LogOut,
-  Settings,
   Network,
   Waves,
   Sparkles,
@@ -35,31 +34,12 @@ import { FintrkShortLogo } from "@/components/fintrk-short-logo";
 
 const ACCENT_HEX = "#0BC18D";
 
-export function HamburgerMenu() {
+export function HamburgerMenu({ sessionActive = false }: { sessionActive?: boolean }) {
   const pathname = usePathname();
   const basePath = "/dashboard";
   const [sheetOpen, setSheetOpen] = useState(false);
 
   const hasClerkKeys = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
-
-  let clerk: { openUserProfile: () => void; signOut: (opts: { redirectUrl: string }) => void } | null = null;
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { useClerk } = require("@clerk/nextjs");
-    clerk = useClerk();
-  } catch {
-    clerk = null;
-  }
-
-  const handleManageAccount = useCallback(() => {
-    setSheetOpen(false);
-    setTimeout(() => { clerk?.openUserProfile(); }, 350);
-  }, [clerk]);
-
-  const handleSignOut = useCallback(() => {
-    setSheetOpen(false);
-    setTimeout(() => { clerk?.signOut({ redirectUrl: "/" }); }, 350);
-  }, [clerk]);
 
   const navItems = [
     { label: "Upload Statement", href: `${basePath}/upload`, icon: Upload },
@@ -81,7 +61,7 @@ export function HamburgerMenu() {
           </Button>
         }
       />
-      <SheetContent side="left" showCloseButton={false} className="w-72 p-0">
+      <SheetContent side="left" showCloseButton={false} className="flex h-full w-72 flex-col p-0">
         <SheetHeader className="border-b border-border px-5 py-4">
           <div className="flex items-center justify-between gap-2">
             <div className="flex min-w-0 items-center gap-2">
@@ -219,30 +199,12 @@ export function HamburgerMenu() {
           </ul>
         </nav>
 
-        <div className="mt-auto border-t border-border px-3 py-3">
-          {hasClerkKeys && clerk ? (
-            <ul className="space-y-1">
-              <li>
-                <button
-                  type="button"
-                  onClick={handleManageAccount}
-                  className="flex w-full items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-muted-foreground hover:bg-muted/50 cursor-pointer"
-                >
-                  <Settings className="w-5 h-5 shrink-0" />
-                  Manage Account
-                </button>
-              </li>
-              <li>
-                <button
-                  type="button"
-                  onClick={handleSignOut}
-                  className="flex w-full items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-destructive hover:bg-destructive/10 cursor-pointer"
-                >
-                  <LogOut className="w-5 h-5 shrink-0" />
-                  Sign Out
-                </button>
-              </li>
-            </ul>
+        <div className="mt-auto shrink-0 border-t border-border px-3 py-3">
+          {sessionActive || hasClerkKeys ? (
+            <HamburgerAccountFooter
+              sessionActive={sessionActive}
+              onClose={() => setSheetOpen(false)}
+            />
           ) : (
             <SheetClose
               nativeButton={false}
@@ -251,7 +213,7 @@ export function HamburgerMenu() {
                   href="/auth"
                   className="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-primary transition-colors"
                 >
-                  <LogIn className="w-5 h-5 shrink-0" />
+                  <LogIn className="h-5 w-5 shrink-0" />
                   Sign up / Log in
                 </Link>
               }

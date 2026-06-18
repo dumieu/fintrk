@@ -3,6 +3,8 @@
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { HamburgerMenu } from "@/components/hamburger-menu";
+import { DashboardUserMenu } from "@/components/dashboard-user-menu";
+import { SignOutControl } from "@/components/sign-out-control";
 import { CashflowSummary } from "@/components/cashflow-summary";
 import { CashflowLegendHelpButton } from "@/components/cashflow-legend-help";
 
@@ -22,6 +24,7 @@ const PAGE_META: Array<{ match: (p: string) => boolean; title: string; subtitle:
   { match: (p) => p.startsWith("/dashboard/categories"), title: "Category Mapping", subtitle: "Curate how transactions roll up into categories and subcategories" },
   { match: (p) => p.startsWith("/dashboard/my-profile"), title: "My Profile", subtitle: "Personal preferences and account settings" },
   { match: (p) => p.startsWith("/dashboard/profile"), title: "My Profile", subtitle: "Manage your personal information and preferences" },
+  { match: (p) => p.startsWith("/dashboard/upgrade"), title: "Plan & Billing", subtitle: "Manage your FinTRK Pro subscription" },
   { match: (p) => p.startsWith("/dashboard/connect-ai"), title: "Connect your AI", subtitle: "Link ChatGPT, Claude, or Perplexity to your real financial data" },
   { match: (p) => p.startsWith("/dashboard/contact"), title: "Contact", subtitle: "Get in touch with the FinTRK team" },
   { match: (p) => p.startsWith("/dashboard/faq"), title: "FAQ", subtitle: "Frequently asked questions about FinTRK" },
@@ -29,7 +32,13 @@ const PAGE_META: Array<{ match: (p: string) => boolean; title: string; subtitle:
 
 const FALLBACK = { title: "Dashboard", subtitle: "" };
 
-export function DashboardHeader({ ribbon = null }: { ribbon?: ReactNode }) {
+export function DashboardHeader({
+  ribbon = null,
+  sessionActive = false,
+}: {
+  ribbon?: ReactNode;
+  sessionActive?: boolean;
+}) {
   const pathname = usePathname() ?? "";
   const meta = PAGE_META.find((m) => m.match(pathname)) ?? FALLBACK;
   const showCashflowSummary = pathname.startsWith("/dashboard/analytics");
@@ -39,7 +48,7 @@ export function DashboardHeader({ ribbon = null }: { ribbon?: ReactNode }) {
   return (
     <header className="sticky top-0 z-40 shrink-0 border-b border-border/40 bg-background/80 backdrop-blur-md">
       <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2 sm:min-h-14 sm:flex-nowrap sm:py-2">
-        <HamburgerMenu />
+        <HamburgerMenu sessionActive={sessionActive} />
         <div className="flex min-w-0 flex-1 flex-col justify-center leading-tight">
           <div className="flex min-w-0 items-center gap-1.5">
             <h1 className="truncate text-sm font-bold tracking-tight text-foreground sm:text-base">
@@ -54,6 +63,8 @@ export function DashboardHeader({ ribbon = null }: { ribbon?: ReactNode }) {
           )}
         </div>
         {trailing ? <div className="flex min-w-0 shrink-0 items-center">{trailing}</div> : null}
+        {sessionActive ? <SignOutControl variant="header" /> : null}
+        <DashboardUserMenu />
       </div>
     </header>
   );

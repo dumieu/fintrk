@@ -30,6 +30,7 @@ const isPublicRoute = createRouteMatcher([
   "/",
   "/unauth1(.*)",
   "/auth(.*)",
+  "/sign-out",
   "/demo(.*)",
   "/api/webhooks/(.*)",
   "/api/demo/(.*)",
@@ -77,7 +78,7 @@ function handleDemoApi(req: NextRequest): NextResponse | undefined {
 }
 
 /**
- * xTRK Referral attribution: capture `?xref=<code>` from a CSM referral link
+ * xTRK Referral attribution: capture `?xref=<code>` from a BDR referral link
  * into a first-touch cookie (1 year) that the signup flow reads to attribute
  * the new user to a seller. Runs before auth so it works on the public landing
  * (the referral link points at https://fintrk.io/?xref=CODE).

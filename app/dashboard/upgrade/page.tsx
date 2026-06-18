@@ -1,6 +1,7 @@
 import { PricingTable } from "@clerk/nextjs";
 import { Sparkles } from "lucide-react";
 
+import { UpgradeAccountActions } from "@/components/upgrade-account-actions";
 import { hasProAccess } from "@/lib/plan";
 
 export const dynamic = "force-dynamic";
@@ -48,6 +49,8 @@ export default async function UpgradePage() {
         <p className="mt-8 text-center text-xs text-muted-foreground">
           Billing is handled securely by Stripe through Clerk. Prices in USD.
         </p>
+
+        <UpgradeAccountActions />
       </div>
     </div>
   );

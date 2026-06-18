@@ -25,7 +25,7 @@ export default async function DashboardLayout({
     <DashboardShell>
       <UpgradeRedirectGuard />
       <XrefCapture />
-      <DashboardLayoutChrome>{children}</DashboardLayoutChrome>
+      <DashboardLayoutChrome sessionActive>{children}</DashboardLayoutChrome>
       <ProcessingBanner />
     </DashboardShell>
   );
