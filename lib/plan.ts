@@ -1,21 +1,21 @@
 import "server-only";
 
-import { auth } from "@clerk/nextjs/server";
+import { auth, currentUser } from "@clerk/nextjs/server";
 import { headers } from "next/headers";
 
+import { isProMetadata, readPlanMetadata } from "@/lib/entitlement";
+
 /**
- * Clerk Billing plan slug (matches the plan key configured in the Clerk
- * Dashboard). Clerk owns the Stripe connected account, checkout, customer
- * portal, the 7-day free trial, and proration. We only ever read the plan via
- * `has({ plan })` - users who are trialing are reported as subscribed, so the
- * trial wall lifts automatically during the trial and re-engages when it lapses.
+ * FinTRK Pro plan, billed directly through Stripe (see lib/stripe.ts). Plan
+ * state lives on the Clerk user's publicMetadata, written by the Stripe webhook
+ * (/api/webhooks/stripe). Trialing users count as Pro, so the 7-day trial lifts
+ * the wall and it re-engages when the subscription lapses.
  */
-export const PRO_PLAN = "fintrk_pro";
+export const PRO_PLAN = "pro";
 
 /**
  * Dev escape hatch. Set `FINTRK_BILLING_ENFORCED=false` to disable the paywall
- * locally (still requires a signed-in Clerk session). Production leaves this
- * unset, so the trial wall is fully enforced by default.
+ * locally (still requires a signed-in session). Production leaves this unset.
  */
 export function billingEnforced(): boolean {
   return process.env.FINTRK_BILLING_ENFORCED !== "false";
@@ -31,21 +31,59 @@ async function isDemoRequest(): Promise<boolean> {
   }
 }
 
+/** Read plan metadata from the session-token claim, if it's configured. */
+function planClaimFromSession(sessionClaims: unknown): unknown {
+  const c = sessionClaims as Record<string, unknown> | null | undefined;
+  if (!c) return undefined;
+  return c.metadata ?? c.publicMetadata ?? undefined;
+}
+
 /**
  * True when the current request may use the (Pro-only) authenticated app:
- * an active subscription OR an active free trial, the public demo, or when
- * billing enforcement is explicitly disabled for local development.
+ * an active subscription or trial, the public demo, or when enforcement is off.
+ * Fast path reads the session claim; falls back to live publicMetadata.
  */
 export async function hasProAccess(): Promise<boolean> {
   if (!billingEnforced()) return true;
   if (await isDemoRequest()) return true;
 
-  const { userId, has } = await auth();
-  if (!userId || typeof has !== "function") return false;
+  const { userId, sessionClaims } = await auth();
+  if (!userId) return false;
+
+  if (isProMetadata(planClaimFromSession(sessionClaims))) return true;
 
   try {
-    return has({ plan: PRO_PLAN });
+    const user = await currentUser();
+    return isProMetadata(user?.publicMetadata);
   } catch {
     return false;
+  }
+}
+
+export interface PlanState {
+  isPro: boolean;
+  status: string | null;
+  renewsAt: number | null;
+  /** Has a Stripe customer => can open the billing portal to manage/cancel. */
+  manageable: boolean;
+}
+
+/** Full plan snapshot for the billing page (reads live Clerk metadata). */
+export async function getPlanState(): Promise<PlanState> {
+  try {
+    const user = await currentUser();
+    if (!user) return { isPro: false, status: null, renewsAt: null, manageable: false };
+    const meta = readPlanMetadata(user.publicMetadata);
+    const stripeCustomerId = (user.privateMetadata as Record<string, unknown> | null)?.[
+      "stripeCustomerId"
+    ];
+    return {
+      isPro: isProMetadata(user.publicMetadata),
+      status: meta.planStatus ?? null,
+      renewsAt: meta.planRenewsAt ?? null,
+      manageable: typeof stripeCustomerId === "string" && stripeCustomerId.length > 0,
+    };
+  } catch {
+    return { isPro: false, status: null, renewsAt: null, manageable: false };
   }
 }

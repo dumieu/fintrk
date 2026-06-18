@@ -8,7 +8,7 @@ import {
   isCimdClientId,
 } from "@/lib/mcp/config";
 import { createAuthCode, getClient } from "@/lib/mcp/tokens";
-import { billingEnforced, PRO_PLAN } from "@/lib/plan";
+import { hasProAccess } from "@/lib/plan";
 import { logServerError } from "@/lib/safe-error";
 
 export const runtime = "nodejs";
@@ -196,7 +196,7 @@ export async function GET(req: NextRequest) {
     return errorRedirect(params.redirectUri, "unsupported_response_type", params.state);
   }
 
-  const { userId, has } = await auth();
+  const { userId } = await auth();
   if (!userId) {
     // Send the user through Clerk sign-in, then back to this exact authorize URL.
     const base = getBaseUrl(req);
@@ -207,7 +207,7 @@ export async function GET(req: NextRequest) {
   }
 
   // Connecting an external AI assistant is a Pro-only capability.
-  if (billingEnforced() && !(typeof has === "function" && has({ plan: PRO_PLAN }))) {
+  if (!(await hasProAccess())) {
     return htmlError(
       "Connecting an AI assistant requires FinTRK Pro. Open FinTRK, start your free trial from Plan &amp; Billing, then connect again.",
       402,
@@ -249,7 +249,7 @@ export async function POST(req: NextRequest) {
     return errorRedirect(params.redirectUri, "access_denied", params.state);
   }
 
-  const { userId, has } = await auth();
+  const { userId } = await auth();
   if (!userId) {
     // Session expired between render and submit — bounce back to GET to re-auth.
     const base = getBaseUrl(req);
@@ -263,7 +263,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Defense-in-depth: re-check Pro entitlement at grant time.
-  if (billingEnforced() && !(typeof has === "function" && has({ plan: PRO_PLAN }))) {
+  if (!(await hasProAccess())) {
     return errorRedirect(params.redirectUri, "access_denied", params.state);
   }
 

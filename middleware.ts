@@ -1,6 +1,7 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse, type NextRequest } from "next/server";
 import { xrefClick } from "@/lib/xref";
+import { hasPlanClaim, isProMetadata } from "@/lib/entitlement";
 
 const authorizedParties =
   process.env.NODE_ENV === "development"
@@ -17,12 +18,12 @@ const authorizedParties =
 const CLERK_KEYS_PRESENT = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
 /**
- * Clerk Billing plan that the whole authenticated app sits behind. Trialing
- * users report as subscribed via `has({ plan })`, so the trial wall lifts for
- * the 7-day trial and re-engages when it lapses. Set
- * `FINTRK_BILLING_ENFORCED=false` to disable the paywall locally.
+ * The whole authenticated app sits behind FinTRK Pro (billed via Stripe). Plan
+ * state is written to the Clerk user by the Stripe webhook and surfaced to the
+ * edge via the session-token claim (Clerk Dashboard -> Sessions -> customize
+ * session token: add `"metadata": "{{user.public_metadata}}"`). Trialing users
+ * count as Pro. Set `FINTRK_BILLING_ENFORCED=false` to disable locally.
  */
-const PRO_PLAN = "fintrk_pro";
 const BILLING_ENFORCED = process.env.FINTRK_BILLING_ENFORCED !== "false";
 
 /** Routes that must stay reachable without a signed-in Clerk session. */
@@ -145,7 +146,7 @@ export default CLERK_KEYS_PRESENT
           return;
         }
         const isApi = req.nextUrl.pathname.startsWith("/api/");
-        const { userId, has } = await auth();
+        const { userId, sessionClaims } = await auth();
         if (!userId) {
           if (isApi) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -153,11 +154,15 @@ export default CLERK_KEYS_PRESENT
           return redirectUnauthenticatedToLanding(req);
         }
 
-        // Trial wall: the authenticated app is FinTRK Pro only. `has` reports
-        // trialing users as subscribed, so the 7-day trial passes here.
+        // Trial wall: the authenticated app is FinTRK Pro only. Plan comes from
+        // the session-token claim (`metadata`/`publicMetadata`). Trialing users
+        // pass. If the claim isn't configured yet we defer to the server layer
+        // (dashboard layout + hasProAccess) rather than risk blocking payers.
         if (BILLING_ENFORCED && !isPaywallExempt(req)) {
-          const isPro = typeof has === "function" && has({ plan: PRO_PLAN });
-          if (!isPro) {
+          const claim =
+            (sessionClaims as Record<string, unknown> | null | undefined)?.metadata ??
+            (sessionClaims as Record<string, unknown> | null | undefined)?.publicMetadata;
+          if (hasPlanClaim(claim) && !isProMetadata(claim)) {
             if (isApi) {
               return NextResponse.json(
                 { error: "FinTRK Pro required.", code: "UPGRADE_REQUIRED" },
