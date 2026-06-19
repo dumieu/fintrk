@@ -14,9 +14,9 @@ const FEATURES = [
 
 type Interval = "month" | "year";
 
-const PRICES: Record<Interval, { amount: string; sub: string }> = {
+const PRICES: Record<Interval, { amount: string; sub: string; note?: string }> = {
   month: { amount: "$8.98", sub: "per month" },
-  year: { amount: "$83.76", sub: "per year ($6.98/mo)" },
+  year: { amount: "$6.98", sub: "per month", note: "billed $83.76/yr" },
 };
 
 export function UpgradePricing({ canTrial }: { canTrial: boolean }) {
@@ -69,9 +69,12 @@ export function UpgradePricing({ canTrial }: { canTrial: boolean }) {
       </div>
 
       <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-        <div className="flex items-baseline gap-2">
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
           <span className="text-4xl font-bold tracking-tight text-foreground">{price.amount}</span>
           <span className="text-sm text-muted-foreground">{price.sub}</span>
+          {price.note ? (
+            <span className="text-sm text-muted-foreground">({price.note})</span>
+          ) : null}
         </div>
         <p className="mt-1 text-sm font-medium" style={{ color: ACCENT_HEX }}>
           FinTRK Pro
