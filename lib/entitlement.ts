@@ -42,3 +42,24 @@ export function hasPlanClaim(meta: unknown): boolean {
   const m = meta as Record<string, unknown>;
   return "plan" in m || "planStatus" in m;
 }
+
+/** Session claim may be full metadata blob or individual plan fields. */
+export function planFromSessionClaims(claims: unknown): PlanMetadata {
+  if (!claims || typeof claims !== "object") return {};
+  const c = claims as Record<string, unknown>;
+  const nested = readPlanMetadata(c.metadata ?? c.publicMetadata);
+  if (nested.plan || nested.planStatus) return nested;
+  return readPlanMetadata(c);
+}
+
+export function isProFromSessionClaims(claims: unknown): boolean {
+  return isProMetadata(planFromSessionClaims(claims));
+}
+
+/** True when the session carries plan info (claim is configured in Clerk). */
+export function hasPlanSessionClaim(claims: unknown): boolean {
+  if (!claims || typeof claims !== "object") return false;
+  const c = claims as Record<string, unknown>;
+  if (hasPlanClaim(c.metadata) || hasPlanClaim(c.publicMetadata)) return true;
+  return hasPlanClaim(c);
+}

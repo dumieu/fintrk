@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { DashboardProGate } from "@/components/dashboard-pro-gate";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { DashboardLayoutChrome } from "@/components/dashboard-layout-chrome";
 import { ProcessingBanner } from "@/components/processing-banner";
@@ -23,6 +24,7 @@ export default async function DashboardLayout({
 
   return (
     <DashboardShell>
+      <DashboardProGate />
       <UpgradeRedirectGuard />
       <XrefCapture />
       <DashboardLayoutChrome sessionActive>{children}</DashboardLayoutChrome>

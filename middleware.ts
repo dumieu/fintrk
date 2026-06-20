@@ -1,7 +1,8 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse, type NextRequest } from "next/server";
 import { xrefClick } from "@/lib/xref";
-import { hasPlanClaim, isProMetadata } from "@/lib/entitlement";
+import { isBillingExemptUserId } from "@/lib/billing-exempt";
+import { hasPlanSessionClaim, isProFromSessionClaims } from "@/lib/entitlement";
 
 const authorizedParties =
   process.env.NODE_ENV === "development"
@@ -154,15 +155,20 @@ export default CLERK_KEYS_PRESENT
           return redirectUnauthenticatedToLanding(req);
         }
 
+        // Single-account operator bypass (Clerk user id only — not forgeable).
+        if (isBillingExemptUserId(userId)) {
+          const res = NextResponse.next();
+          res.headers.set("x-fintrk-path", req.nextUrl.pathname);
+          return res;
+        }
+
         // Trial wall: the authenticated app is FinTRK Pro only. Plan comes from
         // the session-token claim (`metadata`/`publicMetadata`). Trialing users
         // pass. If the claim isn't configured yet we defer to the server layer
         // (dashboard layout + hasProAccess) rather than risk blocking payers.
         if (BILLING_ENFORCED && !isPaywallExempt(req)) {
-          const claim =
-            (sessionClaims as Record<string, unknown> | null | undefined)?.metadata ??
-            (sessionClaims as Record<string, unknown> | null | undefined)?.publicMetadata;
-          if (hasPlanClaim(claim) && !isProMetadata(claim)) {
+          const claims = sessionClaims as Record<string, unknown> | null | undefined;
+          if (hasPlanSessionClaim(claims) && !isProFromSessionClaims(claims)) {
             if (isApi) {
               return NextResponse.json(
                 { error: "FinTRK Pro required.", code: "UPGRADE_REQUIRED" },
@@ -172,7 +178,10 @@ export default CLERK_KEYS_PRESENT
             return redirectToPaywall(req);
           }
         }
-        return;
+
+        const res = NextResponse.next();
+        res.headers.set("x-fintrk-path", req.nextUrl.pathname);
+        return res;
       },
       { authorizedParties }
     )

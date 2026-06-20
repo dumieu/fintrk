@@ -20,7 +20,7 @@ const PRICES: Record<Interval, { amount: string; sub: string; note?: string }> =
 };
 
 export function UpgradePricing({ canTrial }: { canTrial: boolean }) {
-  const [interval, setInterval] = useState<Interval>("month");
+  const [interval, setInterval] = useState<Interval>("year");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

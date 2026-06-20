@@ -3,7 +3,8 @@ import "server-only";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { headers } from "next/headers";
 
-import { isProMetadata, readPlanMetadata } from "@/lib/entitlement";
+import { isBillingExemptAccount, isBillingExemptUserId } from "@/lib/billing-exempt";
+import { isProMetadata, planFromSessionClaims, readPlanMetadata } from "@/lib/entitlement";
 
 /**
  * FinTRK Pro plan, billed directly through Stripe (see lib/stripe.ts). Plan
@@ -31,13 +32,6 @@ async function isDemoRequest(): Promise<boolean> {
   }
 }
 
-/** Read plan metadata from the session-token claim, if it's configured. */
-function planClaimFromSession(sessionClaims: unknown): unknown {
-  const c = sessionClaims as Record<string, unknown> | null | undefined;
-  if (!c) return undefined;
-  return c.metadata ?? c.publicMetadata ?? undefined;
-}
-
 /**
  * True when the current request may use the (Pro-only) authenticated app:
  * an active subscription or trial, the public demo, or when enforcement is off.
@@ -50,7 +44,20 @@ export async function hasProAccess(): Promise<boolean> {
   const { userId, sessionClaims } = await auth();
   if (!userId) return false;
 
-  if (isProMetadata(planClaimFromSession(sessionClaims))) return true;
+  // Single-account operator bypass (dumieu@gmail.com only). Verified with live email.
+  if (isBillingExemptUserId(userId)) {
+    try {
+      const user = await currentUser();
+      return isBillingExemptAccount(
+        user?.id,
+        user?.primaryEmailAddress?.emailAddress ?? null,
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  if (isProMetadata(planFromSessionClaims(sessionClaims))) return true;
 
   try {
     const user = await currentUser();
