@@ -8,6 +8,7 @@ import {
 } from "@/lib/db/category-rollup";
 import {
   excludeCardPaymentsSql,
+  excludeIgnoredSql,
   spendingIntelligenceOutflowSql,
 } from "@/lib/db/excluded-transactions";
 import { eq, and, or, sql } from "drizzle-orm";
@@ -32,7 +33,7 @@ function formatMonthYearLabel(ymd: string): string {
 const merchantOutflowWhere = (userId: string) =>
   and(
     eq(transactions.userId, userId),
-    excludeCardPaymentsSql(),
+    excludeCardPaymentsSql(), excludeIgnoredSql(),
     spendingIntelligenceOutflowSql(),
     sql`${transactions.merchantName} IS NOT NULL`,
   );
@@ -77,7 +78,7 @@ async function dominantCategoriesForMerchants(
       .where(
         and(
           eq(transactions.userId, userId),
-          excludeCardPaymentsSql(),
+          excludeCardPaymentsSql(), excludeIgnoredSql(),
           spendingIntelligenceOutflowSql(),
           sql`${transactions.merchantName} IS NOT NULL`,
           sql`${leafCategory.name} IS NOT NULL`,

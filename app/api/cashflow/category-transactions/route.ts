@@ -4,7 +4,14 @@ import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
 import { accounts, statements, transactions, userCategories } from "@/lib/db/schema";
-import { excludeCardPaymentsSql, spendingIntelligenceOutflowSql } from "@/lib/db/excluded-transactions";
+import { excludeCardPaymentsSql, excludeIgnoredSql, spendingIntelligenceOutflowSql } from "@/lib/db/excluded-transactions";
+import {
+  doubleChargeMerchantKey,
+  findDoubleChargeSuspects,
+  type DoubleChargeCandidate,
+} from "@/lib/double-charge-suspects";
+import { ensureDoubleChargeWatchlistTable } from "@/lib/ensure-double-charge-watchlist";
+import { doubleChargeWatchlistExclusions } from "@/lib/db/schema";
 import { logServerError } from "@/lib/safe-error";
 import { df } from "@/lib/crypto/encryption";
 
@@ -152,7 +159,7 @@ export async function GET(request: NextRequest) {
         .where(
           and(
             eq(transactions.userId, userId),
-            excludeCardPaymentsSql(),
+            excludeCardPaymentsSql(), excludeIgnoredSql(),
             selectionFilter,
             eq(flowExpr, flow),
             ...(flow === "inflow" ? [sql`${transactions.baseAmount}::numeric > 0`] : []),
@@ -174,7 +181,57 @@ export async function GET(request: NextRequest) {
       accountName: df(row.accountName),
     }));
 
-    return NextResponse.json({ data, total: data.length }, { headers: NO_STORE });
+    let enriched = data;
+    if (data.length > 0) {
+      await ensureDoubleChargeWatchlistTable();
+      const exclusionRows = await resilientQuery(() =>
+        db
+          .select({ merchantKey: doubleChargeWatchlistExclusions.merchantKey })
+          .from(doubleChargeWatchlistExclusions)
+          .where(eq(doubleChargeWatchlistExclusions.userId, userId)),
+      );
+      const excludedMerchantKeys = new Set(exclusionRows.map((r) => r.merchantKey));
+      const candidateRows = await resilientQuery(() =>
+        db
+          .select({
+            id: transactions.id,
+            postedDate: transactions.postedDate,
+            merchantName: transactions.merchantName,
+            rawDescription: transactions.rawDescription,
+            baseAmount: transactions.baseAmount,
+            accountId: transactions.accountId,
+            referenceId: transactions.referenceId,
+            isRecurring: transactions.isRecurring,
+            statementId: transactions.statementId,
+          })
+          .from(transactions)
+          .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql(), excludeIgnoredSql())),
+      );
+      const candidates = candidateRows as DoubleChargeCandidate[];
+      const doubleChargeById = findDoubleChargeSuspects(candidates, { excludedMerchantKeys });
+      const candidatesById = new Map(candidates.map((r) => [r.id, r]));
+      enriched = data.map((row) => {
+        const suspect = doubleChargeById.get(row.id);
+        if (!suspect) return row;
+        const src = candidatesById.get(row.id);
+        return {
+          ...row,
+          doubleChargeSuspect: {
+            ...suspect,
+            merchantKey: src
+              ? doubleChargeMerchantKey(src.merchantName, src.rawDescription)
+              : doubleChargeMerchantKey(row.merchantName, row.rawDescription),
+            displayName:
+              src?.merchantName?.trim() ||
+              row.merchantName?.trim() ||
+              src?.rawDescription?.trim().slice(0, 64) ||
+              row.rawDescription.trim().slice(0, 64),
+          },
+        };
+      });
+    }
+
+    return NextResponse.json({ data: enriched, total: enriched.length }, { headers: NO_STORE });
   } catch (err) {
     logServerError("api/cashflow/category-transactions", err);
     return NextResponse.json(

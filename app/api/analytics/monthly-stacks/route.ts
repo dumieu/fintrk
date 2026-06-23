@@ -9,6 +9,8 @@ import {
 } from "@/lib/db/category-rollup";
 import {
   excludeCardPaymentsSql,
+  excludeIgnoredSql,
+  primaryCurrencyOnlySql,
   spendingIntelligenceInflowSql,
   spendingIntelligenceOutflowSql,
 } from "@/lib/db/excluded-transactions";
@@ -26,6 +28,8 @@ const NO_STORE = { "Cache-Control": "no-store" } as const;
 /** Six years of monthly bars (72 months). */
 const MAX_MONTHS = 72;
 const DEFAULT_MONTHS = 72;
+/** Rolling window for avg spend / avg income reference lines on the chart. */
+const REF_AVG_MONTHS = 12;
 
 /**
  * Generate a contiguous list of `YYYY-MM` keys ending at `anchor` (inclusive),
@@ -75,12 +79,12 @@ export interface MonthlyStacksResponse {
   /** Sum across all months in the window. */
   grandTotal: number;
   /** Mean monthly *income* averaged ONLY across months that have positive
-   *  income rows (capped at the chart cap, rolling). Null if no income at all. */
-  avgMonthlyIncomeLast6: number | null;
+   *  income, capped to the most recent {@link REF_AVG_MONTHS} income months. */
+  avgMonthlyIncomeLast12: number | null;
   /** Count of income-bearing months actually used for the average. */
   incomeMonthsCount: number;
-  /** Mean monthly spend across the rightmost 6 bars in the chart window. */
-  avgMonthlySpendLast6: number | null;
+  /** Mean monthly spend across the rightmost {@link REF_AVG_MONTHS} bars. */
+  avgMonthlySpendLast12: number | null;
   primaryCurrency: string;
   monthsRequested: number;
 }
@@ -106,6 +110,20 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    /**
+     * Primary currency first: every sum below is scoped to it so bar totals
+     * stay comparable (base_amount is per-currency) and match the drill-down
+     * lists/tooltips, which also filter by base_currency = primary currency.
+     */
+    const primaryCurrencyRows = await resilientQuery(() =>
+      db
+        .select({ primaryCurrency: accounts.primaryCurrency })
+        .from(accounts)
+        .where(eq(accounts.userId, userId))
+        .limit(1),
+    );
+    const primaryCurrency = primaryCurrencyRows[0]?.primaryCurrency ?? "USD";
+
     /** Anchor at the latest outflow month; query up to 6 years back, return only months with spend. */
     const rangeRows = await resilientQuery(() =>
       db
@@ -119,7 +137,8 @@ export async function GET(request: NextRequest) {
         .where(
           and(
             eq(transactions.userId, userId),
-            excludeCardPaymentsSql(),
+            excludeCardPaymentsSql(), excludeIgnoredSql(),
+            primaryCurrencyOnlySql(primaryCurrency),
             spendingIntelligenceOutflowSql(),
           ),
         ),
@@ -134,11 +153,10 @@ export async function GET(request: NextRequest) {
     const endDateExclusive = `${endMonthKey}-01`;
 
     /** Income reference is averaged ONLY across months that actually have
-     *  income (positive baseAmount), independent of the expense window. The
-     *  cap is the same as the chart cap (DEFAULT_MONTHS most-recent income
-     *  months, rolling) so a one-off historical bonus can't skew the line. */
+     *  income (positive baseAmount), capped to the most recent REF_AVG_MONTHS
+     *  income months so a one-off historical bonus can't skew the line. */
 
-    const [rows, userAccounts, incomeRows] = await Promise.all([
+    const [rows, incomeRows] = await Promise.all([
       drillCategory
         ? resilientQuery(() =>
             db
@@ -163,7 +181,8 @@ export async function GET(request: NextRequest) {
               .where(
                 and(
                   eq(transactions.userId, userId),
-                  excludeCardPaymentsSql(),
+                  excludeCardPaymentsSql(), excludeIgnoredSql(),
+                  primaryCurrencyOnlySql(primaryCurrency),
                   spendingIntelligenceOutflowSql(),
                   sql`${transactions.postedDate}::date >= ${startDate}::date`,
                   sql`${transactions.postedDate}::date < (${endDateExclusive}::date + interval '1 month')`,
@@ -199,7 +218,8 @@ export async function GET(request: NextRequest) {
               .where(
                 and(
                   eq(transactions.userId, userId),
-                  excludeCardPaymentsSql(),
+                  excludeCardPaymentsSql(), excludeIgnoredSql(),
+                  primaryCurrencyOnlySql(primaryCurrency),
                   spendingIntelligenceOutflowSql(),
                   sql`${transactions.postedDate}::date >= ${startDate}::date`,
                   sql`${transactions.postedDate}::date < (${endDateExclusive}::date + interval '1 month')`,
@@ -210,13 +230,6 @@ export async function GET(request: NextRequest) {
                 categoryRollupLabelSql,
               ),
           ),
-      resilientQuery(() =>
-        db
-          .select({ primaryCurrency: accounts.primaryCurrency })
-          .from(accounts)
-          .where(eq(accounts.userId, userId))
-          .limit(1),
-      ),
       /** Per-month income totals for every month with positive baseAmount,
        *  ordered newest-first. We trim & average in JS using only the months
        *  that actually have income — independent of the expense window. */
@@ -230,7 +243,8 @@ export async function GET(request: NextRequest) {
           .where(
             and(
               eq(transactions.userId, userId),
-              excludeCardPaymentsSql(),
+              excludeCardPaymentsSql(), excludeIgnoredSql(),
+              primaryCurrencyOnlySql(primaryCurrency),
               spendingIntelligenceInflowSql(),
             ),
           )
@@ -238,8 +252,6 @@ export async function GET(request: NextRequest) {
           .orderBy(sql`date_trunc('month', ${transactions.postedDate}::date) DESC`),
       ),
     ]);
-
-    const primaryCurrency = userAccounts[0]?.primaryCurrency ?? "USD";
 
     /** Aggregate totals per (month, category or subcategory). */
     const byMonth = new Map<string, Map<string, { amount: number; count: number }>>();
@@ -299,24 +311,23 @@ export async function GET(request: NextRequest) {
     });
 
     /** Average monthly income across ONLY the months that actually have
-     *  income, capped to the most recent `months` of those. So with 4 income
-     *  months and 15 expense months, the divisor is 4. */
+     *  income, capped to the most recent REF_AVG_MONTHS income months. */
     const incomeMonths = incomeRows
       .map((r) => parseFloat(r.total ?? "0"))
       .filter((v) => v > 0)
-      .slice(0, months);
+      .slice(0, REF_AVG_MONTHS);
     const incomeMonthsCount = incomeMonths.length;
     const incomeSum = incomeMonths.reduce((a, b) => a + b, 0);
-    const avgMonthlyIncomeLast6 =
+    const avgMonthlyIncomeLast12 =
       incomeMonthsCount > 0
         ? Math.round((incomeSum / incomeMonthsCount) * 100) / 100
         : null;
 
-    const spendLast6 = monthsOut.slice(-Math.min(6, monthsOut.length));
-    const spendLast6Sum = spendLast6.reduce((s, m) => s + m.total, 0);
-    const avgMonthlySpendLast6 =
-      spendLast6.length > 0
-        ? Math.round((spendLast6Sum / spendLast6.length) * 100) / 100
+    const spendLast12 = monthsOut.slice(-Math.min(REF_AVG_MONTHS, monthsOut.length));
+    const spendLast12Sum = spendLast12.reduce((s, m) => s + m.total, 0);
+    const avgMonthlySpendLast12 =
+      spendLast12.length > 0
+        ? Math.round((spendLast12Sum / spendLast12.length) * 100) / 100
         : null;
 
     const payload: MonthlyStacksResponse = {
@@ -325,9 +336,9 @@ export async function GET(request: NextRequest) {
       ...(drillCategory ? { parentCategory: drillCategory } : {}),
       maxStack: Math.round(maxStack * 100) / 100,
       grandTotal: Math.round(grandTotal * 100) / 100,
-      avgMonthlyIncomeLast6,
+      avgMonthlyIncomeLast12,
       incomeMonthsCount,
-      avgMonthlySpendLast6,
+      avgMonthlySpendLast12,
       primaryCurrency,
       monthsRequested: months,
     };

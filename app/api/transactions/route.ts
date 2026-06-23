@@ -8,7 +8,8 @@ import { transactionFiltersSchema, updateCategorySchema, deleteTransactionsSchem
 import { logServerError } from "@/lib/safe-error";
 import { ef, df } from "@/lib/crypto/encryption";
 import { ensureTransactionWarningFlagColumn } from "@/lib/ensure-transaction-warning-flag";
-import { excludeCardPaymentsSql } from "@/lib/db/excluded-transactions";
+import { ensureTransactionIgnoresTable } from "@/lib/ensure-transaction-ignores";
+import { excludeCardPaymentsSql, excludeIgnoredSql } from "@/lib/db/excluded-transactions";
 import {
   findDoubleChargeSuspects,
   summarizeDoubleChargeMerchants,
@@ -28,6 +29,7 @@ export async function GET(request: NextRequest) {
     const { userId } = await resilientAuth();
     if (!userId) return unauthorizedResponse();
     await ensureTransactionWarningFlagColumn();
+    await ensureTransactionIgnoresTable();
 
     const params = Object.fromEntries(request.nextUrl.searchParams);
     const parsed = transactionFiltersSchema.safeParse(params);
@@ -36,7 +38,8 @@ export async function GET(request: NextRequest) {
     }
 
     const f = parsed.data;
-    const conditions = [eq(transactions.userId, userId)];
+    // Ignored transactions are removed from the ledger and every total/count below.
+    const conditions = [eq(transactions.userId, userId), excludeIgnoredSql()];
 
     if (f.flowTheme) {
       const catRows = await resilientQuery(() =>
@@ -145,7 +148,7 @@ export async function GET(request: NextRequest) {
             statementId: transactions.statementId,
           })
           .from(transactions)
-          .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql())),
+          .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql(), excludeIgnoredSql())),
       );
       const candidates = candidateRows as DoubleChargeCandidate[];
       doubleChargeCandidatesById = new Map(candidates.map((r) => [r.id, r]));

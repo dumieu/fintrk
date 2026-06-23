@@ -9,12 +9,13 @@ import {
   useCallback,
 } from "react";
 import { createPortal } from "react-dom";
-import { CalendarRange, Maximize2, X } from "lucide-react";
+import { CalendarRange, CalendarDays, Maximize2, X } from "lucide-react";
 import type {
   MonthlyStack,
+  MonthlyStackSegment,
   MonthlyStacksResponse,
 } from "@/app/api/analytics/monthly-stacks/route";
-import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/format";
 import { AnalyticsDetailTooltip, detailTipAnchorFromEvent } from "@/components/analytics-detail-tooltip";
 import { useAnalyticsDetail } from "@/components/use-analytics-detail";
@@ -24,7 +25,7 @@ import {
   analyticsCategoryGradientId,
   analyticsCategoryGradientTop,
 } from "@/lib/analytics-category-colors";
-import { monthKeyToDateRange } from "@/lib/month-date-range";
+import { periodKeyToDateRange, formatPeriodKeyLabel } from "@/lib/month-date-range";
 import {
   chartChipClass,
   chartIconBadgeClass,
@@ -33,9 +34,11 @@ import {
   chartOverlayPillClass,
   chartTitleClass,
 } from "@/lib/chart-ui";
+import { cn } from "@/lib/utils";
 
 const REF_LINE_INCOME = "#39FF14";
 const REF_LINE_SPEND = "#FF4444";
+const REF_AVG_MONTHS = 12;
 const DEFAULT_MONTHS = 72;
 const CHART_HEIGHT = 660;
 const CHART_HEIGHT_FULL_INIT = 900;
@@ -43,6 +46,130 @@ const CHART_HEIGHT_FULL_MIN = 540;
 const DENSE_BAR_THRESHOLD = 20;
 /** ~0.5mm gap between bars in dense mode (2px at standard density). */
 const DENSE_BAR_GAP_PX = 2;
+const GRANULARITY_STORAGE_KEY = "fintrk-monthly-stack-granularity";
+const STACK_BY_STORAGE_KEY = "fintrk-monthly-stack-by";
+
+export type ChartTimeGranularity = "month" | "year";
+export type ChartStackBy = "value" | "category";
+
+function readStoredGranularity(): ChartTimeGranularity {
+  if (typeof window === "undefined") return "month";
+  try {
+    const v = window.localStorage.getItem(GRANULARITY_STORAGE_KEY);
+    return v === "year" ? "year" : "month";
+  } catch {
+    return "month";
+  }
+}
+
+function writeStoredGranularity(value: ChartTimeGranularity) {
+  try {
+    window.localStorage.setItem(GRANULARITY_STORAGE_KEY, value);
+  } catch {
+    /* ignore */
+  }
+}
+
+function readStoredStackBy(): ChartStackBy {
+  if (typeof window === "undefined") return "value";
+  try {
+    const v = window.localStorage.getItem(STACK_BY_STORAGE_KEY);
+    return v === "category" ? "category" : "value";
+  } catch {
+    return "value";
+  }
+}
+
+function writeStoredStackBy(value: ChartStackBy) {
+  try {
+    window.localStorage.setItem(STACK_BY_STORAGE_KEY, value);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Overall segment ranking across all bars (biggest first). */
+function globalCategoryStackOrder(months: MonthlyStack[]): string[] {
+  const totals = new Map<string, number>();
+  for (const m of months) {
+    for (const s of m.segments) {
+      totals.set(s.name, (totals.get(s.name) ?? 0) + s.amount);
+    }
+  }
+  return [...totals.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([name]) => name);
+}
+
+function orderStackSegments(
+  segments: MonthlyStackSegment[],
+  stackBy: ChartStackBy,
+  categoryOrder: string[],
+): MonthlyStackSegment[] {
+  if (stackBy === "value") {
+    return [...segments].sort((a, b) => b.amount - a.amount || a.name.localeCompare(b.name));
+  }
+  const rank = new Map(categoryOrder.map((name, i) => [name, i]));
+  return [...segments].sort((a, b) => {
+    const ra = rank.get(a.name) ?? Number.MAX_SAFE_INTEGER;
+    const rb = rank.get(b.name) ?? Number.MAX_SAFE_INTEGER;
+    return ra - rb || a.name.localeCompare(b.name);
+  });
+}
+
+function applyStackBy(months: MonthlyStack[], stackBy: ChartStackBy): MonthlyStack[] {
+  if (months.length === 0) return months;
+  const categoryOrder = globalCategoryStackOrder(months);
+  return months.map((m) => ({
+    ...m,
+    segments: orderStackSegments(m.segments, stackBy, categoryOrder),
+  }));
+}
+
+function countDistinctYears(months: MonthlyStack[]): number {
+  return new Set(months.map((m) => m.month.slice(0, 4))).size;
+}
+
+/** Roll monthly stacks into calendar-year columns (partial current year = YTD). */
+function aggregateMonthsToYears(months: MonthlyStack[]): MonthlyStack[] {
+  const byYear = new Map<string, Map<string, { amount: number; count: number; color: string }>>();
+  for (const m of months) {
+    const year = m.month.slice(0, 4);
+    let segMap = byYear.get(year);
+    if (!segMap) {
+      segMap = new Map();
+      byYear.set(year, segMap);
+    }
+    for (const s of m.segments) {
+      const prev = segMap.get(s.name);
+      if (prev) {
+        prev.amount += s.amount;
+        prev.count += s.count;
+      } else {
+        segMap.set(s.name, { amount: s.amount, count: s.count, color: s.color });
+      }
+    }
+  }
+  return [...byYear.keys()]
+    .sort()
+    .map((year) => {
+      const segMap = byYear.get(year)!;
+      const segments = [...segMap.entries()]
+        .map(([name, v]) => ({
+          name,
+          color: v.color,
+          amount: Math.round(v.amount * 100) / 100,
+          count: v.count,
+        }))
+        .sort((a, b) => b.amount - a.amount);
+      const total = Math.round(segments.reduce((a, s) => a + s.amount, 0) * 100) / 100;
+      return { month: year, total, segments };
+    });
+}
+
+function applyTimeGranularity(months: MonthlyStack[], granularity: ChartTimeGranularity): MonthlyStack[] {
+  return granularity === "year" ? aggregateMonthsToYears(months) : months;
+}
 
 function monthLabelShort(mk: string): string {
   const [y, m] = mk.split("-").map((s) => parseInt(s, 10));
@@ -141,12 +268,25 @@ function filterMonthsBySoloCategory(
   });
 }
 
+function filterMonthsByHiddenCategories(
+  months: MonthlyStack[],
+  hidden: ReadonlySet<string>,
+): MonthlyStack[] {
+  if (hidden.size === 0) return months;
+  return months.map((m) => {
+    const segments = m.segments.filter((s) => !hidden.has(s.name));
+    const total = Math.round(segments.reduce((a, s) => a + s.amount, 0) * 100) / 100;
+    return { ...m, segments, total };
+  });
+}
+
 export function MonthlyStackedSpend({ months: monthsCount = DEFAULT_MONTHS }: { months?: number }) {
   const [data, setData] = useState<MonthlyStacksResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
   const [soloCategory, setSoloCategory] = useState<string | null>(null);
+  const [hiddenCategories, setHiddenCategories] = useState<Set<string>>(() => new Set());
   const [drilldown, setDrilldown] = useState<MonthlyStacksResponse | null>(null);
   const [drilldownLoading, setDrilldownLoading] = useState(false);
   const [segmentModal, setSegmentModal] = useState<{
@@ -154,13 +294,44 @@ export function MonthlyStackedSpend({ months: monthsCount = DEFAULT_MONTHS }: { 
     level: "category" | "subcategory";
     monthKey: string;
   } | null>(null);
+  const [timeGranularity, setTimeGranularity] = useState<ChartTimeGranularity>("month");
+  const [stackBy, setStackBy] = useState<ChartStackBy>("value");
+
+  useEffect(() => {
+    setTimeGranularity(readStoredGranularity());
+    setStackBy(readStoredStackBy());
+  }, []);
+
+  const onTimeGranularityChange = useCallback((next: ChartTimeGranularity) => {
+    setTimeGranularity(next);
+    writeStoredGranularity(next);
+  }, []);
+
+  const onStackByChange = useCallback((next: ChartStackBy) => {
+    setStackBy(next);
+    writeStoredStackBy(next);
+  }, []);
 
   const toggleCategory = useCallback((name: string) => {
     setSoloCategory((prev) => (prev === name ? null : name));
   }, []);
 
+  const toggleCategoryVisibility = useCallback((name: string) => {
+    setHiddenCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) {
+        next.delete(name);
+        return next;
+      }
+      next.add(name);
+      return next;
+    });
+    setSoloCategory((solo) => (solo === name ? null : solo));
+  }, []);
+
   const showAllCategories = useCallback(() => {
     setSoloCategory(null);
+    setHiddenCategories(new Set());
   }, []);
 
   const openSegmentModal = useCallback(
@@ -228,10 +399,17 @@ export function MonthlyStackedSpend({ months: monthsCount = DEFAULT_MONTHS }: { 
     };
   }, [monthsCount]);
 
+  const headerChartControls = {
+    timeGranularity,
+    onTimeGranularityChange,
+    stackBy,
+    onStackByChange,
+  };
+
   if (loading && !data) {
     return (
       <Card className="border-chart-border bg-chart-surface text-card-foreground shadow-chart">
-        <ChartCardHeader />
+        <ChartCardHeader {...headerChartControls} />
         <CardContent className="overflow-visible pt-0">
           <div className="flex h-[660px] items-center justify-center text-sm text-muted-foreground">
             Loading monthly breakdown…
@@ -243,7 +421,7 @@ export function MonthlyStackedSpend({ months: monthsCount = DEFAULT_MONTHS }: { 
   if (error || !data) {
     return (
       <Card className="border-chart-border bg-chart-surface text-card-foreground shadow-chart">
-        <ChartCardHeader />
+        <ChartCardHeader {...headerChartControls} />
         <CardContent className="overflow-visible pt-0">
           <div className="flex h-[660px] items-center justify-center text-sm text-rose-300/80">
             {error ?? "Failed to load monthly breakdown."}
@@ -255,7 +433,7 @@ export function MonthlyStackedSpend({ months: monthsCount = DEFAULT_MONTHS }: { 
   if (data.months.every((m) => m.total === 0)) {
     return (
       <Card className="border-chart-border bg-chart-surface text-card-foreground shadow-chart">
-        <ChartCardHeader />
+        <ChartCardHeader {...headerChartControls} />
         <CardContent className="overflow-visible pt-0">
           <div className="flex h-[660px] items-center justify-center text-sm text-muted-foreground">
             No spending in the selected window.
@@ -264,7 +442,9 @@ export function MonthlyStackedSpend({ months: monthsCount = DEFAULT_MONTHS }: { 
             categories={data.categories}
             compact
             soloCategory={soloCategory}
+            hiddenCategories={hiddenCategories}
             onToggleCategory={toggleCategory}
+            onToggleVisibility={toggleCategoryVisibility}
             onShowAll={showAllCategories}
           />
         </CardContent>
@@ -274,26 +454,34 @@ export function MonthlyStackedSpend({ months: monthsCount = DEFAULT_MONTHS }: { 
 
   return (
     <Card className="border-chart-border bg-chart-surface text-card-foreground shadow-chart">
-      <ChartCardHeader onExpand={() => setExpanded(true)} />
+      <ChartCardHeader
+        onExpand={() => setExpanded(true)}
+        avgMonthlySpendLast12={soloCategory ? null : data.avgMonthlySpendLast12}
+        avgMonthlyIncomeLast12={soloCategory ? null : data.avgMonthlyIncomeLast12}
+        {...headerChartControls}
+      />
       <CardContent className="overflow-visible pt-0">
         <ChartView
           data={data}
           soloCategory={soloCategory}
+          hiddenCategories={hiddenCategories}
           drilldown={drilldown}
           drilldownLoading={drilldownLoading}
+          timeGranularity={timeGranularity}
+          stackBy={stackBy}
           onSegmentClick={openSegmentModal}
         />
         <AnalyticsCategoryLegend
           categories={data.categories}
-          avgSpend={data.avgMonthlySpendLast6}
-          avgIncome={data.avgMonthlyIncomeLast6}
           soloCategory={soloCategory}
+          hiddenCategories={hiddenCategories}
           subcategoryBreakdown={
             soloCategory && drilldown?.parentCategory === soloCategory
               ? drilldown.categories
               : undefined
           }
           onToggleCategory={toggleCategory}
+          onToggleVisibility={toggleCategoryVisibility}
           onShowAll={showAllCategories}
         />
       </CardContent>
@@ -305,7 +493,7 @@ export function MonthlyStackedSpend({ months: monthsCount = DEFAULT_MONTHS }: { 
               mode: "category",
               name: segmentModal.name,
               level: segmentModal.level,
-              ...monthKeyToDateRange(segmentModal.monthKey),
+              ...periodKeyToDateRange(segmentModal.monthKey),
             }}
             currency={data.primaryCurrency}
             onClose={() => setSegmentModal(null)}
@@ -318,9 +506,15 @@ export function MonthlyStackedSpend({ months: monthsCount = DEFAULT_MONTHS }: { 
           <FullscreenChartModal
             data={data}
             soloCategory={soloCategory}
+            hiddenCategories={hiddenCategories}
             drilldown={drilldown}
             drilldownLoading={drilldownLoading}
+            timeGranularity={timeGranularity}
+            onTimeGranularityChange={onTimeGranularityChange}
+            stackBy={stackBy}
+            onStackByChange={onStackByChange}
             onToggleCategory={toggleCategory}
+            onToggleVisibility={toggleCategoryVisibility}
             onShowAllCategories={showAllCategories}
             onClose={() => setExpanded(false)}
             onSegmentClick={openSegmentModal}
@@ -328,6 +522,147 @@ export function MonthlyStackedSpend({ months: monthsCount = DEFAULT_MONTHS }: { 
           document.body,
         )}
     </Card>
+  );
+}
+
+function ChartRefLineLegend({
+  avgMonthlySpendLast12,
+  avgMonthlyIncomeLast12,
+  timeGranularity = "month",
+}: {
+  avgMonthlySpendLast12: number | null | undefined;
+  avgMonthlyIncomeLast12: number | null | undefined;
+  timeGranularity?: ChartTimeGranularity;
+}) {
+  if (timeGranularity === "year") return null;
+
+  const showSpend = avgMonthlySpendLast12 != null && avgMonthlySpendLast12 > 0;
+  const showIncome = avgMonthlyIncomeLast12 != null && avgMonthlyIncomeLast12 > 0;
+  if (!showSpend && !showIncome) return null;
+
+  const spendLabel = "Avg spend · last 12 mo";
+  const incomeLabel = "Avg income · last 12 mo";
+
+  return (
+    <div className="flex items-center gap-3" aria-hidden>
+      {showSpend ? (
+        <div className="flex items-center gap-1.5 text-[10px] font-semibold leading-none text-[#FFB4B4]">
+          <span
+            className="inline-block h-[2px] w-4 shrink-0 rounded-full bg-[#FF4444]"
+            style={{ boxShadow: "0 0 6px rgba(255,68,68,0.7)" }}
+          />
+          <span>{spendLabel}</span>
+        </div>
+      ) : null}
+      {showIncome ? (
+        <div className="flex items-center gap-1.5 text-[10px] font-semibold leading-none text-[#9DFFB0]">
+          <span
+            className="inline-block h-[2px] w-4 shrink-0 rounded-full bg-[#39FF14]"
+            style={{ boxShadow: "0 0 6px rgba(57,255,20,0.55)" }}
+          />
+          <span>{incomeLabel}</span>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ChartTimeGranularityToggle({
+  value,
+  onChange,
+  className,
+}: {
+  value: ChartTimeGranularity;
+  onChange: (next: ChartTimeGranularity) => void;
+  className?: string;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label="Chart time period"
+      className={cn(
+        "pointer-events-auto inline-flex rounded-lg border border-chart-border bg-chart-surface/92 p-0.5 shadow-[0_4px_24px_-8px_rgba(0,0,0,0.55)] backdrop-blur-md ring-1 ring-white/[0.04]",
+        className,
+      )}
+    >
+      {(
+        [
+          { id: "month" as const, label: "Monthly", Icon: CalendarDays },
+          { id: "year" as const, label: "Yearly", Icon: CalendarRange },
+        ] as const
+      ).map(({ id, label, Icon }) => {
+        const active = value === id;
+        return (
+          <button
+            key={id}
+            type="button"
+            aria-pressed={active}
+            title={id === "year" ? "Stack by calendar year (current year = YTD)" : "One bar per month"}
+            onClick={() => onChange(id)}
+            className={cn(
+              "relative inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold transition-all duration-200",
+              active
+                ? "bg-[#0BC18D]/18 text-[#0BC18D] shadow-[0_0_16px_-6px_rgba(11,193,141,0.55)]"
+                : "text-muted-foreground hover:bg-chart-hover hover:text-foreground",
+            )}
+          >
+            <Icon className="h-3 w-3 shrink-0 opacity-90" aria-hidden />
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function ChartStackByToggle({
+  value,
+  onChange,
+}: {
+  value: ChartStackBy;
+  onChange: (next: ChartStackBy) => void;
+}) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="shrink-0 text-[9px] font-medium uppercase tracking-wider text-muted-foreground/80">
+        Stack by
+      </span>
+      <div
+        role="group"
+        aria-label="Stack segments by"
+        className="pointer-events-auto inline-flex rounded-lg border border-chart-border bg-chart-surface/92 p-0.5 shadow-[0_4px_24px_-8px_rgba(0,0,0,0.55)] backdrop-blur-md ring-1 ring-white/[0.04]"
+      >
+        {(
+          [
+            { id: "value" as const, label: "Value" },
+            { id: "category" as const, label: "Category" },
+          ] as const
+        ).map(({ id, label }) => {
+          const active = value === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              aria-pressed={active}
+              title={
+                id === "category"
+                  ? "Same category order in every bar (overall largest first)"
+                  : "Largest segment at the bottom of each bar"
+              }
+              onClick={() => onChange(id)}
+              className={cn(
+                "relative inline-flex items-center rounded-md px-2 py-1 text-[10px] font-semibold transition-all duration-200",
+                active
+                  ? "bg-[#0BC18D]/18 text-[#0BC18D] shadow-[0_0_16px_-6px_rgba(11,193,141,0.55)]"
+                  : "text-muted-foreground hover:bg-chart-hover hover:text-foreground",
+              )}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -345,19 +680,53 @@ function ExpandChartButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-function ChartCardHeader({ onExpand }: { onExpand?: () => void }) {
+function ChartCardHeader({
+  onExpand,
+  avgMonthlySpendLast12,
+  avgMonthlyIncomeLast12,
+  timeGranularity = "month",
+  onTimeGranularityChange,
+  stackBy = "value",
+  onStackByChange,
+}: {
+  onExpand?: () => void;
+  avgMonthlySpendLast12?: number | null;
+  avgMonthlyIncomeLast12?: number | null;
+  timeGranularity?: ChartTimeGranularity;
+  onTimeGranularityChange?: (next: ChartTimeGranularity) => void;
+  stackBy?: ChartStackBy;
+  onStackByChange?: (next: ChartStackBy) => void;
+}) {
   return (
-    <CardHeader className="pb-3">
-      <CardTitle className="flex items-center gap-2 text-sm font-semibold text-foreground">
-        <span className="grid h-7 w-7 place-items-center rounded-lg bg-gradient-to-br from-[#0BC18D]/30 to-[#5DD3F3]/20 ring-1 ring-chart-border">
-          <CalendarRange className="h-4 w-4 text-[#0BC18D]" />
+    <CardHeader className="relative flex min-h-[2.75rem] items-center justify-center pb-3 pt-0">
+      <div className="absolute left-0 top-1/2 z-10 flex -translate-y-1/2 items-center gap-2">
+        {onTimeGranularityChange ? (
+          <ChartTimeGranularityToggle
+            value={timeGranularity}
+            onChange={onTimeGranularityChange}
+          />
+        ) : null}
+        {onStackByChange ? (
+          <ChartStackByToggle value={stackBy} onChange={onStackByChange} />
+        ) : null}
+      </div>
+      <CardTitle className="pointer-events-none text-center text-sm font-semibold text-foreground">
+        <span className="inline-flex items-center justify-center gap-2 whitespace-nowrap">
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-[#0BC18D]/30 to-[#5DD3F3]/20 ring-1 ring-chart-border">
+            <CalendarRange className="h-4 w-4 text-[#0BC18D]" />
+          </span>
+          Spend by Category
         </span>
-        <span>Monthly Spend by Category</span>
       </CardTitle>
       {onExpand ? (
-        <CardAction>
+        <div className="absolute right-0 top-1/2 z-10 flex -translate-y-1/2 items-center gap-2.5">
+          <ChartRefLineLegend
+            avgMonthlySpendLast12={avgMonthlySpendLast12}
+            avgMonthlyIncomeLast12={avgMonthlyIncomeLast12}
+            timeGranularity={timeGranularity}
+          />
           <ExpandChartButton onClick={onExpand} />
-        </CardAction>
+        </div>
       ) : null}
     </CardHeader>
   );
@@ -366,18 +735,30 @@ function ChartCardHeader({ onExpand }: { onExpand?: () => void }) {
 function FullscreenChartModal({
   data,
   soloCategory,
+  hiddenCategories,
   drilldown,
   drilldownLoading,
+  timeGranularity,
+  onTimeGranularityChange,
+  stackBy,
+  onStackByChange,
   onToggleCategory,
+  onToggleVisibility,
   onShowAllCategories,
   onClose,
   onSegmentClick,
 }: {
   data: MonthlyStacksResponse;
   soloCategory: string | null;
+  hiddenCategories: ReadonlySet<string>;
   drilldown: MonthlyStacksResponse | null;
   drilldownLoading: boolean;
+  timeGranularity: ChartTimeGranularity;
+  onTimeGranularityChange: (next: ChartTimeGranularity) => void;
+  stackBy: ChartStackBy;
+  onStackByChange: (next: ChartStackBy) => void;
   onToggleCategory: (name: string) => void;
+  onToggleVisibility: (name: string) => void;
   onShowAllCategories: () => void;
   onClose: () => void;
   onSegmentClick: (segment: { name: string; level: "category" | "subcategory"; monthKey: string }) => void;
@@ -402,17 +783,24 @@ function FullscreenChartModal({
       aria-modal="true"
       aria-label="Monthly Spend by Category — expanded"
     >
-      <div className="flex shrink-0 items-center justify-between border-b border-chart-border px-5 py-3.5 sm:px-8">
-        <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-          <span className="grid h-7 w-7 place-items-center rounded-lg bg-gradient-to-br from-[#0BC18D]/30 to-[#5DD3F3]/20 ring-1 ring-chart-border">
+      <div className="relative flex min-h-[3.25rem] shrink-0 items-center justify-center border-b border-chart-border px-5 py-3.5 sm:px-8">
+        <div className="absolute left-5 top-1/2 z-10 flex -translate-y-1/2 items-center gap-2 sm:left-8">
+          <ChartTimeGranularityToggle
+            value={timeGranularity}
+            onChange={onTimeGranularityChange}
+          />
+          <ChartStackByToggle value={stackBy} onChange={onStackByChange} />
+        </div>
+        <div className="flex items-center justify-center gap-2 text-sm font-semibold text-foreground">
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-[#0BC18D]/30 to-[#5DD3F3]/20 ring-1 ring-chart-border">
             <Maximize2 className="h-3.5 w-3.5 text-[#0BC18D]" />
           </span>
-          Monthly Spend by Category
+          Spend by Category
         </div>
         <button
           type="button"
           onClick={onClose}
-          className="grid h-8 w-8 place-items-center rounded-lg border border-chart-border bg-chart-muted text-muted-foreground transition-colors hover:bg-chart-hover hover:text-white"
+          className="absolute right-5 top-1/2 z-10 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-lg border border-chart-border bg-chart-muted text-muted-foreground transition-colors hover:bg-chart-hover hover:text-white sm:right-8"
           aria-label="Close expanded chart"
         >
           <X className="h-4 w-4" />
@@ -422,22 +810,25 @@ function FullscreenChartModal({
         <ChartView
           data={data}
           soloCategory={soloCategory}
+          hiddenCategories={hiddenCategories}
           drilldown={drilldown}
           drilldownLoading={drilldownLoading}
+          timeGranularity={timeGranularity}
+          stackBy={stackBy}
           fullscreen
           onSegmentClick={onSegmentClick}
         />
         <AnalyticsCategoryLegend
           categories={data.categories}
-          avgSpend={data.avgMonthlySpendLast6}
-          avgIncome={data.avgMonthlyIncomeLast6}
           soloCategory={soloCategory}
+          hiddenCategories={hiddenCategories}
           subcategoryBreakdown={
             soloCategory && drilldown?.parentCategory === soloCategory
               ? drilldown.categories
               : undefined
           }
           onToggleCategory={onToggleCategory}
+          onToggleVisibility={onToggleVisibility}
           onShowAll={onShowAllCategories}
         />
       </div>
@@ -448,15 +839,21 @@ function FullscreenChartModal({
 function ChartView({
   data,
   soloCategory,
+  hiddenCategories,
   drilldown = null,
   drilldownLoading = false,
+  timeGranularity = "month",
+  stackBy = "value",
   fullscreen = false,
   onSegmentClick,
 }: {
   data: MonthlyStacksResponse;
   soloCategory?: string | null;
+  hiddenCategories?: ReadonlySet<string>;
   drilldown?: MonthlyStacksResponse | null;
   drilldownLoading?: boolean;
+  timeGranularity?: ChartTimeGranularity;
+  stackBy?: ChartStackBy;
   fullscreen?: boolean;
   onSegmentClick?: (segment: { name: string; level: "category" | "subcategory"; monthKey: string }) => void;
 }) {
@@ -485,17 +882,31 @@ function ChartView({
     return () => ro.disconnect();
   }, [fullscreen]);
 
-  const { months: rawMonths, primaryCurrency, avgMonthlyIncomeLast6, avgMonthlySpendLast6, categories } = data;
+  const { months: rawMonths, primaryCurrency, avgMonthlyIncomeLast12, avgMonthlySpendLast12, categories } = data;
+  const hidden = hiddenCategories ?? new Set<string>();
   const categoryFilterActive = soloCategory != null;
   const usingSubcategoryStacks =
     categoryFilterActive &&
+    soloCategory != null &&
+    !hidden.has(soloCategory) &&
     drilldown?.parentCategory === soloCategory &&
     drilldown.months.length > 0;
 
-  const months = useMemo(() => {
+  const monthsMonthly = useMemo(() => {
+    const visibleBase = filterMonthsByHiddenCategories(rawMonths, hidden);
     if (usingSubcategoryStacks && drilldown) return drilldown.months;
-    return filterMonthsBySoloCategory(rawMonths, soloCategory ?? null);
-  }, [rawMonths, soloCategory, usingSubcategoryStacks, drilldown]);
+    return filterMonthsBySoloCategory(visibleBase, soloCategory ?? null);
+  }, [rawMonths, soloCategory, usingSubcategoryStacks, drilldown, hidden]);
+
+  const monthsGranularity = useMemo(
+    () => applyTimeGranularity(monthsMonthly, timeGranularity),
+    [monthsMonthly, timeGranularity],
+  );
+
+  const months = useMemo(
+    () => applyStackBy(monthsGranularity, stackBy),
+    [monthsGranularity, stackBy],
+  );
 
   const segmentLevel: "category" | "subcategory" = usingSubcategoryStacks
     ? "subcategory"
@@ -538,31 +949,33 @@ function ChartView({
   const monthYearFont = fullscreen ? 11 : 10;
 
   /** Scale to filtered bar totals only when a category slicer is active. */
+  const refSpendRaw = avgMonthlySpendLast12 ?? 0;
+  const refIncomeRaw = avgMonthlyIncomeLast12 ?? 0;
+  const refSpendValue = timeGranularity === "year" ? refSpendRaw * 12 : refSpendRaw;
+  const refIncomeValue = timeGranularity === "year" ? refIncomeRaw * 12 : refIncomeRaw;
+
   const yMaxRaw = useMemo(() => {
     const barMax = Math.max(0, ...months.map((m) => m.total));
-    if (categoryFilterActive) return barMax;
-    return Math.max(
-      barMax,
-      avgMonthlyIncomeLast6 ?? 0,
-      avgMonthlySpendLast6 ?? 0,
-    );
-  }, [months, avgMonthlyIncomeLast6, avgMonthlySpendLast6, categoryFilterActive]);
+    if (categoryFilterActive || timeGranularity === "year") return barMax;
+    return Math.max(barMax, refIncomeValue, refSpendValue);
+  }, [months, refIncomeValue, refSpendValue, categoryFilterActive, timeGranularity]);
   const yScale = useMemo(() => tightYScale(yMaxRaw, innerH), [yMaxRaw, innerH]);
   const yToPx = (v: number) => padT + innerH - (v / yScale.top) * innerH;
 
-  /** Income line spans only the rightmost 6 bars (or however many the API used). */
-  const incomeBarsCount = Math.min(6, months.length);
-  const incomeFirstIdx = months.length - incomeBarsCount;
-  const incomeX1 = barGeometries[incomeFirstIdx]?.x ?? padL;
-  const incomeX2 =
+  /** Reference lines span the rightmost REF_AVG_MONTHS bars (monthly) or latest year bar. */
+  const refBarsCount = Math.min(REF_AVG_MONTHS, months.length);
+  const refFirstIdx =
+    timeGranularity === "year"
+      ? Math.max(0, months.length - 1)
+      : months.length - refBarsCount;
+  const refX1 = barGeometries[refFirstIdx]?.x ?? padL;
+  const refX2 =
     barGeometries[months.length - 1] != null
       ? barGeometries[months.length - 1].x + barGeometries[months.length - 1].barW
       : padL + innerW;
-  const showRefLines = !categoryFilterActive;
-  const incomeY =
-    showRefLines && avgMonthlyIncomeLast6 != null ? yToPx(avgMonthlyIncomeLast6) : null;
-  const spendY =
-    showRefLines && avgMonthlySpendLast6 != null ? yToPx(avgMonthlySpendLast6) : null;
+  const showRefLines = !categoryFilterActive && timeGranularity === "month";
+  const incomeY = showRefLines && refIncomeValue > 0 ? yToPx(refIncomeValue) : null;
+  const spendY = showRefLines && refSpendValue > 0 ? yToPx(refSpendValue) : null;
 
   return (
     <div
@@ -582,7 +995,11 @@ function ChartView({
           height={size.h}
           viewBox={`0 0 ${size.w} ${size.h}`}
           role="img"
-          aria-label="Monthly stacked spend by category"
+          aria-label={
+            timeGranularity === "year"
+              ? "Yearly stacked spend by category"
+              : "Monthly stacked spend by category"
+          }
           className="block"
         >
             <defs>
@@ -640,14 +1057,14 @@ function ChartView({
             })}
 
             {/* Income reference line — drawn BEHIND the bars so they sit on top.
-             *  Spans only the rightmost 6 bars per the user's spec. Layered
+             *  Spans the rightmost REF_AVG_MONTHS bars. Layered
              *  stroke (wide soft halo + crisp neon core) so it stays
              *  unmistakable even where bars cover most of its length. */}
-            {spendY != null && avgMonthlySpendLast6! > 0 && (
+            {spendY != null && refSpendValue > 0 && (
               <g pointerEvents="none">
                 <line
-                  x1={incomeX1}
-                  x2={incomeX2}
+                  x1={refX1}
+                  x2={refX2}
                   y1={spendY}
                   y2={spendY}
                   stroke={REF_LINE_SPEND}
@@ -656,8 +1073,8 @@ function ChartView({
                   opacity={0.18}
                 />
                 <line
-                  x1={incomeX1}
-                  x2={incomeX2}
+                  x1={refX1}
+                  x2={refX2}
                   y1={spendY}
                   y2={spendY}
                   stroke={REF_LINE_SPEND}
@@ -666,8 +1083,8 @@ function ChartView({
                   opacity={0.45}
                 />
                 <line
-                  x1={incomeX1}
-                  x2={incomeX2}
+                  x1={refX1}
+                  x2={refX2}
                   y1={spendY}
                   y2={spendY}
                   stroke={REF_LINE_SPEND}
@@ -678,12 +1095,12 @@ function ChartView({
               </g>
             )}
 
-            {incomeY != null && avgMonthlyIncomeLast6! > 0 && (
+            {incomeY != null && refIncomeValue > 0 && (
               <g pointerEvents="none">
                 {/* Outer soft halo */}
                 <line
-                  x1={incomeX1}
-                  x2={incomeX2}
+                  x1={refX1}
+                  x2={refX2}
                   y1={incomeY}
                   y2={incomeY}
                   stroke={REF_LINE_INCOME}
@@ -693,8 +1110,8 @@ function ChartView({
                 />
                 {/* Mid halo */}
                 <line
-                  x1={incomeX1}
-                  x2={incomeX2}
+                  x1={refX1}
+                  x2={refX2}
                   y1={incomeY}
                   y2={incomeY}
                   stroke={REF_LINE_INCOME}
@@ -704,8 +1121,8 @@ function ChartView({
                 />
                 {/* Crisp neon core */}
                 <line
-                  x1={incomeX1}
-                  x2={incomeX2}
+                  x1={refX1}
+                  x2={refX2}
                   y1={incomeY}
                   y2={incomeY}
                   stroke={REF_LINE_INCOME}
@@ -734,6 +1151,7 @@ function ChartView({
                   scheduleClose={scheduleClose}
                   shineId={shineId}
                   segmentLevel={segmentLevel}
+                  timeGranularity={timeGranularity}
                   onSegmentClick={onSegmentClick}
                   hideLabels={denseBars}
                   hideEmptyMarker={denseBars}
@@ -746,11 +1164,11 @@ function ChartView({
             })}
 
             {/* Reference-line hover targets (above bars) + colored Y-axis callouts */}
-            {spendY != null && avgMonthlySpendLast6! > 0 && (
+            {spendY != null && refSpendValue > 0 && (
               <g>
                 <line
-                  x1={incomeX1}
-                  x2={incomeX2}
+                  x1={refX1}
+                  x2={refX2}
                   y1={spendY}
                   y2={spendY}
                   stroke="transparent"
@@ -768,16 +1186,16 @@ function ChartView({
                     style={{ fontSize: axisFont, fontWeight: 700 }}
                     pointerEvents="none"
                   >
-                    {compact(avgMonthlySpendLast6!)}
+                    {compact(refSpendValue)}
                   </text>
                 )}
               </g>
             )}
-            {incomeY != null && avgMonthlyIncomeLast6! > 0 && (
+            {incomeY != null && refIncomeValue > 0 && (
               <g>
                 <line
-                  x1={incomeX1}
-                  x2={incomeX2}
+                  x1={refX1}
+                  x2={refX2}
                   y1={incomeY}
                   y2={incomeY}
                   stroke="transparent"
@@ -795,15 +1213,30 @@ function ChartView({
                     style={{ fontSize: axisFont, fontWeight: 700 }}
                     pointerEvents="none"
                   >
-                    {compact(avgMonthlyIncomeLast6!)}
+                    {compact(refIncomeValue)}
                   </text>
                 )}
               </g>
             )}
 
-            {/* X-axis month labels */}
+            {/* X-axis period labels */}
             {months.map((m, i) => {
               const cx = barGeometries[i]?.cx ?? padL;
+              if (timeGranularity === "year") {
+                const label = formatPeriodKeyLabel(m.month);
+                return (
+                  <text
+                    key={`lbl-${m.month}`}
+                    x={cx}
+                    y={size.h - padB + 18}
+                    textAnchor="middle"
+                    className="fill-chart-label"
+                    style={{ fontSize: monthFont + 1, fontWeight: 700 }}
+                  >
+                    {label}
+                  </text>
+                );
+              }
               if (denseBars) {
                 if (i % denseLabelStride !== 0) return null;
                 const short = monthLabelShort(m.month);
@@ -891,6 +1324,7 @@ function MonthBar({
   scheduleClose,
   shineId,
   segmentLevel = "category",
+  timeGranularity = "month",
   onSegmentClick,
   hideLabels = false,
   barRadius = 4,
@@ -911,6 +1345,7 @@ function MonthBar({
   scheduleClose: ReturnType<typeof useAnalyticsDetail>["scheduleClose"];
   shineId: string;
   segmentLevel?: "category" | "subcategory";
+  timeGranularity?: ChartTimeGranularity;
   onSegmentClick?: (segment: { name: string; level: "category" | "subcategory"; monthKey: string }) => void;
   hideLabels?: boolean;
   barRadius?: number;
@@ -959,13 +1394,14 @@ function MonthBar({
           <g
             key={`${month.month}-${seg.name}`}
             onMouseEnter={(e) => {
+              const periodLabel = formatPeriodKeyLabel(month.month);
               void open({
                 ...detailTipAnchorFromEvent(e),
                 entity: "category",
                 value: seg.name,
-                label: `${seg.name} · ${monthLabel(month.month).line1} ${monthLabel(month.month).line2}`,
+                label: `${seg.name} · ${periodLabel}`,
                 accent: seg.color,
-                month: month.month,
+                month: timeGranularity === "month" ? month.month : undefined,
               });
             }}
             onMouseLeave={scheduleClose}

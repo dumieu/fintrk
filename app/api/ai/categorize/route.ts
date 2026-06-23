@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
 import { transactions, userCategories } from "@/lib/db/schema";
+import { excludeIgnoredSql } from "@/lib/db/excluded-transactions";
 import { eq, and, inArray } from "drizzle-orm";
 import { ai, GEMINI_MODEL } from "@/lib/gemini";
 import { logAiCost } from "@/lib/ai-cost";
@@ -34,7 +35,7 @@ export async function POST(request: NextRequest) {
         rawDescription: transactions.rawDescription,
         merchantName: transactions.merchantName,
       }).from(transactions).where(
-        and(eq(transactions.userId, userId), inArray(transactions.id, parsed.data.transactionIds)),
+        and(eq(transactions.userId, userId), excludeIgnoredSql(), inArray(transactions.id, parsed.data.transactionIds)),
       ),
     );
 

@@ -4,6 +4,8 @@ import { db, resilientQuery } from "@/lib/db";
 import { transactions, accounts, userCategories } from "@/lib/db/schema";
 import {
   excludeCardPaymentsSql,
+  excludeIgnoredSql,
+  primaryCurrencyOnlySql,
   spendingIntelligenceOutflowSql,
 } from "@/lib/db/excluded-transactions";
 import { eq, and, sql } from "drizzle-orm";
@@ -83,6 +85,16 @@ export async function GET(request: NextRequest) {
       Math.max(1, Number.isFinite(rawMonths) ? Math.floor(rawMonths) : DEFAULT_MONTHS),
     );
 
+    /** Primary currency scopes every base_amount sum (see primaryCurrencyOnlySql). */
+    const primaryCurrencyRows = await resilientQuery(() =>
+      db
+        .select({ primaryCurrency: accounts.primaryCurrency })
+        .from(accounts)
+        .where(eq(accounts.userId, userId))
+        .limit(1),
+    );
+    const primaryCurrency = primaryCurrencyRows[0]?.primaryCurrency ?? "USD";
+
     /** Anchor at the user's most-recent outflow month so old datasets still render. */
     const anchorRows = await resilientQuery(() =>
       db
@@ -94,7 +106,8 @@ export async function GET(request: NextRequest) {
         .where(
           and(
             eq(transactions.userId, userId),
-            excludeCardPaymentsSql(),
+            excludeCardPaymentsSql(), excludeIgnoredSql(),
+            primaryCurrencyOnlySql(primaryCurrency),
             spendingIntelligenceOutflowSql(),
           ),
         ),
@@ -114,7 +127,7 @@ export async function GET(request: NextRequest) {
      * `user_categories` to read `subcategoryType`). We deliberately avoid the rollup
      * here because the discretionary classification lives on the leaf row.
      */
-    const [leafRows, monthsRow, userAccounts] = await Promise.all([
+    const [leafRows, monthsRow] = await Promise.all([
       resilientQuery(() =>
         db
           .select({
@@ -134,7 +147,8 @@ export async function GET(request: NextRequest) {
           .where(
             and(
               eq(transactions.userId, userId),
-              excludeCardPaymentsSql(),
+              excludeCardPaymentsSql(), excludeIgnoredSql(),
+              primaryCurrencyOnlySql(primaryCurrency),
               spendingIntelligenceOutflowSql(),
               sql`${userCategories.subcategoryType} IS NOT NULL`,
               sql`${transactions.postedDate}::date >= ${windowStart}`,
@@ -153,23 +167,16 @@ export async function GET(request: NextRequest) {
           .where(
             and(
               eq(transactions.userId, userId),
-              excludeCardPaymentsSql(),
+              excludeCardPaymentsSql(), excludeIgnoredSql(),
+              primaryCurrencyOnlySql(primaryCurrency),
               spendingIntelligenceOutflowSql(),
               sql`${transactions.postedDate}::date >= ${windowStart}`,
               sql`${transactions.postedDate}::date < ${windowEnd}`,
             ),
           ),
       ),
-      resilientQuery(() =>
-        db
-          .select({ primaryCurrency: accounts.primaryCurrency })
-          .from(accounts)
-          .where(eq(accounts.userId, userId))
-          .limit(1),
-      ),
     ]);
 
-    const primaryCurrency = userAccounts[0]?.primaryCurrency ?? "USD";
     const monthsCovered = Math.max(1, monthsRow[0]?.count ?? 1);
 
     /** Group leaves by their discretionary type. */

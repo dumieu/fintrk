@@ -4,6 +4,8 @@ import { db, resilientQuery } from "@/lib/db";
 import { transactions, accounts } from "@/lib/db/schema";
 import {
   excludeCardPaymentsSql,
+  excludeIgnoredSql,
+  primaryCurrencyOnlySql,
   spendingIntelligenceInflowSql,
   spendingIntelligenceOutflowSql,
 } from "@/lib/db/excluded-transactions";
@@ -57,41 +59,41 @@ export async function GET(request: NextRequest) {
       Math.max(1, Number.isFinite(rawMonths) ? Math.floor(rawMonths) : DEFAULT_MAX_MONTHS),
     );
 
+    /** Primary currency scopes every base_amount sum (see primaryCurrencyOnlySql). */
+    const userAccounts = await resilientQuery(() =>
+      db
+        .select({ primaryCurrency: accounts.primaryCurrency })
+        .from(accounts)
+        .where(eq(accounts.userId, userId))
+        .limit(1),
+    );
+    const primaryCurrency = userAccounts[0]?.primaryCurrency ?? "USD";
+
     /** Per-month income / expense totals, ordered newest-first. We'll trim and
      *  filter in JS — far simpler than expressing the iterative threshold rule
      *  as SQL, and the row count is tiny (≤ a few dozen). */
-    const [userAccounts, monthlyRows] = await Promise.all([
-      resilientQuery(() =>
-        db
-          .select({ primaryCurrency: accounts.primaryCurrency })
-          .from(accounts)
-          .where(eq(accounts.userId, userId))
-          .limit(1),
-      ),
-      resilientQuery(() =>
-        db
-          .select({
-            month: sql<string>`to_char(date_trunc('month', ${transactions.postedDate}::date), 'YYYY-MM')`,
-            income: sql<string>`COALESCE(SUM(CASE WHEN ${spendingIntelligenceInflowSql()} THEN CAST(${transactions.baseAmount} AS numeric) END), 0)`,
-            expenses: sql<string>`COALESCE(SUM(CASE WHEN ${spendingIntelligenceOutflowSql()} THEN -CAST(${transactions.baseAmount} AS numeric) END), 0)`,
-          })
-          .from(transactions)
-          .where(
-            and(
-              eq(transactions.userId, userId),
-              excludeCardPaymentsSql(),
-              sql`(
-                ${spendingIntelligenceInflowSql()}
-                OR ${spendingIntelligenceOutflowSql()}
-              )`,
-            ),
-          )
-          .groupBy(sql`date_trunc('month', ${transactions.postedDate}::date)`)
-          .orderBy(sql`date_trunc('month', ${transactions.postedDate}::date) DESC`),
-      ),
-    ]);
-
-    const primaryCurrency = userAccounts[0]?.primaryCurrency ?? "USD";
+    const monthlyRows = await resilientQuery(() =>
+      db
+        .select({
+          month: sql<string>`to_char(date_trunc('month', ${transactions.postedDate}::date), 'YYYY-MM')`,
+          income: sql<string>`COALESCE(SUM(CASE WHEN ${spendingIntelligenceInflowSql()} THEN CAST(${transactions.baseAmount} AS numeric) END), 0)`,
+          expenses: sql<string>`COALESCE(SUM(CASE WHEN ${spendingIntelligenceOutflowSql()} THEN -CAST(${transactions.baseAmount} AS numeric) END), 0)`,
+        })
+        .from(transactions)
+        .where(
+          and(
+            eq(transactions.userId, userId),
+            excludeCardPaymentsSql(), excludeIgnoredSql(),
+            primaryCurrencyOnlySql(primaryCurrency),
+            sql`(
+              ${spendingIntelligenceInflowSql()}
+              OR ${spendingIntelligenceOutflowSql()}
+            )`,
+          ),
+        )
+        .groupBy(sql`date_trunc('month', ${transactions.postedDate}::date)`)
+        .orderBy(sql`date_trunc('month', ${transactions.postedDate}::date) DESC`),
+    );
 
     type MonthAgg = { month: string; income: number; expenses: number };
     const allMonths: MonthAgg[] = monthlyRows.map((r) => ({

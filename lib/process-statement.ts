@@ -3,7 +3,7 @@ import { db, resilientQuery } from "@/lib/db";
 import { accounts, transactions, statements, userCategories, merchants, fileUploadLog, users, merchantWarningRules, merchantLabelRules } from "@/lib/db/schema";
 import { ensureUserCategories } from "@/lib/ensure-user-categories";
 import { ensureTransactionWarningFlagColumn } from "@/lib/ensure-transaction-warning-flag";
-import { excludeCardPaymentsSql } from "@/lib/db/excluded-transactions";
+import { excludeCardPaymentsSql, excludeIgnoredSql } from "@/lib/db/excluded-transactions";
 import { ai, GEMINI_MODEL } from "@/lib/gemini";
 import { logAiCost } from "@/lib/ai-cost";
 import { logServerError } from "@/lib/safe-error";
@@ -41,7 +41,7 @@ async function buildUserContext(userId: string) {
         .where(
           and(
             eq(transactions.userId, userId),
-            excludeCardPaymentsSql(),
+            excludeCardPaymentsSql(), excludeIgnoredSql(),
             sql`${transactions.merchantName} IS NOT NULL`,
             sql`TRIM(${transactions.merchantName}) != ''`,
           ),
@@ -520,7 +520,7 @@ async function updateUserMainCurrency(userId: string) {
           txCount: sql<number>`count(distinct ${transactions.id})::int`,
         })
         .from(transactions)
-        .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql()))
+        .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql(), excludeIgnoredSql()))
         .groupBy(transactions.baseCurrency)
         .orderBy(
           desc(sql`count(distinct ${transactions.id})`),
@@ -534,7 +534,7 @@ async function updateUserMainCurrency(userId: string) {
           txCount: sql<number>`count(distinct ${transactions.id})::int`,
         })
         .from(transactions)
-        .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql())),
+        .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql(), excludeIgnoredSql())),
     ),
   ]);
 

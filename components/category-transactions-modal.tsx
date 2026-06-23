@@ -11,7 +11,7 @@ import {
 import {
   FINTRK_TRANSACTIONS_CHANGED,
 } from "@/lib/notify-transactions-changed";
-import { formatMonthKeyLabel } from "@/lib/month-date-range";
+import { formatPeriodRangeLabel } from "@/lib/month-date-range";
 
 export type CategoryTransactionsFilter =
   | { mode: "category"; name: string; level?: "category" | "subcategory"; dateFrom?: string; dateTo?: string }
@@ -33,7 +33,7 @@ function filterTitle(filter: CategoryTransactionsFilter): string {
 function filterSubtitle(filter: CategoryTransactionsFilter): string {
   const period =
     filter.dateFrom && filter.dateTo
-      ? formatMonthKeyLabel(filter.dateFrom.slice(0, 7))
+      ? formatPeriodRangeLabel(filter.dateFrom, filter.dateTo)
       : "All-time";
   if (filter.mode === "merchant") {
     return `${period} · spending intelligence · this merchant only`;

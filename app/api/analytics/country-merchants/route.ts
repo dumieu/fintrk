@@ -4,6 +4,7 @@ import { db, resilientQuery } from "@/lib/db";
 import { transactions } from "@/lib/db/schema";
 import {
   excludeCardPaymentsSql,
+  excludeIgnoredSql,
   spendingIntelligenceOutflowSql,
 } from "@/lib/db/excluded-transactions";
 import { eq, and, sql } from "drizzle-orm";
@@ -51,7 +52,7 @@ export async function GET(request: NextRequest) {
         .where(
           and(
             eq(transactions.userId, userId),
-            excludeCardPaymentsSql(),
+            excludeCardPaymentsSql(), excludeIgnoredSql(),
             spendingIntelligenceOutflowSql(),
             eq(transactions.countryIso, country),
             sql`${transactions.merchantName} IS NOT NULL`,

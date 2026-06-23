@@ -14,6 +14,10 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { Trash2, Loader2, CheckCircle2, AlertTriangle, Info } from "lucide-react";
+import { IgnoredTransactionsPanel } from "@/components/ignored-transactions-panel";
+import { cn } from "@/lib/utils";
+
+type ProfileTab = "settings" | "ignored";
 
 const DETECT_TRAVEL_CURRENCY_HELP =
   "When this is on, spending in another currency is sorted into Travel so you can spot trip-related purchases at a glance.";
@@ -33,6 +37,7 @@ export default function ProfilePage() {
   const [savingDetectTravel, setSavingDetectTravel] = useState(false);
   const [detectTravelError, setDetectTravelError] = useState<string | null>(null);
   const [detectTravelSaved, setDetectTravelSaved] = useState(false);
+  const [activeTab, setActiveTab] = useState<ProfileTab>("settings");
 
   const handleReset = useCallback(async () => {
     setState("loading");
@@ -115,6 +120,31 @@ export default function ProfilePage() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">
+      <div className="mb-6 inline-flex rounded-lg border border-border bg-muted/30 p-1">
+        {([
+          { id: "settings", label: "Settings" },
+          { id: "ignored", label: "Ignored" },
+        ] as const).map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setActiveTab(tab.id)}
+            className={cn(
+              "rounded-md px-4 py-1.5 text-sm font-medium transition-colors",
+              activeTab === tab.id
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === "ignored" ? (
+        <IgnoredTransactionsPanel />
+      ) : (
+      <>
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Personal Information</CardTitle>
@@ -296,6 +326,8 @@ export default function ProfilePage() {
           </Dialog>
         </CardContent>
       </Card>
+      </>
+      )}
     </div>
   );
 }

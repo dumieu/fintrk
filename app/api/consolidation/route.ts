@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
 import { accounts, transactions, fxRates } from "@/lib/db/schema";
-import { excludeCardPaymentsSql } from "@/lib/db/excluded-transactions";
+import { excludeCardPaymentsSql, excludeIgnoredSql } from "@/lib/db/excluded-transactions";
 import { eq, and, sql, desc } from "drizzle-orm";
 import { logServerError } from "@/lib/safe-error";
 import { df } from "@/lib/crypto/encryption";
@@ -28,7 +28,7 @@ export async function GET() {
           txnCount: sql<number>`COUNT(*)::int`,
           lastTxn: sql<string>`MAX(${transactions.postedDate})`,
         }).from(transactions)
-          .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql()))
+          .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql(), excludeIgnoredSql()))
           .groupBy(transactions.accountId, transactions.baseCurrency),
       ),
       resilientQuery(() =>

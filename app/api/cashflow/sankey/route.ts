@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
 import { transactions, userCategories, users } from "@/lib/db/schema";
-import { excludeCardPaymentsSql } from "@/lib/db/excluded-transactions";
+import { excludeCardPaymentsSql, excludeIgnoredSql } from "@/lib/db/excluded-transactions";
 import { alias } from "drizzle-orm/pg-core";
 import { eq, and, gte, lte, sql } from "drizzle-orm";
 import { logServerError } from "@/lib/safe-error";
@@ -154,7 +154,7 @@ export async function GET(request: NextRequest) {
         .where(
           and(
             eq(transactions.userId, userId),
-            excludeCardPaymentsSql(),
+            excludeCardPaymentsSql(), excludeIgnoredSql(),
             ...(dateFrom ? [gte(transactions.postedDate, dateFrom)] : []),
             ...(dateTo ? [lte(transactions.postedDate, dateTo)] : []),
             ...(investmentExclusionFilter ? [investmentExclusionFilter] : []),
@@ -191,7 +191,7 @@ export async function GET(request: NextRequest) {
         .where(
           and(
             eq(transactions.userId, userId),
-            excludeCardPaymentsSql(),
+            excludeCardPaymentsSql(), excludeIgnoredSql(),
             eq(transactions.baseCurrency, primaryCurrency),
             ...(dateFrom ? [gte(transactions.postedDate, dateFrom)] : []),
             ...(dateTo ? [lte(transactions.postedDate, dateTo)] : []),
@@ -292,7 +292,7 @@ export async function GET(request: NextRequest) {
         .where(
           and(
             eq(transactions.userId, userId),
-            excludeCardPaymentsSql(),
+            excludeCardPaymentsSql(), excludeIgnoredSql(),
             eq(transactions.baseCurrency, primaryCurrency),
             ...(investmentExclusionFilter ? [investmentExclusionFilter] : []),
           ),

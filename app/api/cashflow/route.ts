@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
-import { transactions, recurringPatterns } from "@/lib/db/schema";
-import { excludeCardPaymentsSql, excludeRecurringCardPaymentsSql } from "@/lib/db/excluded-transactions";
+import { transactions, recurringPatterns, accounts } from "@/lib/db/schema";
+import { excludeCardPaymentsSql, excludeIgnoredSql, excludeRecurringCardPaymentsSql, excludeRecurringIgnoredSql, primaryCurrencyOnlySql } from "@/lib/db/excluded-transactions";
 import { eq, and, gte, lte, sql, desc } from "drizzle-orm";
 import { logServerError } from "@/lib/safe-error";
 
@@ -23,6 +23,13 @@ export async function GET() {
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
     const dateFrom = sixMonthsAgo.toISOString().split("T")[0];
 
+    /** Scope to the primary currency so monthly income/expense sums and the
+     *  derived averages/projections are not corrupted by mixing currencies. */
+    const primaryCurrencyRows = await resilientQuery(() =>
+      db.select({ primaryCurrency: accounts.primaryCurrency }).from(accounts).where(eq(accounts.userId, userId)).limit(1),
+    );
+    const primaryCurrency = primaryCurrencyRows[0]?.primaryCurrency ?? "USD";
+
     const [histRows, recurring] = await Promise.all([
       resilientQuery(() =>
         db.select({
@@ -31,7 +38,7 @@ export async function GET() {
           expenses: sql<string>`COALESCE(SUM(CASE WHEN CAST(${transactions.baseAmount} AS numeric) < 0 THEN ABS(CAST(${transactions.baseAmount} AS numeric)) ELSE 0 END), 0)`,
           baseCurrency: transactions.baseCurrency,
         }).from(transactions).where(
-          and(eq(transactions.userId, userId), excludeCardPaymentsSql(), gte(transactions.postedDate, dateFrom)),
+          and(eq(transactions.userId, userId), excludeCardPaymentsSql(), excludeIgnoredSql(), primaryCurrencyOnlySql(primaryCurrency), gte(transactions.postedDate, dateFrom)),
         ).groupBy(sql`to_char(${transactions.postedDate}::date, 'YYYY-MM')`, transactions.baseCurrency)
           .orderBy(sql`to_char(${transactions.postedDate}::date, 'YYYY-MM')`),
       ),
@@ -39,7 +46,7 @@ export async function GET() {
         db.select().from(recurringPatterns).where(
           and(
             eq(recurringPatterns.userId, userId),
-            excludeRecurringCardPaymentsSql(),
+            excludeRecurringCardPaymentsSql(), excludeRecurringIgnoredSql(),
             eq(recurringPatterns.isActive, true),
           ),
         ),
@@ -65,8 +72,6 @@ export async function GET() {
       const monthlyAmount = Math.abs(parseFloat(r.expectedAmount)) * (30 / r.intervalDays);
       return sum + monthlyAmount;
     }, 0);
-
-    const primaryCurrency = histRows[0]?.baseCurrency ?? "USD";
 
     const projections: { month: string; income: number; expenses: number; net: number; isProjected: boolean }[] = [];
     const now = new Date();

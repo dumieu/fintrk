@@ -4,6 +4,9 @@ import { db, resilientQuery, resilientRawSql, rawSql } from "@/lib/db";
 import { transactions, accounts } from "@/lib/db/schema";
 import {
   excludeCardPaymentsSql,
+  excludeIgnoredSql,
+  EXCLUDE_IGNORED_RAW,
+  primaryCurrencyOnlySql,
   spendingIntelligenceOutflowSql,
   SPENDING_INTELLIGENCE_OUTFLOW_RAW,
 } from "@/lib/db/excluded-transactions";
@@ -36,14 +39,25 @@ export async function GET(request: NextRequest) {
 
     const fetchLimit = limit + 1;
 
+    /** Primary currency scopes every base_amount sum (see primaryCurrencyOnlySql). */
+    const userAccounts = await resilientQuery(() =>
+      db
+        .select({ primaryCurrency: accounts.primaryCurrency })
+        .from(accounts)
+        .where(eq(accounts.userId, userId))
+        .limit(1),
+    );
+    const primaryCurrency = userAccounts[0]?.primaryCurrency ?? "USD";
+
     const countryWhere = and(
       eq(transactions.userId, userId),
-      excludeCardPaymentsSql(),
+      excludeCardPaymentsSql(), excludeIgnoredSql(),
+      primaryCurrencyOnlySql(primaryCurrency),
       sql`${transactions.countryIso} IS NOT NULL`,
       spendingIntelligenceOutflowSql(),
     );
 
-    const [rows, grandRow, userAccounts, maxRows] = await Promise.all([
+    const [rows, grandRow, maxRows] = await Promise.all([
       resilientQuery(() =>
         db
           .select({
@@ -67,13 +81,6 @@ export async function GET(request: NextRequest) {
           .from(transactions)
           .where(countryWhere),
       ),
-      resilientQuery(() =>
-        db
-          .select({ primaryCurrency: accounts.primaryCurrency })
-          .from(accounts)
-          .where(eq(accounts.userId, userId))
-          .limit(1),
-      ),
       /** Max of per-country totals — Drizzle subquery aggregates were failing at runtime. */
       resilientRawSql(() =>
         rawSql`
@@ -83,7 +90,9 @@ export async function GET(request: NextRequest) {
             FROM transactions
             WHERE user_id = ${userId}
               AND country_iso IS NOT NULL
+              AND base_currency = ${primaryCurrency}
               AND ${SPENDING_INTELLIGENCE_OUTFLOW_RAW}
+              AND ${EXCLUDE_IGNORED_RAW}
               AND NOT EXISTS (
                 SELECT 1
                 FROM user_categories card_payment_category
@@ -99,7 +108,6 @@ export async function GET(request: NextRequest) {
 
     const hasMore = rows.length > limit;
     const slice = hasMore ? rows.slice(0, limit) : rows;
-    const primaryCurrency = userAccounts[0]?.primaryCurrency ?? "USD";
     const grandTotal = parseFloat(grandRow[0]?.grandTotal ?? "0");
     const maxRow = maxRows[0] as { max_total: string } | undefined;
     const maxCountryTotal = parseFloat(maxRow?.max_total ?? "0");

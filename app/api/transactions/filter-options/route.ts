@@ -4,6 +4,7 @@ import { alias } from "drizzle-orm/pg-core";
 import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
 import { userCategories, transactions } from "@/lib/db/schema";
+import { excludeIgnoredSql } from "@/lib/db/excluded-transactions";
 import { logServerError } from "@/lib/safe-error";
 import { flowThemeForCategoryNames, type CategoryFlowTheme } from "@/lib/category-flow-theme";
 
@@ -54,7 +55,7 @@ export async function GET() {
             totalAbs: sql<string>`coalesce(sum(abs(cast(${transactions.baseAmount} as numeric))), 0)::text`,
           })
           .from(transactions)
-          .where(and(eq(transactions.userId, userId), isNotNull(transactions.categoryId)))
+          .where(and(eq(transactions.userId, userId), excludeIgnoredSql(), isNotNull(transactions.categoryId)))
           .groupBy(transactions.categoryId),
       ),
     ]);
@@ -93,7 +94,7 @@ export async function GET() {
       db
         .selectDistinct({ iso: transactions.countryIso })
         .from(transactions)
-        .where(and(eq(transactions.userId, userId), isNotNull(transactions.countryIso))),
+        .where(and(eq(transactions.userId, userId), excludeIgnoredSql(), isNotNull(transactions.countryIso))),
     );
 
     const countries = countryRows

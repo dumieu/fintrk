@@ -9,6 +9,7 @@ import {
 } from "@/lib/db/category-rollup";
 import {
   excludeCardPaymentsSql,
+  excludeIgnoredSql,
   spendingIntelligenceOutflowSql,
 } from "@/lib/db/excluded-transactions";
 import { eq, and, sql } from "drizzle-orm";
@@ -174,8 +175,10 @@ export async function GET(request: NextRequest) {
     let label = value;
 
     if (entity === "category") {
-      // Use the rollup label expression — same logic the chart uses.
-      entityFilter = sql`${categoryRollupLabelSql} = ${value}`;
+      // Use the rollup label expression — same logic the chart uses. Scope to
+      // the primary currency so the tooltip total matches the chart segment and
+      // the drill-down list (base_amount is per-currency and must not be mixed).
+      entityFilter = sql`${categoryRollupLabelSql} = ${value} AND ${transactions.baseCurrency} = ${primaryCurrency}`;
     } else if (entity === "merchant") {
       const cur = currencyParam && currencyParam.length === 3 ? currencyParam : null;
       entityFilter = cur
@@ -226,7 +229,7 @@ export async function GET(request: NextRequest) {
     /** Common base WHERE without the month filter — used for the 12-mo trend so it shows context. */
     const baseWhere = and(
       eq(transactions.userId, userId),
-      excludeCardPaymentsSql(),
+      excludeCardPaymentsSql(), excludeIgnoredSql(),
       spendingIntelligenceOutflowSql(),
       entityFilter,
     );
@@ -247,7 +250,7 @@ export async function GET(request: NextRequest) {
         .where(
           and(
             eq(transactions.userId, userId),
-            excludeCardPaymentsSql(),
+            excludeCardPaymentsSql(), excludeIgnoredSql(),
             spendingIntelligenceOutflowSql(),
           ),
         ),
@@ -316,7 +319,7 @@ export async function GET(request: NextRequest) {
         .where(
           and(
             eq(transactions.userId, userId),
-            excludeCardPaymentsSql(),
+            excludeCardPaymentsSql(), excludeIgnoredSql(),
             spendingIntelligenceOutflowSql(),
           ),
         ),

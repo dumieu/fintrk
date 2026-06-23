@@ -3,6 +3,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
 import { accounts, statements, transactions } from "@/lib/db/schema";
+import { excludeIgnoredSql } from "@/lib/db/excluded-transactions";
 import { df } from "@/lib/crypto/encryption";
 
 export const dynamic = "force-dynamic";
@@ -38,6 +39,7 @@ export async function GET() {
           and(
             eq(transactions.statementId, statements.id),
             eq(transactions.userId, userId),
+            excludeIgnoredSql(),
           ),
         )
         .where(and(eq(statements.userId, userId), eq(statements.status, "completed")))

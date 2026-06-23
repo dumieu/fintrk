@@ -19,6 +19,8 @@ import {
 } from "@/lib/db/category-rollup";
 import {
   excludeCardPaymentsSql,
+  excludeIgnoredSql,
+  excludeRecurringIgnoredSql,
   spendingIntelligenceInflowSql,
   spendingIntelligenceOutflowSql,
 } from "@/lib/db/excluded-transactions";
@@ -54,7 +56,7 @@ export async function getLatestTransactionDate(userId: string): Promise<string |
     db
       .select({ d: sql<string>`MAX(${transactions.postedDate})` })
       .from(transactions)
-      .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql())),
+      .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql(), excludeIgnoredSql())),
   );
   return row?.d ?? null;
 }
@@ -157,7 +159,7 @@ export async function listTransactions(
 ) {
   await audit(userId, meta, "list_transactions");
   const limit = Math.min(Math.max(opts.limit ?? 50, 1), 200);
-  const filters = [eq(transactions.userId, userId), excludeCardPaymentsSql()];
+  const filters = [eq(transactions.userId, userId), excludeCardPaymentsSql(), excludeIgnoredSql()];
   if (opts.from) filters.push(gte(transactions.postedDate, opts.from));
   if (opts.to) filters.push(lte(transactions.postedDate, opts.to));
   if (opts.account_id) filters.push(eq(transactions.accountId, opts.account_id));
@@ -231,7 +233,7 @@ export async function getCashflowSummary(userId: string, meta: ToolMeta, months 
           expenses: sql<string>`COALESCE(SUM(CASE WHEN ${spendingIntelligenceOutflowSql()} THEN -CAST(${transactions.baseAmount} AS numeric) END), 0)`,
         })
         .from(transactions)
-        .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql()))
+        .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql(), excludeIgnoredSql()))
         .groupBy(sql`date_trunc('month', ${transactions.postedDate}::date)`)
         .orderBy(desc(sql`date_trunc('month', ${transactions.postedDate}::date)`))
         .limit(maxMonths),
@@ -280,7 +282,7 @@ export async function getSpendingBreakdown(
   const { from, to } = resolveDateRange(opts);
   const filters = [
     eq(transactions.userId, userId),
-    excludeCardPaymentsSql(),
+    excludeCardPaymentsSql(), excludeIgnoredSql(),
     spendingIntelligenceOutflowSql(),
   ];
   if (from) filters.push(gte(transactions.postedDate, from));
@@ -350,7 +352,7 @@ export async function getSpendingByMonth(
       .where(
         and(
           eq(transactions.userId, userId),
-          excludeCardPaymentsSql(),
+          excludeCardPaymentsSql(), excludeIgnoredSql(),
           spendingIntelligenceOutflowSql(),
         ),
       )
@@ -404,7 +406,7 @@ export async function getTopMerchants(
   const { from, to } = resolveDateRange(opts);
   const filters = [
     eq(transactions.userId, userId),
-    excludeCardPaymentsSql(),
+    excludeCardPaymentsSql(), excludeIgnoredSql(),
     spendingIntelligenceOutflowSql(),
   ];
   if (from) filters.push(gte(transactions.postedDate, from));
@@ -438,7 +440,7 @@ export async function getTopMerchants(
 
 export async function listRecurringCharges(userId: string, meta: ToolMeta, activeOnly = true) {
   await audit(userId, meta, "list_recurring_charges");
-  const filters = [eq(recurringPatterns.userId, userId)];
+  const filters = [eq(recurringPatterns.userId, userId), excludeRecurringIgnoredSql()];
   if (activeOnly) filters.push(eq(recurringPatterns.isActive, true));
 
   const rows = await resilientQuery(() =>
@@ -577,7 +579,7 @@ export async function getCashflowSankeySummary(
 
   const filters = [
     eq(transactions.userId, userId),
-    excludeCardPaymentsSql(),
+    excludeCardPaymentsSql(), excludeIgnoredSql(),
   ];
   if (from) filters.push(gte(transactions.postedDate, from));
   if (to) filters.push(lte(transactions.postedDate, to));
@@ -687,7 +689,7 @@ export async function getContextBrief(userId: string, meta: ToolMeta) {
           count: sql<number>`COUNT(*)::int`,
         })
         .from(transactions)
-        .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql())),
+        .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql(), excludeIgnoredSql())),
     ),
     resilientQuery(() =>
       db
@@ -697,7 +699,7 @@ export async function getContextBrief(userId: string, meta: ToolMeta) {
           expenses: sql<string>`COALESCE(SUM(CASE WHEN ${spendingIntelligenceOutflowSql()} THEN -CAST(${transactions.baseAmount} AS numeric) END), 0)`,
         })
         .from(transactions)
-        .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql()))
+        .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql(), excludeIgnoredSql()))
         .groupBy(sql`date_trunc('month', ${transactions.postedDate}::date)`)
         .orderBy(desc(sql`date_trunc('month', ${transactions.postedDate}::date)`))
         .limit(12),
@@ -720,7 +722,7 @@ export async function getContextBrief(userId: string, meta: ToolMeta) {
         .where(
           and(
             eq(transactions.userId, userId),
-            excludeCardPaymentsSql(),
+            excludeCardPaymentsSql(), excludeIgnoredSql(),
             spendingIntelligenceOutflowSql(),
             gte(transactions.postedDate, threeMonthsAgo),
           ),
@@ -736,7 +738,7 @@ export async function getContextBrief(userId: string, meta: ToolMeta) {
           interval_days: recurringPatterns.intervalDays,
         })
         .from(recurringPatterns)
-        .where(and(eq(recurringPatterns.userId, userId), eq(recurringPatterns.isActive, true))),
+        .where(and(eq(recurringPatterns.userId, userId), eq(recurringPatterns.isActive, true), excludeRecurringIgnoredSql())),
     ),
     resilientQuery(() =>
       db

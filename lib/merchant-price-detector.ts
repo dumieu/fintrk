@@ -1,7 +1,7 @@
 import "server-only";
 import { db, resilientQuery } from "@/lib/db";
 import { transactions, recurringPatterns, aiInsights } from "@/lib/db/schema";
-import { excludeCardPaymentsSql, excludeRecurringCardPaymentsSql } from "@/lib/db/excluded-transactions";
+import { excludeCardPaymentsSql, excludeIgnoredSql, excludeRecurringCardPaymentsSql, excludeRecurringIgnoredSql } from "@/lib/db/excluded-transactions";
 import { eq, and, desc } from "drizzle-orm";
 
 interface PriceChange {
@@ -17,7 +17,7 @@ export async function detectPriceChanges(userId: string): Promise<PriceChange[]>
     db.select().from(recurringPatterns).where(
       and(
         eq(recurringPatterns.userId, userId),
-        excludeRecurringCardPaymentsSql(),
+        excludeRecurringCardPaymentsSql(), excludeRecurringIgnoredSql(),
         eq(recurringPatterns.isActive, true),
       ),
     ),
@@ -36,7 +36,7 @@ export async function detectPriceChanges(userId: string): Promise<PriceChange[]>
         .where(
           and(
             eq(transactions.userId, userId),
-            excludeCardPaymentsSql(),
+            excludeCardPaymentsSql(), excludeIgnoredSql(),
             eq(transactions.merchantName, pattern.merchantName),
           ),
         )

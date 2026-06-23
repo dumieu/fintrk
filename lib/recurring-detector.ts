@@ -1,7 +1,7 @@
 import "server-only";
 import { db, resilientQuery } from "@/lib/db";
 import { transactions, recurringPatterns } from "@/lib/db/schema";
-import { excludeCardPaymentsSql } from "@/lib/db/excluded-transactions";
+import { excludeCardPaymentsSql, excludeIgnoredSql } from "@/lib/db/excluded-transactions";
 import { and, eq } from "drizzle-orm";
 
 interface MerchantGroup {
@@ -61,7 +61,7 @@ export async function detectRecurringPatterns(userId: string): Promise<number> {
         baseCurrency: transactions.baseCurrency,
       })
       .from(transactions)
-      .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql()))
+      .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql(), excludeIgnoredSql()))
       .orderBy(transactions.merchantName, transactions.postedDate),
   );
 

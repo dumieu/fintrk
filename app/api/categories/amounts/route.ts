@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { and, sql, eq } from "drizzle-orm";
 import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
-import { transactions, userCategories } from "@/lib/db/schema";
-import { excludeCardPaymentsSql } from "@/lib/db/excluded-transactions";
+import { transactions, userCategories, accounts } from "@/lib/db/schema";
+import { excludeCardPaymentsSql, excludeIgnoredSql, primaryCurrencyOnlySql } from "@/lib/db/excluded-transactions";
 import { logServerError } from "@/lib/safe-error";
 import {
   rollupInflowLabel,
@@ -28,6 +28,12 @@ export async function GET() {
     const labelExpr =
       sql<string>`${userCategories.name}`;
 
+    /** Scope to the primary currency (base_amount is per-currency; see primaryCurrencyOnlySql). */
+    const primaryCurrencyRows = await resilientQuery(() =>
+      db.select({ primaryCurrency: accounts.primaryCurrency }).from(accounts).where(eq(accounts.userId, userId)).limit(1),
+    );
+    const primaryCurrency = primaryCurrencyRows[0]?.primaryCurrency ?? "USD";
+
     const rows = await resilientQuery(() =>
       db
         .select({
@@ -37,7 +43,7 @@ export async function GET() {
         })
         .from(transactions)
         .leftJoin(userCategories, eq(transactions.categoryId, userCategories.id))
-        .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql()))
+        .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql(), excludeIgnoredSql(), primaryCurrencyOnlySql(primaryCurrency)))
         .groupBy(labelExpr),
     );
 

@@ -9,6 +9,8 @@ import {
 } from "@/lib/db/category-rollup";
 import {
   excludeCardPaymentsSql,
+  excludeIgnoredSql,
+  primaryCurrencyOnlySql,
   spendingIntelligenceOutflowSql,
 } from "@/lib/db/excluded-transactions";
 import { eq, and, sql } from "drizzle-orm";
@@ -24,13 +26,19 @@ export async function GET() {
     const { userId } = await resilientAuth();
     if (!userId) return unauthorizedResponse();
 
+    /** Scope every base_amount sum to the primary currency so totals are
+     *  comparable and match the currency-filtered drill-downs/tooltips. */
+    const primaryCurrencyRows = await resilientQuery(() =>
+      db.select({ primaryCurrency: accounts.primaryCurrency }).from(accounts).where(eq(accounts.userId, userId)).limit(1),
+    );
+    const primaryCurrency = primaryCurrencyRows[0]?.primaryCurrency ?? "USD";
+
     const [
       categoryBreakdown,
       dayOfWeek,
       dayOfWeekCategories,
       countrySpend,
       fxData,
-      userAccounts,
     ] = await Promise.all([
         resilientQuery(() =>
           db
@@ -50,7 +58,7 @@ export async function GET() {
                 eq(parentCategory.userId, userId),
               ),
             )
-            .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql(), spendingIntelligenceOutflowSql()))
+            .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql(), excludeIgnoredSql(), primaryCurrencyOnlySql(primaryCurrency), spendingIntelligenceOutflowSql()))
             .groupBy(categoryRollupLabelSql)
             .orderBy(sql`SUM(ABS(CAST(${transactions.baseAmount} AS numeric))) DESC`)
             .limit(10),
@@ -63,7 +71,7 @@ export async function GET() {
               total: sql<string>`SUM(ABS(CAST(${transactions.baseAmount} AS numeric)))`,
             })
             .from(transactions)
-            .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql(), spendingIntelligenceOutflowSql()))
+            .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql(), excludeIgnoredSql(), primaryCurrencyOnlySql(primaryCurrency), spendingIntelligenceOutflowSql()))
             .groupBy(sql`EXTRACT(DOW FROM ${transactions.postedDate}::date)`)
             .orderBy(sql`EXTRACT(DOW FROM ${transactions.postedDate}::date)`),
         ),
@@ -87,7 +95,7 @@ export async function GET() {
                 eq(parentCategory.userId, userId),
               ),
             )
-            .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql(), spendingIntelligenceOutflowSql()))
+            .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql(), excludeIgnoredSql(), primaryCurrencyOnlySql(primaryCurrency), spendingIntelligenceOutflowSql()))
             .groupBy(categoryRollupLabelSql, sql`EXTRACT(DOW FROM ${transactions.postedDate}::date)`),
         ),
 
@@ -99,7 +107,7 @@ export async function GET() {
               count: sql<number>`COUNT(*)::int`,
             })
             .from(transactions)
-            .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql(), spendingIntelligenceOutflowSql(), sql`${transactions.countryIso} IS NOT NULL`))
+            .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql(), excludeIgnoredSql(), primaryCurrencyOnlySql(primaryCurrency), spendingIntelligenceOutflowSql(), sql`${transactions.countryIso} IS NOT NULL`))
             .groupBy(transactions.countryIso)
             .orderBy(sql`SUM(ABS(CAST(${transactions.baseAmount} AS numeric))) DESC`)
             .limit(10),
@@ -113,16 +121,10 @@ export async function GET() {
             })
             .from(transactions)
             .where(
-              and(eq(transactions.userId, userId), excludeCardPaymentsSql(), spendingIntelligenceOutflowSql(), sql`${transactions.foreignCurrency} IS NOT NULL`),
+              and(eq(transactions.userId, userId), excludeCardPaymentsSql(), excludeIgnoredSql(), spendingIntelligenceOutflowSql(), sql`${transactions.foreignCurrency} IS NOT NULL`),
             ),
         ),
-
-        resilientQuery(() =>
-          db.select({ primaryCurrency: accounts.primaryCurrency }).from(accounts).where(eq(accounts.userId, userId)).limit(1),
-        ),
       ]);
-
-    const primaryCurrency = userAccounts[0]?.primaryCurrency ?? "USD";
 
     const dowArray = Array(7).fill(0);
     for (const row of dayOfWeek) {

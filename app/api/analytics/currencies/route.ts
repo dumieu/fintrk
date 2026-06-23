@@ -4,6 +4,8 @@ import { db, resilientQuery, resilientRawSql, rawSql } from "@/lib/db";
 import { transactions, accounts } from "@/lib/db/schema";
 import {
   excludeCardPaymentsSql,
+  excludeIgnoredSql,
+  EXCLUDE_IGNORED_RAW,
   spendingIntelligenceOutflowSql,
   SPENDING_INTELLIGENCE_OUTFLOW_RAW,
 } from "@/lib/db/excluded-transactions";
@@ -44,7 +46,7 @@ export async function GET(request: NextRequest) {
 
     const whereOutflow = and(
       eq(transactions.userId, userId),
-      excludeCardPaymentsSql(),
+      excludeCardPaymentsSql(), excludeIgnoredSql(),
       spendingIntelligenceOutflowSql(),
     );
 
@@ -87,6 +89,7 @@ export async function GET(request: NextRequest) {
             FROM transactions
             WHERE user_id = ${userId}
               AND ${SPENDING_INTELLIGENCE_OUTFLOW_RAW}
+              AND ${EXCLUDE_IGNORED_RAW}
               AND NOT EXISTS (
                 SELECT 1
                 FROM user_categories card_payment_category

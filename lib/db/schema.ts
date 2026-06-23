@@ -270,6 +270,30 @@ export const merchantLabelRules = pgTable(
   ],
 );
 
+// ─── Ignored transactions (per-user; single item OR all with a name) ────────
+// scope 'item': transactionId set, hides exactly one transaction.
+// scope 'name': nameKey set (lower(trim(coalesce(merchant_name, raw_description)))),
+//   hides every transaction whose display name matches. Ignored rows are removed
+//   from ALL analytics, charts, tables, and reads until the rule is deleted.
+
+export const transactionIgnores = pgTable(
+  "transaction_ignores",
+  {
+    id: serial("id").primaryKey(),
+    userId: varchar("user_id", { length: 255 }).notNull(),
+    scope: varchar("scope", { length: 8 }).notNull(),
+    transactionId: uuid("transaction_id"),
+    nameKey: varchar("name_key", { length: 255 }),
+    displayName: varchar("display_name", { length: 255 }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("transaction_ignores_user_txn_idx").on(t.userId, t.transactionId),
+    uniqueIndex("transaction_ignores_user_name_idx").on(t.userId, t.nameKey),
+    index("transaction_ignores_user_idx").on(t.userId),
+  ],
+);
+
 // ─── Double-charge watchlist exclusions (per-user permanent dismissals) ─────
 
 export const doubleChargeWatchlistExclusions = pgTable(

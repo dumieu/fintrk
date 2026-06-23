@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
-import { transactions } from "@/lib/db/schema";
+import { transactions, accounts } from "@/lib/db/schema";
 import {
   categoryRollupLabelSql,
   leafCategory,
@@ -9,6 +9,8 @@ import {
 } from "@/lib/db/category-rollup";
 import {
   excludeCardPaymentsSql,
+  excludeIgnoredSql,
+  primaryCurrencyOnlySql,
   spendingIntelligenceOutflowSql,
 } from "@/lib/db/excluded-transactions";
 import { eq, and, sql } from "drizzle-orm";
@@ -36,6 +38,16 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    /** Primary currency scopes every base_amount sum (see primaryCurrencyOnlySql). */
+    const primaryCurrencyRows = await resilientQuery(() =>
+      db
+        .select({ primaryCurrency: accounts.primaryCurrency })
+        .from(accounts)
+        .where(eq(accounts.userId, userId))
+        .limit(1),
+    );
+    const primaryCurrency = primaryCurrencyRows[0]?.primaryCurrency ?? "USD";
+
     const rows = await resilientQuery(() =>
       db
         .select({
@@ -58,7 +70,8 @@ export async function GET(request: NextRequest) {
         .where(
           and(
             eq(transactions.userId, userId),
-            excludeCardPaymentsSql(),
+            excludeCardPaymentsSql(), excludeIgnoredSql(),
+            primaryCurrencyOnlySql(primaryCurrency),
             spendingIntelligenceOutflowSql(),
             sql`${categoryRollupLabelSql} = ${raw}`,
           ),

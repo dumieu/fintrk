@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
 import { transactions, aiInsights, recurringPatterns, userCategories } from "@/lib/db/schema";
-import { excludeCardPaymentsSql, excludeRecurringCardPaymentsSql } from "@/lib/db/excluded-transactions";
+import { excludeCardPaymentsSql, excludeIgnoredSql, excludeRecurringCardPaymentsSql, excludeRecurringIgnoredSql } from "@/lib/db/excluded-transactions";
 import { eq, and, gte, sql, desc } from "drizzle-orm";
 import { ai, GEMINI_MODEL } from "@/lib/gemini";
 import { logAiCost } from "@/lib/ai-cost";
@@ -32,20 +32,20 @@ export async function POST() {
         }).from(transactions)
           .leftJoin(userCategories, eq(transactions.categoryId, userCategories.id))
           .where(
-            and(eq(transactions.userId, userId), excludeCardPaymentsSql(), gte(transactions.postedDate, dateFrom), sql`CAST(${transactions.baseAmount} AS numeric) < 0`),
+            and(eq(transactions.userId, userId), excludeCardPaymentsSql(), excludeIgnoredSql(), gte(transactions.postedDate, dateFrom), sql`CAST(${transactions.baseAmount} AS numeric) < 0`),
           ).groupBy(userCategories.name).orderBy(sql`SUM(ABS(CAST(${transactions.baseAmount} AS numeric))) DESC`).limit(15),
       ),
       resilientQuery(() =>
         db.select().from(recurringPatterns).where(
           and(
             eq(recurringPatterns.userId, userId),
-            excludeRecurringCardPaymentsSql(),
+            excludeRecurringCardPaymentsSql(), excludeRecurringIgnoredSql(),
             eq(recurringPatterns.isActive, true),
           ),
         ),
       ),
       resilientQuery(() =>
-        db.select({ count: sql<number>`COUNT(*)::int` }).from(transactions).where(and(eq(transactions.userId, userId), excludeCardPaymentsSql())),
+        db.select({ count: sql<number>`COUNT(*)::int` }).from(transactions).where(and(eq(transactions.userId, userId), excludeCardPaymentsSql(), excludeIgnoredSql())),
       ),
     ]);
 
