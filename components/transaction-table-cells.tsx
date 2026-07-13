@@ -14,6 +14,7 @@ import {
 } from "@/lib/format";
 import { countryDisplayName, flagEmoji, transactionTypeLabel } from "@/lib/transaction-flags";
 import { dispatchTransactionsChanged } from "@/lib/notify-transactions-changed";
+import { transactionDisplayName, transactionMerchantKey } from "@/lib/transaction-merchant-key";
 import { cn } from "@/lib/utils";
 
 export interface TransactionRowDoubleChargeSuspect {
@@ -253,19 +254,22 @@ const LABEL_SUGGEST_MAX = 100;
 export function TransactionLabelCell({
   transactionId,
   merchantName,
+  rawDescription,
   value,
   onSaved,
   allLabels,
 }: {
   transactionId: string;
   merchantName: string | null;
+  rawDescription: string;
   value: string | null;
   onSaved: (id: string, label: string | null, scope: "this" | "merchant", merchantName: string | null) => void;
   allLabels: string[];
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value ?? "");
-  const hasMerchantName = Boolean(merchantName?.trim());
+  const merchantMatchKey = transactionMerchantKey(merchantName, rawDescription);
+  const hasMerchantName = merchantMatchKey.length > 0;
   const defaultScope = hasMerchantName ? "merchant" : "this";
   const [scope, setScope] = useState<"this" | "merchant">(defaultScope);
   const effectiveScope = scope === "merchant" && !hasMerchantName ? "this" : scope;
@@ -367,12 +371,12 @@ export function TransactionLabelCell({
           transactionId,
           label: trimmed,
           labelApplyScope: effectiveScope,
-          labelMerchantName: effectiveScope === "merchant" ? merchantName : undefined,
+          labelMerchantName: effectiveScope === "merchant" ? merchantMatchKey : undefined,
         }),
       });
       if (res.ok) {
         const json = (await res.json()) as { label?: string | null };
-        onSaved(transactionId, json.label ?? next, effectiveScope, merchantName);
+        onSaved(transactionId, json.label ?? next, effectiveScope, merchantMatchKey || null);
         dispatchTransactionsChanged();
       }
     } finally {
@@ -528,18 +532,21 @@ export function TransactionLabelCell({
 export function TransactionNoteCell({
   transactionId,
   merchantName,
+  rawDescription,
   value,
   onSaved,
 }: {
   transactionId: string;
   merchantName: string | null;
+  rawDescription: string;
   value: string | null;
   onSaved: (id: string, note: string | null, scope: "this" | "merchant", merchantName: string | null) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value ?? "");
   const [scope, setScope] = useState<"this" | "merchant">("this");
-  const hasMerchantName = Boolean(merchantName?.trim());
+  const merchantMatchKey = transactionMerchantKey(merchantName, rawDescription);
+  const hasMerchantName = merchantMatchKey.length > 0;
   const effectiveScope = scope === "merchant" && !hasMerchantName ? "this" : scope;
 
   useEffect(() => {
@@ -562,12 +569,12 @@ export function TransactionNoteCell({
           transactionId,
           note: trimmed,
           noteApplyScope: effectiveScope,
-          noteMerchantName: effectiveScope === "merchant" && merchantName ? merchantName : undefined,
+          noteMerchantName: effectiveScope === "merchant" && merchantMatchKey ? merchantMatchKey : undefined,
         }),
       });
       if (res.ok) {
         const json = (await res.json()) as { note?: string | null };
-        onSaved(transactionId, json.note ?? next, effectiveScope, merchantName);
+        onSaved(transactionId, json.note ?? next, effectiveScope, merchantMatchKey || null);
         dispatchTransactionsChanged();
       }
     } finally {
@@ -707,7 +714,7 @@ export function MerchantNameEditor({
           }}
         >
           <p className="text-xs font-medium text-foreground truncate">
-            {txn.merchantName ?? txn.rawDescription}
+            {transactionDisplayName(txn.merchantName, txn.rawDescription)}
           </p>
           <TransactionSourceSubtitle txn={txn} />
           {transactionReferenceDisplay(txn) != null && (
@@ -804,10 +811,16 @@ export function CategoryCellEditor({
   const searchRef = useRef<HTMLInputElement>(null);
   const [panelRect, setPanelRect] = useState<{ top: number; left: number; width: number } | null>(null);
 
+  const hasLabel = Boolean(txn.label?.trim());
+  const bulkMatchName = transactionDisplayName(txn.merchantName, txn.rawDescription);
+  const merchantMatchKey = transactionMerchantKey(txn.merchantName, txn.rawDescription);
+  const canBulkByName = merchantMatchKey.length > 0;
+
   useEffect(() => {
     if (!open) { setSearch(""); setPanelRect(null); return; }
+    setScope(canBulkByName ? "merchant" : "this");
     requestAnimationFrame(() => searchRef.current?.focus());
-  }, [open]);
+  }, [open, canBulkByName]);
 
   const updatePanelPosition = useCallback(() => {
     const el = containerRef.current;
@@ -862,15 +875,13 @@ export function CategoryCellEditor({
       .filter((cat) => cat.subcategories.length > 0 || cat.name.toLowerCase().includes(q));
   }, [userCategories, q]);
 
-  const hasLabel = Boolean(txn.label?.trim());
-  const hasMerchantName = Boolean(txn.merchantName?.trim());
-  const effectiveScope = scope === "merchant" && !hasMerchantName ? "this" : scope;
-
-  useEffect(() => {
-    if (open && scope === "merchant" && !hasMerchantName) setScope("this");
-  }, [hasMerchantName, open, scope]);
-
   const selectCategory = (subcatId: number) => {
+    const applyScope =
+      scope === "merchant" && canBulkByName
+        ? "merchant"
+        : scope === "label" && hasLabel
+          ? "label"
+          : "this";
     let resolvedCat: string | null = null;
     let resolvedSub: string | null = null;
     for (const cat of userCategories) {
@@ -878,7 +889,7 @@ export function CategoryCellEditor({
       const sub = cat.subcategories.find((s) => s.id === subcatId);
       if (sub) { resolvedCat = cat.name; resolvedSub = sub.name; break; }
     }
-    onSaved(txn.id, subcatId, effectiveScope, txn.merchantName, txn.label, resolvedCat, resolvedSub);
+    onSaved(txn.id, subcatId, applyScope, merchantMatchKey || null, txn.label, resolvedCat, resolvedSub);
     setOpen(false);
   };
 
@@ -912,51 +923,62 @@ export function CategoryCellEditor({
               </div>
             </div>
             <div className="shrink-0 border-b border-chart-border px-2.5 pb-2 pt-0">
-              <div className="flex items-center gap-1.5">
-                <span className="shrink-0 text-[9px] text-muted-foreground/80">Apply to:</span>
-                <div className="inline-flex h-[22px] rounded-full border border-chart-border bg-chart-muted p-px text-[9px] font-medium">
-                  <button
-                    type="button"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => setScope("merchant")}
-                    className={cn(
-                      "rounded-full px-2 transition-colors whitespace-nowrap cursor-pointer",
-                      scope === "merchant"
-                        ? "bg-[#0BC18D]/20 text-[#0BC18D]"
-                        : "text-muted-foreground hover:text-muted-foreground",
-                    )}
-                  >
-                    All with this name
-                  </button>
-                  <button
-                    type="button"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => { if (hasLabel) setScope("label"); }}
-                    className={cn(
-                      "rounded-full px-2 transition-colors whitespace-nowrap",
-                      !hasLabel
-                        ? "text-muted-foreground/40 cursor-not-allowed"
-                        : effectiveScope === "label"
-                          ? "bg-[#0BC18D]/20 text-[#0BC18D] cursor-pointer"
-                          : "text-muted-foreground hover:text-muted-foreground cursor-pointer",
-                    )}
-                    title={hasLabel ? `Label: ${txn.label}` : "No label assigned"}
-                  >
-                    {hasLabel ? txn.label : "No label"}
-                  </button>
-                  <button
-                    type="button"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => setScope("this")}
-                    className={cn(
-                      "rounded-full px-2 transition-colors whitespace-nowrap cursor-pointer",
-                      effectiveScope === "this"
-                        ? "bg-[#0BC18D]/20 text-[#0BC18D]"
-                        : "text-muted-foreground hover:text-muted-foreground",
-                    )}
-                  >
-                    Only this
-                  </button>
+              <div className="flex flex-col gap-1.5">
+                <div className="flex flex-wrap items-center gap-1">
+                  <span className="shrink-0 text-[9px] text-muted-foreground/80">Apply to:</span>
+                  <div className="inline-flex min-h-[22px] max-w-full flex-wrap gap-0.5 rounded-full border border-chart-border bg-chart-muted p-0.5 text-[9px] font-medium">
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => { if (canBulkByName) setScope("merchant"); }}
+                      disabled={!canBulkByName}
+                      className={cn(
+                        "rounded-full px-2 py-0.5 transition-colors whitespace-nowrap",
+                        !canBulkByName
+                          ? "cursor-not-allowed text-muted-foreground/40"
+                          : scope === "merchant"
+                            ? "cursor-pointer bg-[#0BC18D]/20 text-[#0BC18D]"
+                            : "cursor-pointer text-muted-foreground hover:text-foreground",
+                      )}
+                      title={
+                        canBulkByName
+                          ? `All transactions named “${bulkMatchName.length > 48 ? `${bulkMatchName.slice(0, 48)}…` : bulkMatchName}”`
+                          : "No merchant or description to match"
+                      }
+                    >
+                      All with this name
+                    </button>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => { if (hasLabel) setScope("label"); }}
+                      disabled={!hasLabel}
+                      className={cn(
+                        "rounded-full px-2 py-0.5 transition-colors whitespace-nowrap",
+                        !hasLabel
+                          ? "cursor-not-allowed text-muted-foreground/40"
+                          : scope === "label"
+                            ? "cursor-pointer bg-[#0BC18D]/20 text-[#0BC18D]"
+                            : "cursor-pointer text-muted-foreground hover:text-foreground",
+                      )}
+                      title={hasLabel ? `Label: ${txn.label}` : "No label assigned"}
+                    >
+                      {hasLabel ? txn.label : "No label"}
+                    </button>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => setScope("this")}
+                      className={cn(
+                        "rounded-full px-2 py-0.5 transition-colors whitespace-nowrap cursor-pointer",
+                        scope === "this"
+                          ? "bg-[#0BC18D]/20 text-[#0BC18D]"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      Only this
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

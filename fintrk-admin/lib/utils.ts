@@ -5,6 +5,23 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/** Parse page query param; non-numeric / non-positive → fallback. */
+export function parsePageParam(raw: string | null, fallback = 1): number {
+  const n = parseInt(raw || String(fallback), 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+/** Parse limit query param; clamp to [1, max]. Non-numeric → fallback. */
+export function parseLimitParam(
+  raw: string | null,
+  fallback: number,
+  max: number,
+): number {
+  const n = parseInt(raw || String(fallback), 10);
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return Math.min(n, max);
+}
+
 export function formatMs(ms: number | null | undefined): string {
   if (ms == null || !Number.isFinite(ms)) return "–";
   if (ms < 1000) return `${Math.round(ms)}ms`;

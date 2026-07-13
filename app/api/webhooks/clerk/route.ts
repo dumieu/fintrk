@@ -8,9 +8,16 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
+  let evt: Awaited<ReturnType<typeof verifyWebhook>>;
   try {
-    const evt = await verifyWebhook(req);
+    evt = await verifyWebhook(req);
+  } catch (err) {
+    // Bad signature / missing secret: do not retry.
+    logServerError("clerk_webhook_verify", err);
+    return NextResponse.json({ ok: false }, { status: 400 });
+  }
 
+  try {
     if (evt.type === "user.created" || evt.type === "user.updated") {
       await upsertUserFromUserJson(evt.data);
     } else if (evt.type === "user.deleted") {
@@ -24,7 +31,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ok: true });
   } catch (err) {
-    logServerError("clerk_webhook", err);
-    return NextResponse.json({ ok: false }, { status: 400 });
+    // Handler / wipe failure: 500 so Clerk retries and purge completes.
+    logServerError("clerk_webhook_handle", err);
+    return NextResponse.json({ ok: false }, { status: 500 });
   }
 }

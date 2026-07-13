@@ -1,0 +1,34 @@
+---
+description: FinTRK Admin — Neon ops console with decryption sessions
+globs: FinTRK/fintrk-admin/**/*
+alwaysApply: false
+---
+
+# FinTRK Admin architecture
+
+Port **3005** (`https://local.admin.fintrk.io:3005`). User app is `FinTRK/` on **3004**.
+
+## Stack
+
+| Piece | Detail |
+|-------|--------|
+| DB | Neon Postgres (`DATABASE_URL`) — same as user app |
+| Auth | Clerk + `ADMIN_EMAILS` allow-list (`lib/auth-admin.ts`) |
+| Encryption | Break-the-glass sessions (`lib/decryption-session.ts`); key `FINTRK_ENCRYPTION_KEY` |
+
+## Modules (must stay complete)
+
+Overview · Users (Pro grant/revoke, hard delete) · Messages · Data catalog · Tables DataTable · Crons · Errors · Security (decrypt / audit / secrets / vendors / DRP)
+
+## Domain notes
+
+- FinTRK is **subscription Pro** (Stripe), not credits.
+- User-owned rows use `user_id` (Clerk id). Cascade deletes must follow FK order (transactions → statements → accounts → …).
+- Encrypted tables decrypt only with an active admin decryption session.
+- Cron registry paths live in `lib/cron-registry.ts` and must match user-app `/api/cron/*` routes.
+
+## Do not
+
+- Point admin at a different database than the user app.
+- Ship table decrypt without a reason-logged session.
+- Remove Overview / Users / DataTable / Security when extending features.

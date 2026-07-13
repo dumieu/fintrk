@@ -65,6 +65,19 @@ function accountLabel(statement: UploadedStatement): string {
   return institution ? `${institution} · ${statement.account.name}` : statement.account.name;
 }
 
+/** Newest statement period first; ties broken by start date, then upload time, then id. */
+function sortStatementsNewestFirst(list: UploadedStatement[]): UploadedStatement[] {
+  return [...list].sort((a, b) => {
+    const endCmp = (b.transactionEnd ?? "").localeCompare(a.transactionEnd ?? "");
+    if (endCmp !== 0) return endCmp;
+    const startCmp = (b.transactionStart ?? "").localeCompare(a.transactionStart ?? "");
+    if (startCmp !== 0) return startCmp;
+    const processedCmp = b.processedAt.localeCompare(a.processedAt);
+    if (processedCmp !== 0) return processedCmp;
+    return b.id - a.id;
+  });
+}
+
 export function UploadedStatementsList() {
   const [items, setItems] = useState<UploadedStatement[]>([]);
   const [loading, setLoading] = useState(true);
@@ -80,7 +93,7 @@ export function UploadedStatementsList() {
       const res = await fetch("/api/statements", { cache: "no-store" });
       if (!res.ok) return;
       const data = (await res.json()) as { statements?: UploadedStatement[] };
-      setItems(data.statements ?? []);
+      setItems(sortStatementsNewestFirst(data.statements ?? []));
     } finally {
       setLoading(false);
       setRefreshing(false);

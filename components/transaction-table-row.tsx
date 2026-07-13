@@ -135,6 +135,7 @@ export function TransactionTableRow({
         <TransactionLabelCell
           transactionId={txn.id}
           merchantName={txn.merchantName}
+          rawDescription={txn.rawDescription}
           value={txn.label ?? null}
           onSaved={onSavedLabel}
           allLabels={allLabels}
@@ -169,6 +170,7 @@ export function TransactionTableRow({
         <TransactionNoteCell
           transactionId={txn.id}
           merchantName={txn.merchantName}
+          rawDescription={txn.rawDescription}
           value={txn.note ?? null}
           onSaved={onSavedNote}
         />

@@ -16,12 +16,14 @@ export async function POST(
 
   await ensureErrorLogsTable();
   const { id } = await context.params;
-  const [kind, raw] = id.split(":");
-  if (kind !== "log" || !raw) {
+  const colon = id.indexOf(":");
+  const kind = colon >= 0 ? id.slice(0, colon) : "";
+  const raw = colon >= 0 ? id.slice(colon + 1) : "";
+  // User app writes UUID text ids (Drizzle); never parseInt - that rejects
+  // UUIDs and can truncate digit-prefixed ids.
+  if (kind !== "log" || !raw || raw.length > 128) {
     return NextResponse.json({ error: "only error_log rows can be resolved" }, { status: 400 });
   }
-  const numericId = Number.parseInt(raw, 10);
-  if (!Number.isFinite(numericId)) return NextResponse.json({ error: "bad_id" }, { status: 400 });
 
   const body = (await request.json().catch(() => ({}))) as { comment?: string };
   const comment = (body.comment ?? "").slice(0, 500) || null;
@@ -29,7 +31,7 @@ export async function POST(
   const res = await sql`
     UPDATE error_logs
     SET resolved_at = NOW(), resolved_comment = ${comment}
-    WHERE id = ${numericId}
+    WHERE id::text = ${raw}
     RETURNING id, resolved_at, resolved_comment
   `;
   if (res.length === 0) return NextResponse.json({ error: "not_found" }, { status: 404 });

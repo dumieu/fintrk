@@ -52,15 +52,15 @@ const NAV = [
   { label: "Category Mapping", href: "/demo/categories", icon: Network },
 ] as const;
 
-const PAGE_META: Array<{ match: (p: string) => boolean; title: string; subtitle: string }> = [
-  { match: (p) => p.startsWith("/demo/transactions"), title: "Transactions", subtitle: "Browse, edit, and manage every line of your financial history" },
-  { match: (p) => p.startsWith("/demo/cashflow"), title: "Cashflow", subtitle: "Watch every dollar move through your life - from income, into spending and savings" },
-  { match: (p) => p.startsWith("/demo/analytics"), title: "Spending Intelligence", subtitle: "Deep analysis of your financial patterns" },
-  { match: (p) => p.startsWith("/demo/net-worth"), title: "Net Worth Atlas", subtitle: "Map your wealth today - then watch it compound 5, 10, 20, 30 years out" },
-  { match: (p) => p.startsWith("/demo/accounts"), title: "Accounts", subtitle: "Linked bank, card, and investment accounts" },
-  { match: (p) => p.startsWith("/demo/categories"), title: "Category Mapping", subtitle: "Curate how transactions roll up into categories and subcategories" },
+const PAGE_META: Array<{ match: (p: string) => boolean; title: string }> = [
+  { match: (p) => p.startsWith("/demo/transactions"), title: "Transactions" },
+  { match: (p) => p.startsWith("/demo/cashflow"), title: "Cashflow" },
+  { match: (p) => p.startsWith("/demo/analytics"), title: "Spending Intelligence" },
+  { match: (p) => p.startsWith("/demo/net-worth"), title: "Net Worth Atlas" },
+  { match: (p) => p.startsWith("/demo/accounts"), title: "Accounts" },
+  { match: (p) => p.startsWith("/demo/categories"), title: "Category Mapping" },
 ];
-const FALLBACK = { title: "Demo", subtitle: "The Sterling family - 5 years of real financial life" };
+const FALLBACK = { title: "Demo" };
 
 function DemoNav() {
   const pathname = usePathname() ?? "";
@@ -153,9 +153,6 @@ function DemoHeader() {
             </h1>
             {showCashflowLegend ? <CashflowLegendHelpButton /> : null}
           </div>
-          {meta.subtitle && (
-            <p className="hidden truncate text-[11px] text-muted-foreground sm:block">{meta.subtitle}</p>
-          )}
         </div>
         {trailing ? <div className="flex min-w-0 shrink-0 items-center">{trailing}</div> : null}
       </div>

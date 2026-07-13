@@ -247,6 +247,6 @@ export async function GET() {
     });
   } catch (e) {
     console.error("Error monitor route:", e);
-    return NextResponse.json({ error: e instanceof Error ? e.message : "errors_failed" }, { status: 500 });
+    return NextResponse.json({ error: "errors_failed" }, { status: 500 });
   }
 }

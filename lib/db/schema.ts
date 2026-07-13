@@ -201,6 +201,10 @@ export const transactions = pgTable(
     statementId: integer("statement_id").references(() => statements.id),
     postedDate: date("posted_date").notNull(),
     rawDescription: text("raw_description").notNull(),
+    /** Normalized date|amount|description key used with occurrenceIndex for waterproof dedupe. */
+    dedupeSignature: text("dedupe_signature").notNull(),
+    /** 0-based index among identical signatures in one extract (keeps Starbucks x2 same day). */
+    occurrenceIndex: integer("occurrence_index").notNull().default(0),
     referenceId: varchar("reference_id", { length: 128 }),
     merchantId: integer("merchant_id").references(() => merchants.id),
     merchantName: varchar("merchant_name", { length: 255 }),
@@ -229,9 +233,8 @@ export const transactions = pgTable(
     index("txn_user_date_idx").on(t.userId, t.postedDate),
     uniqueIndex("txn_dedup_idx").on(
       t.accountId,
-      t.postedDate,
-      t.baseAmount,
-      t.rawDescription,
+      t.dedupeSignature,
+      t.occurrenceIndex,
     ),
   ],
 );
@@ -729,3 +732,145 @@ export const mcpTokensTable = pgTable("mcp_tokens", {
   userIdx: index("mcp_tokens_user_idx").on(table.clerkUserId),
   clientIdx: index("mcp_tokens_client_idx").on(table.clientId),
 }));
+
+// ─── Admin ops (fintrk-admin Crons / Errors / Messages / Security) ───────────
+
+/** Cron job last success/failure (admin Crons dashboard). */
+export const cronRuns = pgTable("cron_runs", {
+  cronPath: text("cron_path").primaryKey(),
+  lastSuccessAt: timestamp("last_success_at", { withTimezone: true }).notNull(),
+  durationMs: integer("duration_ms"),
+  summary: jsonb("summary").$type<Record<string, unknown>>(),
+  lastFailureAt: timestamp("last_failure_at", { withTimezone: true }),
+  failureDurationMs: integer("failure_duration_ms"),
+  failureSummary: jsonb("failure_summary").$type<Record<string, unknown>>(),
+});
+
+/** Application error log for admin Error Monitor. */
+export const errorLogs = pgTable(
+  "error_logs",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    clerkUserId: text("clerk_user_id"),
+    errorContext: text("error_context").notNull(),
+    errorMessage: text("error_message").notNull(),
+    errorCode: text("error_code"),
+    severity: text("severity").notNull().default("error"),
+    pathname: text("pathname"),
+    ipAddress: text("ip_address"),
+    userAgent: text("user_agent"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    resolvedComment: text("resolved_comment"),
+  },
+  (t) => [
+    index("error_logs_created_at_idx").on(t.createdAt),
+    index("error_logs_user_idx").on(t.clerkUserId),
+    index("error_logs_context_idx").on(t.errorContext),
+    index("error_logs_severity_idx").on(t.severity),
+  ],
+);
+
+/** In-app feedback submissions (admin Messages). */
+export const feedbackSubmissions = pgTable(
+  "feedback_submissions",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    clerkUserId: text("clerk_user_id"),
+    email: text("email").notNull(),
+    sentiment: text("sentiment").notNull(),
+    message: text("message"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("feedback_submissions_created_at_idx").on(t.createdAt),
+    index("feedback_submissions_sentiment_idx").on(t.sentiment),
+  ],
+);
+
+/** Contact / support form submissions (admin Messages). */
+export const contactSubmissions = pgTable(
+  "contact_submissions",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    clerkUserId: text("clerk_user_id"),
+    fullName: text("full_name").notNull(),
+    email: text("email").notNull(),
+    country: text("country").notNull().default(""),
+    message: text("message").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("contact_submissions_created_at_idx").on(t.createdAt)],
+);
+
+/** Admin action audit buffer (Security page). */
+export const adminAuditBuffer = pgTable(
+  "admin_audit_buffer",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    adminIdentifier: text("admin_identifier").notNull(),
+    action: text("action").notNull(),
+    resource: text("resource").notNull(),
+    detail: jsonb("detail").$type<Record<string, unknown>>().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("admin_audit_buffer_created_at_idx").on(t.createdAt)],
+);
+
+/** Key/value admin settings (e.g. vendor checklist). */
+export const adminSettings = pgTable("admin_settings", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").$type<Record<string, unknown>>().notNull().default({}),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+/** Single persistent scratch pad per user (global quick note). */
+export const userQuickNotes = pgTable(
+  "user_quick_notes",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    userId: varchar("user_id", { length: 255 }).notNull(),
+    title: text("title").notNull().default(""),
+    body: text("body").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("user_quick_notes_user_id_uniq").on(t.userId),
+    index("user_quick_notes_user_id_idx").on(t.userId),
+  ],
+);
+
+/**
+ * Break-the-glass decryption sessions (fintrk-admin).
+ * Columns match fintrk-admin/lib/decryption-session.ts.
+ */
+export const adminDecryptionSessions = pgTable(
+  "admin_decryption_sessions",
+  {
+    id: serial("id").primaryKey(),
+    adminEmail: text("admin_email").notNull(),
+    adminUserId: text("admin_user_id"),
+    reason: text("reason").notNull(),
+    tablesAccessed: text("tables_accessed").array().notNull().default([]),
+    accessCount: integer("access_count").notNull().default(0),
+    startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    revoked: boolean("revoked").notNull().default(false),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("admin_decrypt_sessions_active_idx").on(t.expiresAt),
+  ],
+);

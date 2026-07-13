@@ -246,6 +246,6 @@ export async function GET() {
     });
   } catch (e) {
     console.error("Stats route error:", e);
-    return NextResponse.json({ error: e instanceof Error ? e.message : "stats_failed" }, { status: 500 });
+    return NextResponse.json({ error: "stats_failed" }, { status: 500 });
   }
 }

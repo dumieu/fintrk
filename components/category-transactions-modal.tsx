@@ -14,7 +14,13 @@ import {
 import { formatPeriodRangeLabel } from "@/lib/month-date-range";
 
 export type CategoryTransactionsFilter =
-  | { mode: "category"; name: string; level?: "category" | "subcategory"; dateFrom?: string; dateTo?: string }
+  | {
+      mode: "category";
+      name: string;
+      level?: "category" | "subcategory" | "discretionary";
+      dateFrom?: string;
+      dateTo?: string;
+    }
   | { mode: "merchant"; name: string; dateFrom?: string; dateTo?: string };
 
 function filterKey(filter: CategoryTransactionsFilter): string {
@@ -37,6 +43,9 @@ function filterSubtitle(filter: CategoryTransactionsFilter): string {
       : "All-time";
   if (filter.mode === "merchant") {
     return `${period} · spending intelligence · this merchant only`;
+  }
+  if (filter.level === "discretionary") {
+    return `${period} · spending intelligence · this type only`;
   }
   if (filter.level === "subcategory") {
     return `${period} · spending intelligence · this subcategory only`;

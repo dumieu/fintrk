@@ -4,7 +4,7 @@
  * Scope rule: a column may be encrypted ONLY if it is never used inside SQL
  * for filtering, joining, grouping, sorting, range comparison, aggregation, or
  * a unique/dedup index. Columns that power search, dedup, merchant rules, and
- * analytics (merchant_name, raw_description, reference_id, masked_number,
+ * analytics (merchant_name, raw_description, reference_id, dedupe_signature, masked_number,
  * base_amount and other numeric amounts) stay plaintext by design.
  *
  * `text`  = columns decrypted with `df()`.

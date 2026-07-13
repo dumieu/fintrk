@@ -3,6 +3,7 @@ import { corsHeaders, getBaseUrl, MCP_PATH } from "@/lib/mcp/config";
 import { resolveBearerToken } from "@/lib/mcp/tokens";
 import { handleRpc } from "@/lib/mcp/server";
 import { extractRequestMeta } from "@/lib/mcp/request-meta";
+import { hasProAccessForClerkUserId } from "@/lib/plan";
 import { logServerError } from "@/lib/safe-error";
 
 export const runtime = "nodejs";
@@ -34,6 +35,23 @@ function unauthorized(req: NextRequest, error?: string): NextResponse {
   );
 }
 
+function upgradeRequired(): NextResponse {
+  return NextResponse.json(
+    {
+      jsonrpc: "2.0",
+      id: null,
+      error: { code: -32001, message: "FinTRK Pro required" },
+    },
+    {
+      status: 402,
+      headers: corsHeaders({
+        "WWW-Authenticate": `Bearer error="insufficient_scope"`,
+        "Cache-Control": "no-store",
+      }),
+    },
+  );
+}
+
 export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders() });
 }
@@ -43,6 +61,9 @@ export async function GET(req: NextRequest) {
   if (!token) return unauthorized(req);
   const resolved = await resolveBearerToken(token);
   if (!resolved) return unauthorized(req, "invalid_token");
+  if (!(await hasProAccessForClerkUserId(resolved.clerkUserId))) {
+    return upgradeRequired();
+  }
   // No server-initiated SSE stream is offered; clients use POST.
   return NextResponse.json(
     { jsonrpc: "2.0", id: null, error: { code: -32000, message: "Use POST for MCP requests" } },
@@ -56,6 +77,9 @@ export async function POST(req: NextRequest) {
 
   const resolved = await resolveBearerToken(token);
   if (!resolved) return unauthorized(req, "invalid_token");
+  if (!(await hasProAccessForClerkUserId(resolved.clerkUserId))) {
+    return upgradeRequired();
+  }
 
   let body: unknown;
   try {

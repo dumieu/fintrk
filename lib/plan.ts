@@ -1,6 +1,6 @@
 import "server-only";
 
-import { auth, currentUser } from "@clerk/nextjs/server";
+import { auth, clerkClient, currentUser } from "@clerk/nextjs/server";
 import { headers } from "next/headers";
 
 import { isBillingExemptAccount, isBillingExemptUserId } from "@/lib/billing-exempt";
@@ -22,11 +22,16 @@ export function billingEnforced(): boolean {
   return process.env.FINTRK_BILLING_ENFORCED !== "false";
 }
 
-/** The public, no-auth /demo experience must never be paywalled. */
-async function isDemoRequest(): Promise<boolean> {
+/**
+ * Public /demo only: honor `x-fintrk-demo` when there is no Clerk session.
+ * Signed-in callers must never forge Pro access (or pin identity) via that header.
+ */
+async function isUnauthenticatedDemoRequest(): Promise<boolean> {
   try {
     const h = await headers();
-    return h.get("x-fintrk-demo") === "1";
+    if (h.get("x-fintrk-demo") !== "1") return false;
+    const { userId } = await auth();
+    return !userId;
   } catch {
     return false;
   }
@@ -39,7 +44,7 @@ async function isDemoRequest(): Promise<boolean> {
  */
 export async function hasProAccess(): Promise<boolean> {
   if (!billingEnforced()) return true;
-  if (await isDemoRequest()) return true;
+  if (await isUnauthenticatedDemoRequest()) return true;
 
   const { userId, sessionClaims } = await auth();
   if (!userId) return false;
@@ -62,6 +67,32 @@ export async function hasProAccess(): Promise<boolean> {
   try {
     const user = await currentUser();
     return isProMetadata(user?.publicMetadata);
+  } catch {
+    return false;
+  }
+}
+
+/** Pro check for a Clerk user id (MCP bearer / PAT use; no request session). */
+export async function hasProAccessForClerkUserId(clerkUserId: string): Promise<boolean> {
+  if (!billingEnforced()) return true;
+
+  if (isBillingExemptUserId(clerkUserId)) {
+    try {
+      const client = await clerkClient();
+      const user = await client.users.getUser(clerkUserId);
+      return isBillingExemptAccount(
+        user.id,
+        user.primaryEmailAddress?.emailAddress ?? null,
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  try {
+    const client = await clerkClient();
+    const user = await client.users.getUser(clerkUserId);
+    return isProMetadata(user.publicMetadata);
   } catch {
     return false;
   }

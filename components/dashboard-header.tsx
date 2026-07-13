@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
+import { AppQuickNoteChromeSlot } from "@/components/app-top-chrome-slot";
 import { HamburgerMenu } from "@/components/hamburger-menu";
 import { DashboardUserMenu } from "@/components/dashboard-user-menu";
 import { SignOutControl } from "@/components/sign-out-control";
@@ -9,28 +10,28 @@ import { CashflowSummary } from "@/components/cashflow-summary";
 import { CashflowLegendHelpButton } from "@/components/cashflow-legend-help";
 
 /**
- * Static title + subtitle for each top-level dashboard page. The header swaps
- * its label dynamically based on the current pathname so every page has
- * a consistent, branded heading slot without each page repeating the markup.
+ * Static title for each top-level dashboard page. The header swaps its label
+ * dynamically based on the current pathname so every page has a consistent,
+ * branded heading slot without each page repeating the markup.
  */
-const PAGE_META: Array<{ match: (p: string) => boolean; title: string; subtitle: string }> = [
+const PAGE_META: Array<{ match: (p: string) => boolean; title: string }> = [
   // Order matters — most specific matches first.
-  { match: (p) => p.startsWith("/dashboard/upload"), title: "Upload Statement", subtitle: "Import your bank statements — AI extracts, classifies, and analyzes every transaction" },
-  { match: (p) => p.startsWith("/dashboard/transactions"), title: "Transactions", subtitle: "Browse, edit, and manage every line of your financial history" },
-  { match: (p) => p.startsWith("/dashboard/cashflow"), title: "Cashflow", subtitle: "Watch every dollar move through your life — from income, into spending and savings" },
-  { match: (p) => p.startsWith("/dashboard/analytics"), title: "Spending Intelligence", subtitle: "Deep analysis of your financial patterns" },
-  { match: (p) => p.startsWith("/dashboard/net-worth"), title: "Net Worth Atlas", subtitle: "Map your wealth today — then watch it compound 5, 10, 20, 30 years out" },
-  { match: (p) => p.startsWith("/dashboard/accounts"), title: "Accounts", subtitle: "Linked bank, card, and investment accounts" },
-  { match: (p) => p.startsWith("/dashboard/categories"), title: "Category Mapping", subtitle: "Curate how transactions roll up into categories and subcategories" },
-  { match: (p) => p.startsWith("/dashboard/my-profile"), title: "My Profile", subtitle: "Personal preferences and account settings" },
-  { match: (p) => p.startsWith("/dashboard/profile"), title: "My Profile", subtitle: "Manage your personal information and preferences" },
-  { match: (p) => p.startsWith("/dashboard/upgrade"), title: "Plan & Billing", subtitle: "Manage your FinTRK Pro subscription" },
-  { match: (p) => p.startsWith("/dashboard/connect-ai"), title: "Connect your AI", subtitle: "Link ChatGPT, Claude, or Perplexity to your real financial data" },
-  { match: (p) => p.startsWith("/dashboard/contact"), title: "Contact", subtitle: "Get in touch with the FinTRK team" },
-  { match: (p) => p.startsWith("/dashboard/faq"), title: "FAQ", subtitle: "Frequently asked questions about FinTRK" },
+  { match: (p) => p.startsWith("/dashboard/upload"), title: "Upload Statement" },
+  { match: (p) => p.startsWith("/dashboard/transactions"), title: "Transactions" },
+  { match: (p) => p.startsWith("/dashboard/cashflow"), title: "Cashflow" },
+  { match: (p) => p.startsWith("/dashboard/analytics"), title: "Spending Intelligence" },
+  { match: (p) => p.startsWith("/dashboard/net-worth"), title: "Net Worth Atlas" },
+  { match: (p) => p.startsWith("/dashboard/accounts"), title: "Accounts" },
+  { match: (p) => p.startsWith("/dashboard/categories"), title: "Category Mapping" },
+  { match: (p) => p.startsWith("/dashboard/my-profile"), title: "My Profile" },
+  { match: (p) => p.startsWith("/dashboard/profile"), title: "My Profile" },
+  { match: (p) => p.startsWith("/dashboard/upgrade"), title: "Plan & Billing" },
+  { match: (p) => p.startsWith("/dashboard/connect-ai"), title: "Connect your AI" },
+  { match: (p) => p.startsWith("/dashboard/contact"), title: "Contact" },
+  { match: (p) => p.startsWith("/dashboard/faq"), title: "FAQ" },
 ];
 
-const FALLBACK = { title: "Dashboard", subtitle: "" };
+const FALLBACK = { title: "Dashboard" };
 
 export function DashboardHeader({
   ribbon = null,
@@ -56,15 +57,12 @@ export function DashboardHeader({
             </h1>
             {showCashflowLegend ? <CashflowLegendHelpButton /> : null}
           </div>
-          {meta.subtitle && (
-            <p className="hidden truncate text-[11px] text-muted-foreground sm:block">
-              {meta.subtitle}
-            </p>
-          )}
         </div>
         {trailing ? <div className="flex min-w-0 shrink-0 items-center">{trailing}</div> : null}
         {sessionActive ? <SignOutControl variant="header" /> : null}
         <DashboardUserMenu />
+        {/* Desktop scratch-pad corner sits fixed top-right — reserve its slot. */}
+        <AppQuickNoteChromeSlot className="hidden md:block" />
       </div>
     </header>
   );

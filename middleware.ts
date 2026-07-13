@@ -34,10 +34,18 @@ const isPublicRoute = createRouteMatcher([
   "/auth(.*)",
   "/sign-out",
   "/demo(.*)",
+  "/contact",
+  "/privacy",
+  "/terms",
   "/api/webhooks/(.*)",
   "/api/demo/(.*)",
   /** Handlers verify `CRON_SECRET` themselves. */
   "/api/cron/(.*)",
+  /** Alternate FX enrich path; handler verifies `CRON_SECRET` (same as cron). */
+  "/api/enrich/(.*)",
+  /** Optional auth; used by landing / in-app forms. */
+  "/api/feedback",
+  "/api/contact",
   /** MCP server + OAuth: external GenAI clients authenticate via Bearer tokens. */
   "/api/mcp(.*)",
 ]);
@@ -51,6 +59,8 @@ const isPaywallExempt = createRouteMatcher([
   "/dashboard/upgrade(.*)",
   "/dashboard/contact",
   "/dashboard/faq",
+  /** Checkout / portal must work for lapsed or never-subscribed users. */
+  "/api/billing(.*)",
   /** Referral attribution must record even before/without an active plan. */
   "/api/xref/capture",
 ]);
@@ -69,10 +79,17 @@ function redirectToPaywall(req: NextRequest) {
  * no real data can ever be reached) and SWALLOW any write at the edge so the
  * shared demo dataset is never mutated. The demo client already no-ops writes;
  * this is a defense-in-depth safety net.
+ *
+ * Only apply when there is no Clerk session. Signed-in users must never get
+ * silent write success (or auth bypass) from a forgeable header.
  */
-function handleDemoApi(req: NextRequest): NextResponse | undefined {
+async function handleDemoApi(
+  req: NextRequest,
+  userId: string | null | undefined,
+): Promise<NextResponse | undefined> {
   if (req.headers.get("x-fintrk-demo") !== "1") return undefined;
   if (!req.nextUrl.pathname.startsWith("/api/")) return undefined;
+  if (userId) return undefined;
   if (req.method === "GET" || req.method === "HEAD") {
     return NextResponse.next();
   }
@@ -123,7 +140,8 @@ function redirectUnauthenticatedToLanding(req: NextRequest) {
  * so visitors never see the authenticated shell.
  */
 async function middlewareWithoutClerk(req: NextRequest) {
-  const demo = handleDemoApi(req);
+  // No Clerk: treat as unauthenticated for demo-header handling.
+  const demo = await handleDemoApi(req, null);
   if (demo) return demo;
   const xref = await captureXref(req);
   if (xref) return xref;
@@ -139,15 +157,18 @@ async function middlewareWithoutClerk(req: NextRequest) {
 export default CLERK_KEYS_PRESENT
   ? clerkMiddleware(
       async (auth, req) => {
-        const demo = handleDemoApi(req);
-        if (demo) return demo;
         const xref = await captureXref(req);
         if (xref) return xref;
+
+        const { userId, sessionClaims } = await auth();
+
+        const demo = await handleDemoApi(req, userId);
+        if (demo) return demo;
+
         if (isPublicRoute(req)) {
           return;
         }
         const isApi = req.nextUrl.pathname.startsWith("/api/");
-        const { userId, sessionClaims } = await auth();
         if (!userId) {
           if (isApi) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

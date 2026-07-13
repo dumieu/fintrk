@@ -10,6 +10,13 @@ const nextConfig: NextConfig = {
   compress: true,
   // Pin tracing to this app so the nested fintrk-admin lockfile doesn't confuse Next.js.
   outputFileTracingRoot: path.join(__dirname),
+  // Large FinTRK JSON backups (exhaustive transaction dumps) for data import.
+  experimental: {
+    serverActions: {
+      bodySizeLimit: "64mb",
+    },
+    proxyClientMaxBodySize: "64mb",
+  },
   ...(isDev && {
     allowedDevOrigins: ["local.fintrk.io:3004", "local.fintrk.io"],
   }),

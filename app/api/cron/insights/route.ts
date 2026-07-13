@@ -5,15 +5,19 @@ import { excludeCardPaymentsSql, excludeIgnoredSql, excludeRecurringCardPayments
 import { ai, GEMINI_MODEL } from "@/lib/gemini";
 import { logAiCost } from "@/lib/ai-cost";
 import { logServerError } from "@/lib/safe-error";
+import { recordCronFailure, recordCronRun } from "@/lib/cron-run";
 import { ef, efJson } from "@/lib/crypto/encryption";
 import { eq, and, gte, sql } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
+const CRON_PATH = "/api/cron/insights";
+
 function verifyCronSecret(request: NextRequest): boolean {
   const secret = process.env.CRON_SECRET;
-  if (!secret) return true;
+  // Fail closed in production; allow unauthenticated local runs when unset.
+  if (!secret) return process.env.NODE_ENV !== "production";
   return request.headers.get("authorization") === `Bearer ${secret}`;
 }
 
@@ -21,6 +25,8 @@ export async function GET(request: NextRequest) {
   if (!verifyCronSecret(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  const started = Date.now();
 
   try {
     const userIds = await resilientQuery(() =>
@@ -114,9 +120,18 @@ Return JSON: {"summary":"string","tip":"string","anomaly":{"title":"string","des
       }
     }
 
-    return NextResponse.json({ success: true, usersProcessed: userIds.length, insightsGenerated: generated });
+    const summary = {
+      success: true,
+      usersProcessed: userIds.length,
+      insightsGenerated: generated,
+    };
+    await recordCronRun(CRON_PATH, Date.now() - started, summary);
+    return NextResponse.json(summary);
   } catch (err) {
     logServerError("cron/insights", err);
+    await recordCronFailure(CRON_PATH, Date.now() - started, {
+      error: err instanceof Error ? err.message : String(err),
+    });
     return NextResponse.json({ error: "Failed" }, { status: 500 });
   }
 }

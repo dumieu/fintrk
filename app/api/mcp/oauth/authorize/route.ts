@@ -5,6 +5,7 @@ import {
   OAUTH_AUTHORIZE_PATH,
   SUPPORTED_SCOPES,
   getBaseUrl,
+  isAllowedOAuthRedirect,
   isCimdClientId,
 } from "@/lib/mcp/config";
 import { createAuthCode, getClient } from "@/lib/mcp/tokens";
@@ -86,30 +87,28 @@ function htmlError(message: string, status = 400): NextResponse {
   );
 }
 
-function isAllowedRedirect(uri: string): boolean {
-  try {
-    const u = new URL(uri);
-    const isLocal =
-      u.hostname === "localhost" ||
-      u.hostname === "127.0.0.1" ||
-      u.hostname.endsWith(".local");
-    // Accept https everywhere, http only for local dev, plus native custom schemes.
-    return u.protocol === "https:" || (isLocal && u.protocol === "http:") || !["http:", "https:"].includes(u.protocol);
-  } catch {
-    return false;
-  }
-}
-
 async function validate(params: AuthParams) {
   if (!params.clientId || !params.redirectUri) {
     return { ok: false as const, html: htmlError("Missing client_id or redirect_uri.") };
+  }
+
+  // OAuth 2.1 / public clients: PKCE is required (token auth method is "none").
+  if (!params.codeChallenge) {
+    return { ok: false as const, html: htmlError("PKCE code_challenge is required.") };
+  }
+  if (
+    params.codeChallengeMethod &&
+    params.codeChallengeMethod !== "S256" &&
+    params.codeChallengeMethod !== "plain"
+  ) {
+    return { ok: false as const, html: htmlError("Unsupported code_challenge_method.") };
   }
 
   // CIMD (Client ID Metadata Document): the client_id is an https URL the
   // client controls. No registration record exists; accept the provided
   // redirect_uri without a pre-registered allow-list.
   if (isCimdClientId(params.clientId)) {
-    if (!isAllowedRedirect(params.redirectUri)) {
+    if (!isAllowedOAuthRedirect(params.redirectUri)) {
       return { ok: false as const, html: htmlError("Invalid redirect address for this application.") };
     }
     let clientName = "An AI assistant";

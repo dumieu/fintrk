@@ -31,9 +31,10 @@ export function readPlanMetadata(meta: unknown): PlanMetadata {
 
 export function isProMetadata(meta: unknown): boolean {
   const m = readPlanMetadata(meta);
-  if (m.plan === "pro") return true;
-  if (m.planStatus && PRO_STATUSES.has(m.planStatus)) return true;
-  return false;
+  // Prefer live Stripe status when present so leftover plan:"pro" cannot
+  // override canceled / unpaid / incomplete.
+  if (m.planStatus) return PRO_STATUSES.has(m.planStatus);
+  return m.plan === "pro";
 }
 
 /** True only when the metadata bag actually carries plan info (claim is configured). */

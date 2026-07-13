@@ -107,6 +107,14 @@ function CategoryLegendScrollRow({
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
+    // Don't steal clicks from legend checkboxes / pills.
+    if (
+      (e.target as Element | null)?.closest?.(
+        'button, [role="button"], [role="checkbox"], a, input, label',
+      )
+    ) {
+      return;
+    }
     const el = stripRef.current;
     if (!el) return;
     dragRef.current = {
@@ -240,6 +248,7 @@ function CategorySlicerButton({
   onToggle,
   onToggleVisibility,
   readOnly = false,
+  soloFilter = false,
 }: {
   category: AnalyticsLegendCategory;
   highlighted: boolean;
@@ -248,6 +257,8 @@ function CategorySlicerButton({
   onToggle: () => void;
   onToggleVisibility?: () => void;
   readOnly?: boolean;
+  /** When true, pill click solos this category; checkbox still hides. */
+  soloFilter?: boolean;
 }) {
   const shareLabel = formatShare(category.share);
   const tone = analyticsCategoryLabelTone(category.color);
@@ -255,9 +266,13 @@ function CategorySlicerButton({
   const textSub = tone === "light" ? "text-foreground" : "text-[#0a0a0a]/75";
   const title = readOnly
     ? category.name
-    : highlighted
-      ? `Clear filter · show all categories`
-      : `Show only ${category.name}`;
+    : soloFilter
+      ? highlighted
+        ? `Clear filter · show all categories`
+        : `Show only ${category.name}`
+      : visible
+        ? `Hide ${category.name} from chart`
+        : `Show ${category.name} on chart`;
 
   const className = [
     "group relative min-w-[7.5rem] shrink-0 overflow-hidden rounded-xl border px-2.5 py-0.5 text-left",
@@ -408,6 +423,8 @@ export function AnalyticsCategoryLegend({
               const visible = !hidden.has(c.name);
               const highlighted = filterActive && soloCategory === c.name;
               const dimmed = filterActive && soloCategory !== c.name;
+              const canSolo = Boolean(onToggleCategory);
+              const canHide = Boolean(onToggleVisibility);
               return (
                 <CategorySlicerButton
                   key={c.name}
@@ -415,11 +432,17 @@ export function AnalyticsCategoryLegend({
                   highlighted={highlighted}
                   dimmed={dimmed}
                   visible={visible}
-                  onToggle={() => onToggleCategory?.(c.name)}
+                  soloFilter={canSolo}
+                  readOnly={!canSolo && !canHide}
+                  onToggle={() => {
+                    if (canSolo) {
+                      onToggleCategory?.(c.name);
+                      return;
+                    }
+                    if (canHide) onToggleVisibility?.(c.name);
+                  }}
                   onToggleVisibility={
-                    visibilityEnabled
-                      ? () => onToggleVisibility?.(c.name)
-                      : undefined
+                    canHide ? () => onToggleVisibility?.(c.name) : undefined
                   }
                 />
               );

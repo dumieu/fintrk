@@ -18,10 +18,18 @@ export interface DetailTipState {
   error: string | null;
 }
 
-/** Per-entity LRU-ish cache keyed by `${entity}|${value}|${currency ?? ''}|${month ?? ''}`. */
+/** Per-entity LRU-ish cache keyed by `${entity}|${value}|${currency}|${month}|${year}|${level}|${parent}`. */
 const CACHE = new Map<string, AnalyticsDetailResponse>();
-function cacheKey(entity: DetailEntity, value: string, currency?: string, month?: string) {
-  return `${entity}|${value}|${currency ?? ""}|${month ?? ""}`;
+function cacheKey(
+  entity: DetailEntity,
+  value: string,
+  currency?: string,
+  month?: string,
+  year?: string,
+  level?: string,
+  parent?: string,
+) {
+  return `${entity}|${value}|${currency ?? ""}|${month ?? ""}|${year ?? ""}|${level ?? "category"}|${parent ?? ""}`;
 }
 
 export async function loadAnalyticsDetail(
@@ -29,8 +37,11 @@ export async function loadAnalyticsDetail(
   value: string,
   currency?: string,
   month?: string,
+  year?: string,
+  level: "category" | "subcategory" = "category",
+  parent?: string,
 ): Promise<{ data: AnalyticsDetailResponse | null; error: string | null }> {
-  const key = cacheKey(entity, value, currency, month);
+  const key = cacheKey(entity, value, currency, month, year, level, parent);
   const cached = CACHE.get(key);
   if (cached) return { data: cached, error: null };
 
@@ -39,7 +50,12 @@ export async function loadAnalyticsDetail(
       `/api/analytics/detail?entity=${encodeURIComponent(entity)}` +
       `&value=${encodeURIComponent(value)}` +
       (currency ? `&currency=${encodeURIComponent(currency)}` : "") +
-      (month ? `&month=${encodeURIComponent(month)}` : "");
+      (month ? `&month=${encodeURIComponent(month)}` : "") +
+      (year ? `&year=${encodeURIComponent(year)}` : "") +
+      (entity === "category" && level !== "category"
+        ? `&level=${encodeURIComponent(level)}`
+        : "") +
+      (entity === "category" && parent ? `&parent=${encodeURIComponent(parent)}` : "");
     const r = await fetch(url);
     const j = (await r.json()) as AnalyticsDetailResponse | { error: string };
     if ("error" in j || !r.ok) {
@@ -88,11 +104,28 @@ export function useAnalyticsDetail() {
       accent: string;
       currency?: string;
       month?: string;
+      year?: string;
+      level?: "category" | "subcategory";
+      parent?: string;
     }) => {
-      const { rect, clientX, clientY, avoidRect, entity, value, label, accent, currency, month } = params;
+      const {
+        rect,
+        clientX,
+        clientY,
+        avoidRect,
+        entity,
+        value,
+        label,
+        accent,
+        currency,
+        month,
+        year,
+        level = "category",
+        parent,
+      } = params;
       clearLeave();
 
-      const key = cacheKey(entity, value, currency, month);
+      const key = cacheKey(entity, value, currency, month, year, level, parent);
       const cached = CACHE.get(key);
 
       const baseState: DetailTipState = {
@@ -114,7 +147,15 @@ export function useAnalyticsDetail() {
 
       const gen = ++fetchGen.current;
       try {
-        const { data, error } = await loadAnalyticsDetail(entity, value, currency, month);
+        const { data, error } = await loadAnalyticsDetail(
+          entity,
+          value,
+          currency,
+          month,
+          year,
+          level,
+          parent,
+        );
         if (gen !== fetchGen.current) return;
 
         if (error || !data) {

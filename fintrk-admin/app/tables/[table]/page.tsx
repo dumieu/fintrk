@@ -1,279 +1,208 @@
 "use client";
 
+import { useEffect, useState, useCallback, use } from "react";
 import Link from "next/link";
-import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, ArrowLeft, ArrowUp, ChevronLeft, ChevronRight, Pencil, Plus, RefreshCcw, Search } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card } from "@/components/ui/card";
+import { DataTable, type TableStats } from "@/components/data-table";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { formatNumber, truncate } from "@/lib/utils";
-import { RowEditorDialog, ColumnDef } from "@/components/row-editor-dialog";
+import { ArrowLeft, Database, Columns3, Rows3, KeyRound, Link2, Lock, Unlock } from "lucide-react";
 
-interface IntrospectTable {
+interface Column {
   name: string;
-  rowCount: number | null;
-  columns: Array<{ name: string; type: string; nullable: boolean; default: string | null }>;
+  type: string;
+  udtName: string;
+  nullable: boolean;
+  default: string | null;
+  maxLength: number | null;
+}
+
+interface TableMeta {
+  name: string;
+  columns: Column[];
   primaryKey: string | null;
-  foreignKeys: Array<{ column: string; targetTable: string; targetColumn: string }>;
+  foreignKeys: Array<{
+    column: string;
+    foreignTable: string;
+    foreignColumn: string;
+  }>;
+  rowCount: number;
 }
 
-interface RowsResponse {
-  rows: Array<Record<string, unknown>>;
-  pagination: { page: number; limit: number; totalRows: number; totalPages: number };
-}
-
-const PAGE_SIZE = 50;
-
-function fmtCell(v: unknown): string {
-  if (v === null || v === undefined) return "—";
-  if (typeof v === "boolean") return v ? "true" : "false";
-  if (typeof v === "object") {
-    try { return truncate(JSON.stringify(v), 80); } catch { return "[object]"; }
-  }
-  return truncate(String(v), 80);
-}
-
-export default function TableDetailPage({ params }: { params: Promise<{ table: string }> }) {
+export default function TablePage({
+  params,
+}: {
+  params: Promise<{ table: string }>;
+}) {
   const { table } = use(params);
   const tableName = decodeURIComponent(table);
-  const [meta, setMeta] = useState<IntrospectTable | null>(null);
-  const [rows, setRows] = useState<RowsResponse | null>(null);
+  const [tableMeta, setTableMeta] = useState<TableMeta | null>(null);
+  const [liveRowCount, setLiveRowCount] = useState<number | null>(null);
+  const [tableStats, setTableStats] = useState<TableStats | null>(null);
+  const [encrypted, setEncrypted] = useState(false);
+  const [decrypted, setDecrypted] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(0);
-  const [q, setQ] = useState("");
-  const [sort, setSort] = useState<{ col: string; dir: "asc" | "desc" } | null>(null);
-  const [editing, setEditing] = useState<{ row: Record<string, unknown> | null } | null>(null);
-  const debounceRef = useRef<number | null>(null);
+  const [error, setError] = useState("");
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({
-        table: tableName,
-        limit: String(PAGE_SIZE),
-        page: String(page + 1),
-      });
-      if (q.trim()) params.set("search", q.trim());
-      if (sort) {
-        params.set("sort", sort.col);
-        params.set("order", sort.dir);
-      }
-      const r = await fetch(`/api/rows?${params.toString()}`, { cache: "no-store" });
-      const body = (await r.json()) as RowsResponse;
-      setRows(body);
-    } finally {
-      setLoading(false);
-    }
-  }, [tableName, page, q, sort]);
+  const handleTotalRowsChange = useCallback((count: number) => {
+    setLiveRowCount(count);
+  }, []);
+
+  const handleTableStatsChange = useCallback((stats: TableStats) => {
+    setTableStats(stats);
+  }, []);
 
   useEffect(() => {
-    fetch("/api/introspect", { cache: "no-store" })
+    setLoading(true);
+    setError("");
+    fetch(`/api/introspect?table=${encodeURIComponent(tableName)}`, { cache: "no-store" })
       .then((r) => r.json())
-      .then((d: { tables?: IntrospectTable[] } | IntrospectTable[]) => {
-        const list = Array.isArray(d) ? d : (d.tables ?? []);
-        const t = list.find((x) => x.name === tableName);
-        setMeta(t ?? null);
+      .then((payload) => {
+        const tables = Array.isArray(payload) ? payload : (payload.tables ?? []);
+        if (!Array.isArray(tables)) throw new Error("Invalid response");
+        const found = tables.find((t: { name: string }) => t.name === tableName) as
+          | (Omit<TableMeta, "foreignKeys" | "columns"> & {
+              columns: Array<Partial<Column> & { name: string; type: string; nullable: boolean; default: string | null }>;
+              foreignKeys: Array<{
+                column: string;
+                foreignTable?: string;
+                foreignColumn?: string;
+                targetTable?: string;
+                targetColumn?: string;
+              }>;
+            })
+          | undefined;
+        if (!found) throw new Error(`Table "${tableName}" not found`);
+        setTableMeta({
+          name: found.name,
+          primaryKey: found.primaryKey,
+          rowCount: found.rowCount,
+          columns: (found.columns ?? []).map((c) => ({
+            name: c.name,
+            type: c.type,
+            udtName: c.udtName ?? c.type,
+            nullable: c.nullable,
+            default: c.default,
+            maxLength: c.maxLength ?? null,
+          })),
+          foreignKeys: (found.foreignKeys ?? []).map((fk) => ({
+            column: fk.column,
+            foreignTable: fk.foreignTable ?? fk.targetTable ?? "",
+            foreignColumn: fk.foreignColumn ?? fk.targetColumn ?? "",
+          })),
+        });
       })
-      .catch(() => setMeta(null));
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)))
+      .finally(() => setLoading(false));
   }, [tableName]);
 
+  // Probe encryption status from a lightweight rows fetch
   useEffect(() => {
-    if (debounceRef.current) window.clearTimeout(debounceRef.current);
-    debounceRef.current = window.setTimeout(() => {
-      load();
-    }, 200);
-  }, [load]);
-
-  const total = rows?.pagination?.totalRows ?? 0;
-  const totalPages = rows?.pagination?.totalPages ?? Math.max(1, Math.ceil(total / PAGE_SIZE));
-
-  const columns: ColumnDef[] = useMemo(
-    () => meta?.columns.map((c) => ({ name: c.name, type: c.type, default: c.default })) ?? [],
-    [meta?.columns]
-  );
-
-  function toggleSort(col: string) {
-    setSort((cur) => {
-      if (!cur || cur.col !== col) return { col, dir: "desc" };
-      if (cur.dir === "desc") return { col, dir: "asc" };
-      return null;
-    });
-    setPage(0);
-  }
+    if (!tableMeta) return;
+    fetch(`/api/rows?table=${encodeURIComponent(tableName)}&limit=1&page=1`, {
+      cache: "no-store",
+    })
+      .then((r) => r.json())
+      .then((body) => {
+        setEncrypted(Boolean(body.encrypted));
+        setDecrypted(Boolean(body.decrypted));
+      })
+      .catch(() => {});
+  }, [tableMeta, tableName]);
 
   return (
-    <div className="mx-auto max-w-[100rem] px-4 py-6 sm:px-6 lg:px-8">
-      <Link href="/tables" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary">
-        <ArrowLeft className="h-3.5 w-3.5" /> All tables
-      </Link>
-
-      {/* Header */}
-      <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="font-mono text-2xl font-bold tracking-tight">{tableName}</h1>
-          <p className="text-sm text-muted-foreground">
-            {meta ? (
-              <>
-                {meta.columns.length} columns · PK:{" "}
-                <span className="font-mono">{meta.primaryKey ?? "—"}</span> ·{" "}
-                {formatNumber(meta.rowCount ?? 0)} rows
-              </>
-            ) : (
-              "Loading schema…"
+    <>
+      {loading ? (
+        <div className="space-y-4">
+          <Skeleton className="h-10 w-64" />
+          <Skeleton className="h-6 w-96" />
+          <Skeleton className="h-[400px] w-full rounded-xl" />
+        </div>
+      ) : error ? (
+        <div className="flex h-[50vh] items-center justify-center">
+          <div className="text-center">
+            <Database className="mx-auto h-12 w-12 text-muted-foreground/40" />
+            <p className="mt-4 text-lg font-medium text-muted-foreground">{error}</p>
+            <Link href="/data" className="mt-3 inline-flex items-center gap-1 text-sm text-emerald-600 hover:underline">
+              <ArrowLeft className="h-3.5 w-3.5" /> Back to Data
+            </Link>
+          </div>
+        </div>
+      ) : tableMeta ? (
+        <>
+          <div className="mb-6">
+            <Link
+              href="/data"
+              className="mb-2 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <ArrowLeft className="h-3 w-3" /> Data catalog
+            </Link>
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-100">
+                <Database className="h-5 w-5 text-emerald-700" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-slate-900 font-mono">
+                  {tableMeta.name}
+                </h1>
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1">
+                    <Columns3 className="h-3 w-3" />
+                    {tableMeta.columns.length} columns
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Rows3 className="h-3 w-3" />
+                    {(liveRowCount ?? tableMeta.rowCount).toLocaleString()} rows
+                  </span>
+                  {tableMeta.primaryKey && (
+                    <span className="flex items-center gap-1">
+                      <KeyRound className="h-3 w-3" />
+                      PK: {tableMeta.primaryKey}
+                    </span>
+                  )}
+                  {tableMeta.foreignKeys.length > 0 && (
+                    <span className="flex items-center gap-1">
+                      <Link2 className="h-3 w-3" />
+                      {tableMeta.foreignKeys.length} FK
+                      {tableMeta.foreignKeys.length > 1 ? "s" : ""}
+                    </span>
+                  )}
+                  {encrypted ? (
+                    decrypted ? (
+                      <Badge className="gap-1 bg-emerald-600 text-white hover:bg-emerald-600">
+                        <Unlock className="h-3 w-3" /> Decrypted session
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary" className="gap-1">
+                        <Lock className="h-3 w-3" /> Encrypted fields
+                      </Badge>
+                    )
+                  ) : null}
+                  {tableStats?.distinct_users != null && (
+                    <>
+                      <span className="mx-2 text-slate-300">|</span>
+                      <span>Users: {tableStats.distinct_users}</span>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+            {tableMeta.foreignKeys.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {tableMeta.foreignKeys.map((fk) => (
+                  <Badge key={`${fk.column}-${fk.foreignTable}`} variant="outline" className="font-mono text-[10px]">
+                    {fk.column} → {fk.foreignTable}.{fk.foreignColumn}
+                  </Badge>
+                ))}
+              </div>
             )}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="relative w-72">
-            <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              value={q}
-              onChange={(e) => { setQ(e.target.value); setPage(0); }}
-              placeholder="Search visible columns…"
-              className="pl-8"
-            />
           </div>
-          <Button variant="ghost" onClick={load} className="gap-2" disabled={loading}>
-            <RefreshCcw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-          </Button>
-          <Button onClick={() => setEditing({ row: null })} className="gap-2">
-            <Plus className="h-4 w-4" /> Insert
-          </Button>
-        </div>
-      </div>
-
-      {/* Foreign keys hint */}
-      {meta?.foreignKeys?.length ? (
-        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <span className="font-medium uppercase tracking-wider">Foreign keys:</span>
-          {meta.foreignKeys.map((fk) => (
-            <Badge key={`${fk.column}-${fk.targetTable}`} variant="info" className="font-mono text-[10px]">
-              {fk.column} → {fk.targetTable}.{fk.targetColumn}
-            </Badge>
-          ))}
-        </div>
+          <DataTable
+            tableMeta={tableMeta}
+            onTotalRowsChange={handleTotalRowsChange}
+            onTableStatsChange={handleTableStatsChange}
+          />
+        </>
       ) : null}
-
-      {/* Data table */}
-      <Card className="mt-4 overflow-hidden p-0">
-        <div className="max-h-[70vh] overflow-auto">
-          <table className="w-full text-xs">
-            <thead className="sticky top-0 z-10 bg-secondary/95 backdrop-blur">
-              <tr>
-                {meta?.columns.map((c) => {
-                  const active = sort?.col === c.name;
-                  return (
-                    <th
-                      key={c.name}
-                      onClick={() => toggleSort(c.name)}
-                      className="cursor-pointer select-none px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:text-primary"
-                    >
-                      <span className="inline-flex items-center gap-1">
-                        {c.name}
-                        {active ? (
-                          sort.dir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
-                        ) : null}
-                      </span>
-                      <div className="text-[9px] font-normal text-muted-foreground/70">{c.type}</div>
-                    </th>
-                  );
-                })}
-                <th className="sticky right-0 bg-secondary/95 px-3 py-2 text-right text-[10px] uppercase tracking-wider text-muted-foreground">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {loading && (rows?.rows?.length ?? 0) === 0 ? (
-                Array.from({ length: 8 }).map((_, i) => (
-                  <tr key={i}>
-                    {meta?.columns.map((c) => (
-                      <td key={c.name} className="px-3 py-2">
-                        <div className="h-3 w-24 animate-pulse rounded bg-secondary" />
-                      </td>
-                    ))}
-                    <td />
-                  </tr>
-                ))
-              ) : (rows?.rows?.length ?? 0) === 0 ? (
-                <tr>
-                  <td colSpan={(meta?.columns.length ?? 0) + 1} className="px-3 py-12 text-center text-sm text-muted-foreground">
-                    No rows match this query.
-                  </td>
-                </tr>
-              ) : (
-                rows!.rows.map((r, i) => (
-                  <tr key={i} className="hover:bg-accent/30">
-                    {meta?.columns.map((c) => (
-                      <td key={c.name} className="whitespace-nowrap px-3 py-2 align-top tabular-nums" title={r[c.name] == null ? "" : String(r[c.name])}>
-                        {fmtCell(r[c.name])}
-                      </td>
-                    ))}
-                    <td className="sticky right-0 bg-card/95 px-2 py-1 text-right backdrop-blur">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-7 w-7"
-                        onClick={() => setEditing({ row: r })}
-                        title="Edit row"
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Pagination */}
-        <div className="flex items-center justify-between gap-2 border-t border-border bg-secondary/40 px-3 py-2 text-xs">
-          <span className="text-muted-foreground">
-            Showing{" "}
-            <span className="font-semibold text-foreground">
-              {total === 0 ? 0 : page * PAGE_SIZE + 1}
-              {" – "}
-              {Math.min(total, (page + 1) * PAGE_SIZE)}
-            </span>{" "}
-            of <span className="font-semibold text-foreground">{formatNumber(total)}</span>
-          </span>
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setPage((p) => Math.max(0, p - 1))}
-              disabled={page === 0 || loading}
-              className="gap-1"
-            >
-              <ChevronLeft className="h-4 w-4" /> Prev
-            </Button>
-            <span className="text-muted-foreground">
-              {page + 1} / {totalPages}
-            </span>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-              disabled={page + 1 >= totalPages || loading}
-              className="gap-1"
-            >
-              Next <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      </Card>
-
-      <RowEditorDialog
-        open={!!editing}
-        onOpenChange={(v) => !v && setEditing(null)}
-        table={tableName}
-        columns={columns}
-        primaryKey={meta?.primaryKey ?? null}
-        row={editing?.row ?? null}
-        onSaved={() => load()}
-      />
-    </div>
+    </>
   );
 }

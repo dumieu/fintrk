@@ -10,17 +10,19 @@ import {
 import {
   excludeCardPaymentsSql,
   excludeIgnoredSql,
+  primaryCurrencyOnlySql,
   spendingIntelligenceOutflowSql,
 } from "@/lib/db/excluded-transactions";
 import { eq, and, sql } from "drizzle-orm";
 import { logServerError } from "@/lib/safe-error";
+import { parseDiscretionaryType, DISCRETIONARY_TYPE_LABEL } from "@/lib/discretionary-type";
 
 export const dynamic = "force-dynamic";
 
 const NO_STORE = { "Cache-Control": "no-store" } as const;
 const MAX_NAME = 200;
 
-type Entity = "category" | "merchant" | "country" | "dow" | "currency";
+type Entity = "category" | "merchant" | "country" | "dow" | "currency" | "discretionary";
 
 export interface AnalyticsDetailMonth {
   month: string;
@@ -54,6 +56,8 @@ export interface AnalyticsDetailResponse {
   busiestMonth: { month: string; total: number } | null;
   /** Echo of the `month=YYYY-MM` filter when set — lets the client highlight that bar in the 12-mo trend. */
   selectedMonth: string | null;
+  /** Echo of the `year=YYYY` filter when set (yearly chart segment click). */
+  selectedYear: string | null;
 }
 
 function emptyResp(
@@ -62,6 +66,7 @@ function emptyResp(
   label: string,
   primaryCurrency: string,
   selectedMonth: string | null = null,
+  selectedYear: string | null = null,
 ): AnalyticsDetailResponse {
   return {
     entity,
@@ -82,6 +87,7 @@ function emptyResp(
     monthlyMedian: 0,
     busiestMonth: null,
     selectedMonth,
+    selectedYear,
   };
 }
 
@@ -132,6 +138,36 @@ function uiDowToPgDow(i: number): number {
   return (i + 1) % 7;
 }
 
+/** Same calendar-year window as the yearly chart bars (current year = YTD). */
+function yearDateFilterSql(yearKey: string) {
+  const y = parseInt(yearKey, 10);
+  const now = new Date();
+  const isCurrent = y === now.getUTCFullYear();
+  const yearStart = `${y}-01-01`;
+  const yearEnd = isCurrent
+    ? `${y}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-${String(now.getUTCDate()).padStart(2, "0")}`
+    : `${y}-12-31`;
+  return sql`${transactions.postedDate}::date >= ${yearStart}::date AND ${transactions.postedDate}::date <= ${yearEnd}::date`;
+}
+
+/** Merchant label for grouping — matches what users see in transaction rows. */
+function merchantDisplayNameSql() {
+  return sql<string>`coalesce(nullif(btrim(${transactions.merchantName}), ''), ${transactions.rawDescription})`;
+}
+
+function reconcileTopMerchants(
+  rows: AnalyticsDetailRow[],
+  sliceTotal: number,
+): AnalyticsDetailRow[] {
+  const listed = rows.filter((r) => r.name.trim().length > 0 && r.total > 0);
+  const listedSum = listed.reduce((s, r) => s + r.total, 0);
+  const remainder = Math.round((sliceTotal - listedSum) * 100) / 100;
+  if (remainder > 0.01) {
+    listed.push({ name: "Other", total: remainder, count: 0 });
+  }
+  return listed;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { userId } = await resilientAuth();
@@ -144,13 +180,23 @@ export async function GET(request: NextRequest) {
      *  are scoped to that calendar month. The 12-month trend chart is intentionally NOT month-filtered
      *  so it always shows context (the selected month is highlighted client-side). */
     const monthParam = (request.nextUrl.searchParams.get("month") ?? "").trim();
+    /** Optional `YYYY` filter — yearly chart segment clicks scope aggregates to that calendar year (YTD for current year). */
+    const yearParam = (request.nextUrl.searchParams.get("year") ?? "").trim();
+
+    if (monthParam && yearParam) {
+      return NextResponse.json(
+        { error: "Provide month or year, not both" },
+        { status: 400, headers: NO_STORE },
+      );
+    }
 
     if (
       entityRaw !== "category" &&
       entityRaw !== "merchant" &&
       entityRaw !== "country" &&
       entityRaw !== "dow" &&
-      entityRaw !== "currency"
+      entityRaw !== "currency" &&
+      entityRaw !== "discretionary"
     ) {
       return NextResponse.json({ error: "Invalid entity" }, { status: 400, headers: NO_STORE });
     }
@@ -175,10 +221,29 @@ export async function GET(request: NextRequest) {
     let label = value;
 
     if (entity === "category") {
-      // Use the rollup label expression — same logic the chart uses. Scope to
-      // the primary currency so the tooltip total matches the chart segment and
-      // the drill-down list (base_amount is per-currency and must not be mixed).
-      entityFilter = sql`${categoryRollupLabelSql} = ${value} AND ${transactions.baseCurrency} = ${primaryCurrency}`;
+      const levelParam = (request.nextUrl.searchParams.get("level") ?? "category").trim();
+      const parentParam = (request.nextUrl.searchParams.get("parent") ?? "").trim();
+      if (levelParam === "subcategory") {
+        if (!parentParam) {
+          return NextResponse.json(
+            { error: "parent required for subcategory level" },
+            { status: 400, headers: NO_STORE },
+          );
+        }
+        entityFilter = sql`${leafCategory.name} = ${value} AND ${categoryRollupLabelSql} = ${parentParam} AND ${transactions.baseCurrency} = ${primaryCurrency}`;
+      } else {
+        entityFilter = sql`${categoryRollupLabelSql} = ${value} AND ${transactions.baseCurrency} = ${primaryCurrency}`;
+      }
+    } else if (entity === "discretionary") {
+      const discType = parseDiscretionaryType(value);
+      if (!discType) {
+        return NextResponse.json(
+          { error: "Invalid discretionary type" },
+          { status: 400, headers: NO_STORE },
+        );
+      }
+      label = DISCRETIONARY_TYPE_LABEL[discType];
+      entityFilter = sql`${leafCategory.subcategoryType} = ${discType} AND ${transactions.baseCurrency} = ${primaryCurrency}`;
     } else if (entity === "merchant") {
       const cur = currencyParam && currencyParam.length === 3 ? currencyParam : null;
       entityFilter = cur
@@ -211,20 +276,40 @@ export async function GET(request: NextRequest) {
       entityFilter = sql`EXTRACT(DOW FROM ${transactions.postedDate}::date) = ${pg}`;
     }
 
-    /** Optional month-of-year filter (`YYYY-MM` → first-day-of-that-month UTC). */
+    /** Optional period filter: `YYYY-MM` (month) or `YYYY-MM-DD` (single day). */
     let monthFilter = sql``;
     let monthFilterActive = false;
     if (monthParam) {
-      if (!/^\d{4}-\d{2}$/.test(monthParam)) {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(monthParam)) {
+        monthFilter = sql`${transactions.postedDate}::date = ${monthParam}::date`;
+        monthFilterActive = true;
+      } else if (/^\d{4}-\d{2}$/.test(monthParam)) {
+        const monthStart = `${monthParam}-01`;
+        monthFilter = sql`${transactions.postedDate}::date >= ${monthStart}::date AND ${transactions.postedDate}::date < (${monthStart}::date + interval '1 month')`;
+        monthFilterActive = true;
+      } else {
         return NextResponse.json(
-          { error: "Invalid month format (expected YYYY-MM)" },
+          { error: "Invalid month format (expected YYYY-MM or YYYY-MM-DD)" },
           { status: 400, headers: NO_STORE },
         );
       }
-      const monthStart = `${monthParam}-01`;
-      monthFilter = sql`${transactions.postedDate}::date >= ${monthStart}::date AND ${transactions.postedDate}::date < (${monthStart}::date + interval '1 month')`;
-      monthFilterActive = true;
     }
+
+    let yearFilter = sql``;
+    let yearFilterActive = false;
+    if (yearParam) {
+      if (!/^\d{4}$/.test(yearParam)) {
+        return NextResponse.json(
+          { error: "Invalid year format (expected YYYY)" },
+          { status: 400, headers: NO_STORE },
+        );
+      }
+      yearFilter = yearDateFilterSql(yearParam);
+      yearFilterActive = true;
+    }
+
+    const periodFilterActive = monthFilterActive || yearFilterActive;
+    const periodFilter = monthFilterActive ? monthFilter : yearFilterActive ? yearFilter : sql``;
 
     /** Common base WHERE without the month filter — used for the 12-mo trend so it shows context. */
     const baseWhere = and(
@@ -234,9 +319,9 @@ export async function GET(request: NextRequest) {
       entityFilter,
     );
 
-    /** Aggregate-scoped WHERE — same as baseWhere plus the optional month filter. */
-    const aggWhere = monthFilterActive
-      ? and(baseWhere, monthFilter)
+    /** Aggregate-scoped WHERE — same as baseWhere plus the optional month/year filter. */
+    const aggWhere = periodFilterActive
+      ? and(baseWhere, periodFilter)
       : baseWhere;
 
     /** Anchor the 12-month trend at the user's latest outflow month so old datasets
@@ -309,7 +394,7 @@ export async function GET(request: NextRequest) {
         .groupBy(sql`date_trunc('month', ${transactions.postedDate}::date)`),
     );
 
-    /** Grand total of outflows (for share %). */
+    /** Denominator for share % — same currency and period as the chart slice when filtered. */
     const grandP = resilientQuery(() =>
       db
         .select({
@@ -319,20 +404,23 @@ export async function GET(request: NextRequest) {
         .where(
           and(
             eq(transactions.userId, userId),
-            excludeCardPaymentsSql(), excludeIgnoredSql(),
+            excludeCardPaymentsSql(),
+            excludeIgnoredSql(),
             spendingIntelligenceOutflowSql(),
+            primaryCurrencyOnlySql(primaryCurrency),
+            ...(periodFilterActive ? [periodFilter] : []),
           ),
         ),
     );
 
-    /** Top merchants within this slice (skip when entity is merchant itself). */
+    const merchantNameExpr = merchantDisplayNameSql();
     const topMerchantsP =
       entity === "merchant"
         ? Promise.resolve([] as { name: string | null; total: string; count: number }[])
         : resilientQuery(() =>
             db
               .select({
-                name: transactions.merchantName,
+                name: merchantNameExpr,
                 total: sql<string>`SUM(ABS(CAST(${transactions.baseAmount} AS numeric)))`,
                 count: sql<number>`COUNT(*)::int`,
               })
@@ -348,10 +436,15 @@ export async function GET(request: NextRequest) {
                   eq(parentCategory.userId, userId),
                 ),
               )
-              .where(and(aggWhere, sql`${transactions.merchantName} IS NOT NULL`))
-              .groupBy(transactions.merchantName)
+              .where(
+                and(
+                  aggWhere,
+                  sql`btrim(${merchantNameExpr}) <> ''`,
+                ),
+              )
+              .groupBy(merchantNameExpr)
               .orderBy(sql`SUM(ABS(CAST(${transactions.baseAmount} AS numeric))) DESC`)
-              .limit(6),
+              .limit(100),
           );
 
     /** Top rollup categories within this slice (skip for category entity itself). */
@@ -402,10 +495,11 @@ export async function GET(request: NextRequest) {
     const count = headline?.count ?? 0;
 
     const selectedMonth = monthFilterActive ? monthParam : null;
+    const selectedYear = yearFilterActive ? yearParam : null;
 
     if (total <= 0 && count === 0) {
       return NextResponse.json(
-        emptyResp(entity, value, label, primaryCurrency, selectedMonth),
+        emptyResp(entity, value, label, primaryCurrency, selectedMonth, selectedYear),
         { headers: NO_STORE },
       );
     }
@@ -422,13 +516,16 @@ export async function GET(request: NextRequest) {
       trendAnchorDate,
     );
 
-    const topMerchants: AnalyticsDetailRow[] = topMerchantsRows
-      .filter((r) => r.name && String(r.name).length > 0)
-      .map((r) => ({
-        name: String(r.name),
-        total: parseFloat(r.total ?? "0"),
-        count: r.count,
-      }));
+    const topMerchants: AnalyticsDetailRow[] = reconcileTopMerchants(
+      topMerchantsRows
+        .filter((r) => r.name && String(r.name).trim().length > 0)
+        .map((r) => ({
+          name: String(r.name).trim(),
+          total: Math.round(parseFloat(r.total ?? "0") * 100) / 100,
+          count: r.count,
+        })),
+      Math.round(total * 100) / 100,
+    );
 
     const topCategories: AnalyticsDetailRow[] = topCategoriesRows
       .filter((r) => r.name && String(r.name).length > 0)
@@ -470,6 +567,7 @@ export async function GET(request: NextRequest) {
         ? { month: busiestMonth.month, total: Math.round(busiestMonth.total * 100) / 100 }
         : null,
       selectedMonth,
+      selectedYear,
     };
 
     return NextResponse.json(payload, { headers: NO_STORE });

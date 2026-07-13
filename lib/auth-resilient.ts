@@ -12,10 +12,12 @@ const RETRY_DELAYS_MS = [100, 250, 500];
  * userId here is hard-pinned to the literal string "demo", this branch can
  * NEVER return another user's identity, and middleware swallows demo write
  * requests, so nothing the demo does is ever persisted.
+ *
+ * A signed-in Clerk session always wins over a forgeable demo header.
  */
 export const DEMO_USER_ID = "demo";
 
-async function isDemoRequest(): Promise<boolean> {
+async function hasDemoHeader(): Promise<boolean> {
   try {
     const h = await headers();
     return h.get("x-fintrk-demo") === "1";
@@ -31,10 +33,6 @@ async function isDemoRequest(): Promise<boolean> {
  * (~850ms total) before giving up.
  */
 export async function resilientAuth() {
-  if (await isDemoRequest()) {
-    return { userId: DEMO_USER_ID } as unknown as Awaited<ReturnType<typeof auth>>;
-  }
-
   const first = await auth();
   if (first.userId) return first;
 
@@ -42,6 +40,11 @@ export async function resilientAuth() {
     await new Promise((r) => setTimeout(r, delay));
     const retry = await auth();
     if (retry.userId) return retry;
+  }
+
+  // No Clerk session after retries: only then honor the public demo pin.
+  if (await hasDemoHeader()) {
+    return { userId: DEMO_USER_ID } as unknown as Awaited<ReturnType<typeof auth>>;
   }
 
   console.warn(

@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { db, resilientQuery } from "@/lib/db";
 import { fxRates } from "@/lib/db/schema";
 import { logServerError } from "@/lib/safe-error";
@@ -9,7 +9,17 @@ const FRANKFURTER_API = "https://api.frankfurter.dev";
 
 const MAJOR_CURRENCIES = ["USD", "EUR", "GBP", "CHF", "JPY", "CAD", "AUD", "NZD", "SEK", "NOK", "DKK", "PLN", "CZK", "HUF", "RON", "BGN", "HRK", "TRY", "ZAR", "BRL", "MXN", "INR", "CNY", "HKD", "SGD", "KRW", "THB", "MYR", "PHP", "IDR", "AED", "SAR", "ILS"];
 
-export async function GET() {
+function verifyCronSecret(request: NextRequest): boolean {
+  const secret = process.env.CRON_SECRET;
+  if (!secret) return process.env.NODE_ENV !== "production";
+  return request.headers.get("authorization") === `Bearer ${secret}`;
+}
+
+export async function GET(request: NextRequest) {
+  if (!verifyCronSecret(request)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const today = new Date().toISOString().split("T")[0];
     let inserted = 0;

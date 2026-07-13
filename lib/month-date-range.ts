@@ -8,6 +8,11 @@ export function monthKeyToDateRange(monthKey: string): { dateFrom: string; dateT
   };
 }
 
+/** Single calendar day `YYYY-MM-DD` → inclusive range (same day). */
+export function dayKeyToDateRange(dayKey: string): { dateFrom: string; dateTo: string } {
+  return { dateFrom: dayKey, dateTo: dayKey };
+}
+
 /** Calendar year key `YYYY` → inclusive UTC date range (current year ends today). */
 export function yearKeyToDateRange(yearKey: string): { dateFrom: string; dateTo: string } {
   const y = parseInt(yearKey, 10);
@@ -19,8 +24,9 @@ export function yearKeyToDateRange(yearKey: string): { dateFrom: string; dateTo:
   return { dateFrom: `${y}-01-01`, dateTo };
 }
 
-/** `YYYY-MM` month key or `YYYY` year key → drill-down date range. */
+/** `YYYY-MM-DD` day, `YYYY-MM` month, or `YYYY` year → drill-down date range. */
 export function periodKeyToDateRange(periodKey: string): { dateFrom: string; dateTo: string } {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(periodKey)) return dayKeyToDateRange(periodKey);
   if (/^\d{4}-\d{2}$/.test(periodKey)) return monthKeyToDateRange(periodKey);
   if (/^\d{4}$/.test(periodKey)) return yearKeyToDateRange(periodKey);
   return monthKeyToDateRange(periodKey);
@@ -33,6 +39,18 @@ export function formatMonthKeyLabel(monthKey: string): string {
   return `${month} ${y}`;
 }
 
+export function formatDayKeyLabel(dayKey: string): string {
+  const d = new Date(`${dayKey}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return dayKey;
+  return d.toLocaleString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
 export function isCurrentUtcYear(yearKey: string): boolean {
   return yearKey === String(new Date().getUTCFullYear());
 }
@@ -41,8 +59,9 @@ export function formatYearKeyLabel(yearKey: string): string {
   return isCurrentUtcYear(yearKey) ? `${yearKey} (YTD)` : yearKey;
 }
 
-/** Human label for a chart period key (`YYYY-MM` or `YYYY`). */
+/** Human label for a chart period key (`YYYY-MM-DD`, `YYYY-MM`, or `YYYY`). */
 export function formatPeriodKeyLabel(periodKey: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(periodKey)) return formatDayKeyLabel(periodKey);
   if (/^\d{4}$/.test(periodKey)) return formatYearKeyLabel(periodKey);
   if (/^\d{4}-\d{2}$/.test(periodKey)) return formatMonthKeyLabel(periodKey);
   return periodKey;
@@ -52,6 +71,9 @@ export function formatPeriodKeyLabel(periodKey: string): string {
 export function formatPeriodRangeLabel(dateFrom: string, dateTo: string): string {
   const yFrom = dateFrom.slice(0, 4);
   const yTo = dateTo.slice(0, 4);
+  if (dateFrom === dateTo && /^\d{4}-\d{2}-\d{2}$/.test(dateFrom)) {
+    return formatDayKeyLabel(dateFrom);
+  }
   if (yFrom === yTo && dateFrom.endsWith("-01-01") && (dateTo.endsWith("-12-31") || isCurrentUtcYear(yFrom))) {
     return formatYearKeyLabel(yFrom);
   }

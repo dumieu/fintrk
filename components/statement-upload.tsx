@@ -21,7 +21,7 @@ import * as XLSX from "xlsx";
 import { dispatchTransactionsChanged } from "@/lib/notify-transactions-changed";
 
 const ACCEPT = ".csv,.xls,.xlsx,.pdf";
-const MAX_SIZE = 1 * 1024 * 1024;
+const MAX_SIZE = 10 * 1024 * 1024;
 const SESSION_KEY = "fintrk:upload-queue";
 
 type LocalStatus = "queued" | "deferred" | "parsing" | "checking" | "submitting" | "submitted" | "completed" | "failed" | "duplicate" | "error";
@@ -45,9 +45,13 @@ interface SerializedQueue {
   ts: number;
 }
 
-function fileFingerprint(f: File): string {
-  const normalName = f.name.trim().toLowerCase();
-  return `${normalName}|${f.size}|${f.lastModified}`;
+/** True content hash (SHA-256). Name/size/mtime must never gate re-uploads. */
+async function fileContentHash(f: File): Promise<string> {
+  const buf = await f.arrayBuffer();
+  const digest = await crypto.subtle.digest("SHA-256", buf);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 function fileIcon(name: string) {
@@ -354,12 +358,27 @@ export function StatementUpload() {
     const rejected: QueuedFile[] = [];
 
     for (const f of Array.from(files)) {
-      if (f.size > MAX_SIZE) continue;
       const ext = f.name.split(".").pop()?.toLowerCase();
       if (!ext || !["csv", "xls", "xlsx", "pdf"].includes(ext)) continue;
-      candidates.push({ file: f, hash: fileFingerprint(f) });
+      if (f.size > MAX_SIZE) {
+        rejected.push({
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          fileName: f.name,
+          fileSize: f.size,
+          hash: `oversized:${f.name}:${f.size}`,
+          status: "error",
+          error: `File too large (max ${formatSize(MAX_SIZE)})`,
+        });
+        continue;
+      }
+      const hash = await fileContentHash(f);
+      candidates.push({ file: f, hash });
     }
-    if (candidates.length === 0) return;
+    if (candidates.length === 0 && rejected.length === 0) return;
+    if (candidates.length === 0) {
+      setQueue((prev) => [...prev, ...rejected]);
+      return;
+    }
 
     const incomingHashes = new Set(candidates.map((c) => c.hash));
     const reuploadableHashes = new Set(
@@ -371,7 +390,7 @@ export function StatementUpload() {
       if (!inQueue) return true;
       return reuploadableHashes.has(c.hash);
     });
-    if (fresh.length === 0) return;
+    if (fresh.length === 0 && rejected.length === 0) return;
 
     // Check for password-protected files
     const checked: { file: File; hash: string }[] = [];
@@ -410,7 +429,7 @@ export function StatementUpload() {
 
     if (checked.length === 0) return;
 
-    // Server-side duplicate check
+    // Server-side duplicate check (content hash only)
     const serverResults = await checkDuplicatesOnServer(
       fresh.map((c) => ({ hash: c.hash, size: c.file.size, name: c.file.name })),
     );
@@ -423,7 +442,7 @@ export function StatementUpload() {
         const check = serverResults.get(item.hash);
         if (item.status !== "checking") return item;
         if (check?.isDuplicate && !allowsReingestReason(check.reason)) {
-          return { ...item, status: "duplicate", error: "Already uploaded — skipped to save AI costs" };
+          return { ...item, status: "duplicate", error: "Identical file already processed — skipped (new transactions need a different export)" };
         }
         if (slotsLeft > 0) {
           slotsLeft--;
@@ -507,9 +526,12 @@ export function StatementUpload() {
           const stmtIds: number[] = json.statementIds ?? [];
           const fileNames: string[] = json.files ?? [];
           const dupSkipped: string[] = json.duplicatesSkipped ?? [];
+          const tooLarge: string[] = json.tooLargeSkipped ?? [];
           for (const item of structuredPayloads) {
             if (dupSkipped.includes(item.fileName)) {
-              updateFile(item.id, { status: "duplicate", error: "Server rejected — already processed" });
+              updateFile(item.id, { status: "duplicate", error: "Identical file already processed" });
+            } else if (tooLarge.includes(item.fileName)) {
+              updateFile(item.id, { status: "error", error: `File too large (max ${formatSize(MAX_SIZE)})` });
             } else {
               const idx = fileNames.indexOf(item.fileName);
               updateFile(item.id, { status: "submitted", statementId: idx >= 0 ? stmtIds[idx] : undefined });
@@ -525,12 +547,9 @@ export function StatementUpload() {
 
     if (binaryFiles.length > 0) {
       const formData = new FormData();
-      const hashMap: Record<string, string> = {};
-      for (const { file, hash } of binaryFiles) {
+      for (const { file } of binaryFiles) {
         formData.append("file", file);
-        hashMap[file.name] = hash;
       }
-      formData.append("fileHashes", JSON.stringify(hashMap));
       try {
         const res = await fetch("/api/ingest", { method: "POST", body: formData });
         if (!res.ok) {
@@ -541,11 +560,14 @@ export function StatementUpload() {
           const stmtIds: number[] = json.statementIds ?? [];
           const fileNames: string[] = json.files ?? [];
           const dupSkipped: string[] = json.duplicatesSkipped ?? [];
+          const tooLarge: string[] = json.tooLargeSkipped ?? [];
           for (const bf of binaryFiles) {
             const file = fileStash.current.get(bf.hash);
             const name = file?.name ?? "";
             if (dupSkipped.includes(name)) {
-              updateFile(bf.id, { status: "duplicate", error: "Server rejected — already processed" });
+              updateFile(bf.id, { status: "duplicate", error: "Identical file already processed" });
+            } else if (tooLarge.includes(name)) {
+              updateFile(bf.id, { status: "error", error: `File too large (max ${formatSize(MAX_SIZE)})` });
             } else {
               const idx = fileNames.indexOf(name);
               updateFile(bf.id, { status: "submitted", statementId: idx >= 0 ? stmtIds[idx] : undefined });
@@ -720,7 +742,7 @@ export function StatementUpload() {
             </span>
           ))}
         </div>
-        <p className="mt-3 text-[11px] text-muted-foreground">Max 1MB per file</p>
+        <p className="mt-3 text-[11px] text-muted-foreground">Max 10MB per file · Re-uploads of the same month merge new transactions</p>
       </motion.div>
 
       <AnimatePresence>

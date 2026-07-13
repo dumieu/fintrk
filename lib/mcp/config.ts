@@ -104,6 +104,39 @@ export function isCimdClientId(clientId: string): boolean {
   return /^https:\/\//i.test(clientId);
 }
 
+/** Schemes that must never be OAuth redirect targets (XSS / local file theft). */
+const DANGEROUS_OAUTH_REDIRECT_SCHEMES = new Set([
+  "javascript:",
+  "data:",
+  "vbscript:",
+  "file:",
+  "blob:",
+]);
+
+/**
+ * OAuth redirect_uri allowlist: https everywhere, http only on loopback /
+ * *.local, plus native custom schemes (e.g. cursor://). Rejects plain
+ * http:// on public hosts and dangerous non-http schemes (open-redirect /
+ * auth-code interception / XSS via DCR).
+ */
+export function isAllowedOAuthRedirect(uri: string): boolean {
+  try {
+    const u = new URL(uri);
+    if (DANGEROUS_OAUTH_REDIRECT_SCHEMES.has(u.protocol)) return false;
+    const isLocal =
+      u.hostname === "localhost" ||
+      u.hostname === "127.0.0.1" ||
+      u.hostname.endsWith(".local");
+    return (
+      u.protocol === "https:" ||
+      (isLocal && u.protocol === "http:") ||
+      !["http:", "https:"].includes(u.protocol)
+    );
+  } catch {
+    return false;
+  }
+}
+
 /** CORS headers for cross-origin MCP/OAuth clients (Bearer-auth, not cookies). */
 export function corsHeaders(extra?: Record<string, string>): Record<string, string> {
   return {

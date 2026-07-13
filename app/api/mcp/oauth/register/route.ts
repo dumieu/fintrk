@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { corsHeaders } from "@/lib/mcp/config";
+import { corsHeaders, isAllowedOAuthRedirect } from "@/lib/mcp/config";
 import { registerClient } from "@/lib/mcp/tokens";
 import { logServerError } from "@/lib/safe-error";
 
@@ -40,19 +40,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Enforce https (or localhost for dev tooling) redirect URIs.
+  // Same allowlist as authorize: https, loopback http, or native custom schemes.
+  // Reject http:// on public hosts (open redirect / auth-code interception).
   for (const uri of redirectUris) {
-    try {
-      const u = new URL(uri);
-      const isLocal =
-        u.hostname === "localhost" ||
-        u.hostname === "127.0.0.1" ||
-        u.hostname.endsWith(".local");
-      if (u.protocol !== "https:" && !isLocal && u.protocol !== "http:") {
-        // allow custom scheme callbacks used by native apps (e.g. cursor://)
-        if (!u.protocol.endsWith(":")) throw new Error("bad");
-      }
-    } catch {
+    if (!isAllowedOAuthRedirect(uri)) {
       return NextResponse.json(
         { error: "invalid_redirect_uri", error_description: `Invalid redirect_uri: ${uri}` },
         { status: 400, headers: corsHeaders() },

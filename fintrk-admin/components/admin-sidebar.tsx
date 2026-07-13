@@ -10,7 +10,6 @@ import {
   ArrowLeftRight,
   BadgeDollarSign,
   Banknote,
-  BookOpen,
   Brain,
   ChevronDown,
   ChevronRight,
@@ -19,19 +18,21 @@ import {
   Database,
   FileSpreadsheet,
   FileText,
-  Flag,
   Gauge,
   Goal,
   Landmark,
   LogOut,
+  MessageSquare,
   Network,
   PiggyBank,
   Receipt,
   RefreshCcw,
   Search,
+  Shield,
   Sparkles,
   Table2,
   Tag,
+  Timer,
   TrendingUp,
   Users,
 } from "lucide-react";
@@ -54,11 +55,12 @@ const TABLES_BOLD = new Set([
   "transactions",
   "accounts",
   "statements",
+  "ai_costs",
+  "ai_insights",
   "user_categories",
   "system_categories",
   "merchants",
   "recurring_patterns",
-  "ai_insights",
 ]);
 
 const TABLE_ICONS: Record<string, React.ElementType> = {
@@ -80,6 +82,51 @@ const TABLE_ICONS: Record<string, React.ElementType> = {
   file_upload_log: FileText,
   error_logs: AlertTriangle,
 };
+
+const PRIMARY_NAV = [
+  {
+    href: "/overview",
+    label: "Overview",
+    icon: Gauge,
+    match: (p: string) => p === "/overview",
+  },
+  {
+    href: "/users",
+    label: "Users",
+    icon: Users,
+    match: (p: string) => p === "/users" || (p.startsWith("/users/") && !p.startsWith("/users/messages")),
+  },
+  {
+    href: "/users/messages",
+    label: "Messages",
+    icon: MessageSquare,
+    match: (p: string) => p === "/users/messages",
+  },
+  {
+    href: "/data",
+    label: "Data",
+    icon: Table2,
+    match: (p: string) => p === "/data",
+  },
+  {
+    href: "/crons",
+    label: "Crons",
+    icon: Timer,
+    match: (p: string) => p === "/crons",
+  },
+  {
+    href: "/errors",
+    label: "Errors",
+    icon: AlertTriangle,
+    match: (p: string) => p === "/errors",
+  },
+  {
+    href: "/security",
+    label: "Security",
+    icon: Shield,
+    match: (p: string) => p === "/security" || p.startsWith("/security/"),
+  },
+] as const;
 
 export function AdminSidebar({ collapsed = false, onCollapsedChange }: Props) {
   const pathname = usePathname();
@@ -150,7 +197,6 @@ export function AdminSidebar({ collapsed = false, onCollapsedChange }: Props) {
 
   return (
     <aside className="fixed left-0 top-0 z-40 flex h-screen w-[270px] flex-col bg-sidebar text-sidebar-foreground">
-      {/* Brand */}
       <div className="flex items-center gap-3 px-5 py-5">
         <div className="relative flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg bg-gradient-to-br from-emerald-400 via-teal-500 to-sky-500">
           <span className="absolute inset-0 brand-glow" aria-hidden="true" />
@@ -172,18 +218,16 @@ export function AdminSidebar({ collapsed = false, onCollapsedChange }: Props) {
       <Separator className="bg-slate-700/50" />
 
       <nav className="flex-1 overflow-y-auto px-3 py-3">
-        <SideLink href="/overview" icon={Gauge} active={pathname === "/overview"}>
-          Overview
-        </SideLink>
-        <SideLink href="/users" icon={Users} active={pathname === "/users" || pathname.startsWith("/users/")}>
-          Users
-        </SideLink>
-        <SideLink href="/errors" icon={AlertTriangle} active={pathname === "/errors"}>
-          Error Monitor
-        </SideLink>
-        <SideLink href="/data" icon={BookOpen} active={pathname === "/data"} disabled>
-          Knowledge (soon)
-        </SideLink>
+        {PRIMARY_NAV.map((item) => (
+          <SideLink
+            key={item.href}
+            href={item.href}
+            icon={item.icon}
+            active={item.match(pathname)}
+          >
+            {item.label}
+          </SideLink>
+        ))}
 
         <div className="mt-4">
           <button
@@ -283,19 +327,9 @@ interface SideLinkProps {
   icon: React.ElementType;
   active: boolean;
   children: React.ReactNode;
-  disabled?: boolean;
 }
 
-function SideLink({ href, icon: Icon, active, children, disabled }: SideLinkProps) {
-  if (disabled) {
-    return (
-      <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-[13px] text-slate-600 cursor-not-allowed select-none">
-        <Icon className="h-4 w-4" />
-        {children}
-        <Flag className="ml-auto h-3 w-3 text-slate-700" />
-      </div>
-    );
-  }
+function SideLink({ href, icon: Icon, active, children }: SideLinkProps) {
   return (
     <Link
       href={href}

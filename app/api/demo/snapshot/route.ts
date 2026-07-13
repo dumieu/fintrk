@@ -10,6 +10,7 @@
 import { NextResponse } from "next/server";
 import { neon } from "@neondatabase/serverless";
 import { df, dfJson } from "@/lib/crypto/encryption";
+import { logServerError } from "@/lib/safe-error";
 
 const sql = neon(process.env.DATABASE_URL!);
 const DEMO = "demo";
@@ -138,8 +139,9 @@ export async function GET() {
       },
     );
   } catch (e) {
+    logServerError("api/demo/snapshot", e);
     return NextResponse.json(
-      { error: "demo_snapshot_failed", message: e instanceof Error ? e.message : String(e) },
+      { error: "demo_snapshot_failed" },
       { status: 500 },
     );
   }

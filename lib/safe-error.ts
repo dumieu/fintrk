@@ -7,7 +7,8 @@ const SENSITIVE_PATTERNS = [
   /\b\d{9,}\b/g,
 ];
 
-function sanitize(message: string): string {
+/** Strip card numbers, emails, SSN-like and long digit runs before logging. */
+export function sanitizeErrorMessage(message: string): string {
   let clean = message;
   for (const pattern of SENSITIVE_PATTERNS) {
     clean = clean.replace(pattern, "[REDACTED]");
@@ -21,7 +22,7 @@ export function logServerError(context: string, err: unknown): void {
     JSON.stringify({
       _type: "server_error",
       context,
-      message: sanitize(message),
+      message: sanitizeErrorMessage(message),
       ts: new Date().toISOString(),
     }),
   );

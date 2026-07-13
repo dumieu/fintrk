@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { transactionDisplayName, transactionMerchantKey } from "@/lib/transaction-merchant-key";
 import { cn } from "@/lib/utils";
 
 const ACCENT = "#2CA2FF";
@@ -53,8 +54,8 @@ export function IgnoreTransactionButton({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const displayName = merchantName?.trim() || rawDescription?.trim() || "this transaction";
-  const nameKey = (merchantName ?? rawDescription ?? "").trim().toLowerCase();
+  const displayName = transactionDisplayName(merchantName, rawDescription) || "this transaction";
+  const nameKey = transactionMerchantKey(merchantName, rawDescription);
 
   async function confirm() {
     setSubmitting(true);

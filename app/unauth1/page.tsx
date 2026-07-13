@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 
 import { AiConnectBand } from "@/components/ai-connect-band";
+import { AdvantageValueLine } from "@/components/advantage-value-line";
 
 const CapitalFlowBackground = dynamic(
   () => import("@/components/capital-flow-background").then((m) => ({ default: m.CapitalFlowBackground })),
@@ -92,22 +93,25 @@ export default async function Unauth1() {
             </span>
             <span className="hidden text-xs uppercase tracking-widest text-emerald-200/50 sm:inline">.io</span>
           </Link>
-          <nav className="flex items-center gap-3 sm:gap-5" aria-label="Main navigation">
+          <nav className="flex items-start gap-3 sm:gap-5" aria-label="Main navigation">
             <Link
               href={SIGN_IN_URL}
-              className="hidden text-sm text-white/65 transition-colors hover:text-white sm:inline"
+              className="hidden text-sm text-white/65 transition-colors hover:text-white sm:inline pt-2"
             >
               Sign In
             </Link>
-            <Link href={SIGN_UP_URL}>
-              <Button
-                size="sm"
-                className="border-0 text-emerald-950 shadow-[0_0_24px_rgba(11,193,141,0.35)] hover:opacity-95"
-                style={{ background: `linear-gradient(90deg, ${GREEN}, ${BLUE})` }}
-              >
-                Get Started
-              </Button>
-            </Link>
+            <div className="flex flex-col items-center gap-1">
+              <Link href={SIGN_UP_URL}>
+                <Button
+                  size="sm"
+                  className="border-0 text-emerald-950 shadow-[0_0_24px_rgba(11,193,141,0.35)] hover:opacity-95"
+                  style={{ background: `linear-gradient(90deg, ${GREEN}, ${BLUE})` }}
+                >
+                  Get Started
+                </Button>
+              </Link>
+              <AdvantageValueLine tone="dark" align="center" compact />
+            </div>
           </nav>
         </div>
       </header>
@@ -172,7 +176,7 @@ export default async function Unauth1() {
                 the outcome. No bank logins. No spreadsheets.
               </p>
 
-              <div className="mt-9 flex justify-center">
+              <div className="mt-9 flex flex-col items-center gap-2">
                 <Link href={SIGN_UP_URL} className="block">
                   <Button
                     size="lg"
@@ -184,6 +188,7 @@ export default async function Unauth1() {
                     <ArrowRight className="ml-2 h-4 w-4 shrink-0 transition-transform group-hover:translate-x-0.5" aria-hidden />
                   </Button>
                 </Link>
+                <AdvantageValueLine tone="dark" align="center" />
               </div>
               <p className="mt-3 text-[11px] uppercase tracking-widest text-white/40">
                 Private by design · Encrypted at rest · Your data stays yours
@@ -387,7 +392,7 @@ export default async function Unauth1() {
                 ))}
               </div>
 
-              <div className="mt-8">
+              <div className="mt-8 flex flex-col items-start gap-2">
                 <Link href={SIGN_UP_URL}>
                   <Button
                     size="lg"
@@ -398,6 +403,7 @@ export default async function Unauth1() {
                     <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" aria-hidden />
                   </Button>
                 </Link>
+                <AdvantageValueLine tone="dark" align="center" />
               </div>
             </div>
 
@@ -800,17 +806,20 @@ export default async function Unauth1() {
               then open the Net Worth Atlas and see exactly where today&rsquo;s habits
               take you in 10, 20, and 40 years. Your data stays yours, private by design.
             </p>
-            <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
-              <Link href={SIGN_UP_URL}>
-                <Button
-                  size="lg"
-                  className="group h-12 w-full border-0 px-8 text-base font-semibold text-emerald-950 shadow-[0_0_44px_rgba(11,193,141,0.5)] transition-all hover:scale-[1.02] hover:shadow-[0_0_64px_rgba(11,193,141,0.75)] sm:w-auto"
-                  style={{ background: `linear-gradient(90deg, ${GREEN}, ${BLUE})` }}
-                >
-                  Create Your Account
-                  <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" aria-hidden />
-                </Button>
-              </Link>
+            <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:items-start sm:justify-center">
+              <div className="flex w-full flex-col items-center gap-2 sm:w-auto">
+                <Link href={SIGN_UP_URL}>
+                  <Button
+                    size="lg"
+                    className="group h-12 w-full border-0 px-8 text-base font-semibold text-emerald-950 shadow-[0_0_44px_rgba(11,193,141,0.5)] transition-all hover:scale-[1.02] hover:shadow-[0_0_64px_rgba(11,193,141,0.75)] sm:w-auto"
+                    style={{ background: `linear-gradient(90deg, ${GREEN}, ${BLUE})` }}
+                  >
+                    Create Your Account
+                    <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" aria-hidden />
+                  </Button>
+                </Link>
+                <AdvantageValueLine tone="dark" align="center" />
+              </div>
               <Link href={SIGN_IN_URL}>
                 <Button
                   size="lg"

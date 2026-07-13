@@ -7,6 +7,7 @@ import {
   rotateRefreshToken,
   verifyPkce,
 } from "@/lib/mcp/tokens";
+import { hasProAccessForClerkUserId } from "@/lib/plan";
 import { logServerError } from "@/lib/safe-error";
 
 export const runtime = "nodejs";
@@ -56,19 +57,24 @@ export async function POST(req: NextRequest) {
       const clientId = params.get("client_id");
       const redirectUri = params.get("redirect_uri");
       const codeVerifier = params.get("code_verifier") ?? "";
-      if (!code || !clientId) {
-        return tokenError("invalid_request", "Missing code or client_id");
+      if (!code || !clientId || !redirectUri) {
+        return tokenError("invalid_request", "Missing code, client_id, or redirect_uri");
       }
       const consumed = await consumeAuthCode(code);
       if (!consumed) return tokenError("invalid_grant", "Authorization code is invalid or expired");
       if (consumed.clientId !== clientId) {
         return tokenError("invalid_grant", "client_id mismatch");
       }
-      if (redirectUri && consumed.redirectUri !== redirectUri) {
+      // RFC 6749 §4.1.3: redirect_uri is required when it was used at authorize.
+      if (consumed.redirectUri !== redirectUri) {
         return tokenError("invalid_grant", "redirect_uri mismatch");
       }
       if (!verifyPkce(codeVerifier, consumed.codeChallenge, consumed.codeChallengeMethod)) {
         return tokenError("invalid_grant", "PKCE verification failed");
+      }
+      // Re-check Pro at issuance (authorize already gated; covers lapse mid-flow).
+      if (!(await hasProAccessForClerkUserId(consumed.clerkUserId))) {
+        return tokenError("access_denied", "FinTRK Pro required", 403);
       }
       const tokens = await issueTokenPair({
         clientId,
@@ -93,7 +99,12 @@ export async function POST(req: NextRequest) {
       if (!refreshToken || !clientId) {
         return tokenError("invalid_request", "Missing refresh_token or client_id");
       }
-      const tokens = await rotateRefreshToken({ refreshToken, clientId });
+      const tokens = await rotateRefreshToken({
+        refreshToken,
+        clientId,
+        // Lapsed users must not mint new access tokens; revoke the refresh row.
+        isAllowed: hasProAccessForClerkUserId,
+      });
       if (!tokens) return tokenError("invalid_grant", "Refresh token is invalid or expired");
       return NextResponse.json(
         {

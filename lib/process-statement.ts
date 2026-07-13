@@ -9,7 +9,8 @@ import { logAiCost } from "@/lib/ai-cost";
 import { logServerError } from "@/lib/safe-error";
 import { aiResponseSchema } from "@/lib/validations/ingest";
 import { ef, df } from "@/lib/crypto/encryption";
-import { eq, and, asc, desc, sql } from "drizzle-orm";
+import { eq, and, asc, desc, sql, inArray } from "drizzle-orm";
+import { assignOccurrenceIndices, buildDedupeSignature, isStrongReferenceId } from "@/lib/txn-dedupe";
 
 /**
  * Queries the categories table and the user's transactions to build:
@@ -271,6 +272,22 @@ function sanitizeAiReferenceId(
 
   // Must contain at least one digit — real bank references always do.
   if (!/\d/.test(collapsed)) return undefined;
+
+  // Reject PAN / account-number shaped values (15–19 all-digit) — reused across lines.
+  const compact = collapsed.replace(/[\s-]/g, "");
+  const digitsOnly = compact.replace(/\D/g, "");
+  if (
+    digitsOnly.length >= 15 &&
+    digitsOnly.length <= 19 &&
+    digitsOnly.length === compact.length
+  ) {
+    return undefined;
+  }
+  // Reject masked account tails like xxxxxx3050
+  if (/x{2,}/i.test(collapsed)) return undefined;
+  // Short codes (< 12) are usually auth codes / shared bank codes, not unique txn ids.
+  // Keep them out of reference_id storage; line signature + occurrence handles dedupe.
+  if (collapsed.length < 12) return undefined;
 
   const strip = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "");
   const refStripped = strip(collapsed);
@@ -962,16 +979,27 @@ export async function processStatement(statementId: number) {
       .filter(([merchantName, label]) => merchantName && label),
   );
 
-  const txnRows = aiResult.transactions.map((txn) => {
+  const signatures = aiResult.transactions.map((txn) =>
+    buildDedupeSignature(txn.posted_date, txn.base_amount, txn.raw_description),
+  );
+  const occurrenceIndices = assignOccurrenceIndices(signatures);
+
+  const txnRows = aiResult.transactions.map((txn, idx) => {
     const catId = resolveExistingCategoryId(txn.category_suggestion);
     const merchantName = txn.merchant_name?.toLowerCase();
     const normalizedMerchantName = merchantName?.trim().toLowerCase() ?? "";
     const merchantId = txn.merchant_name ? merchantIdCache.get(canonicalizeMerchant(txn.merchant_name).toLowerCase()) : undefined;
+    const rawDescription = txn.raw_description.trim();
+    const referenceId = sanitizeAiReferenceId(txn.reference_id, txn.merchant_name ?? null, txn.raw_description);
+    // Persist only strong refs; weak reused codes stay null so they cannot mislead future logic.
+    const storedRef = referenceId && isStrongReferenceId(referenceId) ? referenceId : undefined;
     return {
       userId, accountId, statementId,
       postedDate: txn.posted_date,
-      rawDescription: txn.raw_description,
-      referenceId: sanitizeAiReferenceId(txn.reference_id, txn.merchant_name ?? null, txn.raw_description),
+      rawDescription,
+      dedupeSignature: signatures[idx],
+      occurrenceIndex: occurrenceIndices[idx],
+      referenceId: storedRef,
       merchantName: merchantName ?? undefined, merchantId: merchantId ?? undefined,
       categoryId: catId,
       categoryConfidence: txn.confidence?.toString(),
@@ -987,29 +1015,53 @@ export async function processStatement(statementId: number) {
     };
   });
 
-  const batches: typeof txnRows[] = [];
-  for (let i = 0; i < txnRows.length; i += BATCH_SIZE) {
-    batches.push(txnRows.slice(i, i + BATCH_SIZE));
+  // Soft skip: strong bank refs that already exist on this account are known duplicates
+  // even if AI rewrote the raw description (signature would otherwise miss them).
+  const strongRefs = [...new Set(txnRows.map((r) => r.referenceId).filter(Boolean))] as string[];
+  const existingRefSet = new Set<string>();
+  if (strongRefs.length > 0) {
+    const existingRefs = await resilientQuery(() =>
+      db
+        .select({ referenceId: transactions.referenceId })
+        .from(transactions)
+        .where(
+          and(
+            eq(transactions.accountId, accountId),
+            inArray(transactions.referenceId, strongRefs),
+          ),
+        ),
+    );
+    for (const row of existingRefs) {
+      if (row.referenceId) existingRefSet.add(row.referenceId);
+    }
+  }
+
+  const rowsToInsert = txnRows.filter((r) => !(r.referenceId && existingRefSet.has(r.referenceId)));
+  const softRefDupes = txnRows.length - rowsToInsert.length;
+
+  const batches: typeof rowsToInsert[] = [];
+  for (let i = 0; i < rowsToInsert.length; i += BATCH_SIZE) {
+    batches.push(rowsToInsert.slice(i, i + BATCH_SIZE));
   }
 
   const results = await Promise.all(
     batches.map(async (batch) => {
-      try {
-        const result = await resilientQuery(() =>
-          db.insert(transactions).values(batch)
-            .onConflictDoNothing({ target: [transactions.accountId, transactions.postedDate, transactions.baseAmount, transactions.rawDescription] })
-            .returning({ id: transactions.id }),
-        );
-        return { imported: result.length, duplicates: batch.length - result.length };
-      } catch {
-        return { imported: 0, duplicates: batch.length };
-      }
+      if (batch.length === 0) return { imported: 0, duplicates: 0 };
+      const result = await resilientQuery(() =>
+        db.insert(transactions).values(batch)
+          .onConflictDoNothing({
+            target: [transactions.accountId, transactions.dedupeSignature, transactions.occurrenceIndex],
+          })
+          .returning({ id: transactions.id }),
+      );
+      return { imported: result.length, duplicates: batch.length - result.length };
     }),
   );
   for (const r of results) {
     imported += r.imported;
     duplicates += r.duplicates;
   }
+  duplicates += softRefDupes;
 
   await updateUserMainCurrency(userId);
 

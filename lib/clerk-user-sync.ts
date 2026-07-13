@@ -7,6 +7,7 @@ import { eq } from "drizzle-orm";
 import { db, resilientQuery } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { ef, efJson } from "@/lib/crypto/encryption";
+import { wipeUserData } from "@/lib/wipe-user-data";
 
 function primaryEmailFromUserJson(data: UserJSON): string | null {
   const pid = data.primary_email_address_id;
@@ -51,7 +52,7 @@ export async function upsertUserFromUserJson(data: UserJSON): Promise<void> {
 }
 
 export async function deleteUserByClerkId(clerkUserId: string): Promise<void> {
-  await resilientQuery(() => db.delete(users).where(eq(users.clerkUserId, clerkUserId)));
+  await wipeUserData(clerkUserId, { deleteUserRow: true, deleteSubmissions: true });
 }
 
 /**

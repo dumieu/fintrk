@@ -52,6 +52,8 @@ interface UserDetail {
     created_at: string;
     updated_at: string;
   };
+  plan?: string;
+  planStatus?: string | null;
   counts: Record<string, number | string>;
   lifetime: {
     first_txn_date: string | null;
@@ -179,10 +181,17 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
           </span>
         )}
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <h1 className="truncate text-2xl font-bold tracking-tight">{fullName}</h1>
+            {data.plan === "pro" ? (
+              <Badge className="gap-1 bg-emerald-600 hover:bg-emerald-600">
+                Pro{data.planStatus ? ` · ${data.planStatus}` : ""}
+              </Badge>
+            ) : data.plan === "free" ? (
+              <Badge variant="secondary">Free</Badge>
+            ) : null}
             {p.detect_travel === "Yes" ? (
-              <Badge variant="info" className="gap-1">
+              <Badge variant="secondary" className="gap-1">
                 <Globe2 className="h-3 w-3" /> Travel ON
               </Badge>
             ) : null}

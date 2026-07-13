@@ -36,6 +36,7 @@ import {
   dispatchTransactionsChanged,
   FINTRK_TRANSACTIONS_CHANGED,
 } from "@/lib/notify-transactions-changed";
+import { transactionMatchesMerchantKey } from "@/lib/transaction-merchant-key";
 
 interface Transaction extends TransactionRowData {}
 
@@ -462,9 +463,8 @@ export default function TransactionsPage() {
 
   const saveTransactionNote = useCallback((id: string, note: string | null, scope: "this" | "merchant", mName: string | null) => {
     if (scope === "merchant" && mName) {
-      const mLower = mName.trim().toLowerCase();
       setTxns((prev) => prev.map((t) =>
-        t.merchantName?.trim().toLowerCase() === mLower ? { ...t, note } : t,
+        transactionMatchesMerchantKey(t.merchantName, t.rawDescription, mName) ? { ...t, note } : t,
       ));
     } else {
       setTxns((prev) => prev.map((t) => (t.id === id ? { ...t, note } : t)));
@@ -473,9 +473,8 @@ export default function TransactionsPage() {
 
   const saveTransactionLabel = useCallback((id: string, label: string | null, scope: "this" | "merchant", mName: string | null) => {
     if (scope === "merchant" && mName) {
-      const mLower = mName.trim().toLowerCase();
       setTxns((prev) => prev.map((t) =>
-        t.merchantName?.trim().toLowerCase() === mLower ? { ...t, label } : t,
+        transactionMatchesMerchantKey(t.merchantName, t.rawDescription, mName) ? { ...t, label } : t,
       ));
     } else {
       setTxns((prev) => prev.map((t) => (t.id === id ? { ...t, label } : t)));
@@ -544,9 +543,8 @@ export default function TransactionsPage() {
           subcategoryName: resolvedSubcategoryName,
         };
         if (scope === "merchant" && merchantName) {
-          const mLower = merchantName.trim().toLowerCase();
           setTxns((prev) => prev.map((t) =>
-            t.merchantName?.trim().toLowerCase() === mLower ? { ...t, ...patch } : t,
+            transactionMatchesMerchantKey(t.merchantName, t.rawDescription, merchantName) ? { ...t, ...patch } : t,
           ));
         } else if (scope === "label" && label) {
           setTxns((prev) => prev.map((t) =>
@@ -1275,9 +1273,7 @@ export default function TransactionsPage() {
                           prev.filter((t) =>
                             info.scope === "item"
                               ? t.id !== info.transactionId
-                              : (t.merchantName ?? t.rawDescription ?? "")
-                                  .trim()
-                                  .toLowerCase() !== info.nameKey,
+                              : !transactionMatchesMerchantKey(t.merchantName, t.rawDescription, info.nameKey),
                           ),
                         );
                         setListRefreshKey((k) => k + 1);

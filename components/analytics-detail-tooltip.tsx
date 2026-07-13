@@ -20,7 +20,13 @@ import { currencyMeta } from "@/components/currency-meta";
 import { computeSmartTooltipPlacement } from "@/lib/smart-tooltip-position";
 import { loadAnalyticsDetail } from "@/components/use-analytics-detail";
 
-export type DetailEntity = "category" | "merchant" | "country" | "dow" | "currency";
+export type DetailEntity =
+  | "category"
+  | "merchant"
+  | "country"
+  | "dow"
+  | "currency"
+  | "discretionary";
 
 /** Build tooltip anchor from a hover target — cursor position + card rect to avoid. */
 export function detailTipAnchorFromEvent(
@@ -41,6 +47,7 @@ const ENTITY_TYPE_LABEL: Record<DetailEntity, string> = {
   country: "Country",
   dow: "Day of Week",
   currency: "Currency",
+  discretionary: "Type",
 };
 
 function countryFlag(iso: string): string {
@@ -150,25 +157,25 @@ function MonthlyTrendChart({
   const avgY = padTop + ((max - avg) / max) * innerH;
 
   return (
-    <div className="min-w-0 max-w-full overflow-hidden rounded-xl border border-chart-border bg-chart-muted/40 p-2.5">
+    <div className="min-w-0 max-w-full overflow-hidden rounded-xl border border-[color:var(--chart-tooltip-border)] bg-chart-tooltip-panel p-2.5">
       <div className="mb-1.5 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
-        <p className="shrink-0 text-[9px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+        <p className="shrink-0 text-[9px] font-semibold uppercase tracking-[0.18em] text-chart-tooltip-label">
           Monthly trend · 12 mo
         </p>
-        <div className="flex min-w-0 flex-wrap items-center justify-end gap-x-2 gap-y-0.5 text-[9px] tabular-nums text-muted-foreground">
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-x-2 gap-y-0.5 text-[9px] tabular-nums text-chart-tooltip-hint">
           <span className="flex items-center gap-1">
             <span className="inline-block h-1.5 w-2.5 rounded-full" style={{ background: accent }} />
             month
           </span>
           {avg > 0 && (
             <span className="flex items-center gap-1">
-              <span className="inline-block h-px w-3 bg-white/45" />
+              <span className="inline-block h-px w-3 bg-foreground/50" />
               avg
             </span>
           )}
           {median > 0 && median !== avg && (
             <span className="flex items-center gap-1">
-              <span className="inline-block h-px w-3 bg-emerald-300/55" />
+              <span className="inline-block h-px w-3 bg-emerald-300/70" />
               median
             </span>
           )}
@@ -184,7 +191,7 @@ function MonthlyTrendChart({
         {ticks.map((t, i) => (
           <g key={i}>
             <line x1={padX} x2={W - padX} y1={t.y} y2={t.y} stroke="var(--chart-grid)" strokeDasharray="2 4" />
-            <text x={W - padX} y={t.y - 2} textAnchor="end" className="fill-chart-axis" style={{ fontSize: 7.5 }}>
+            <text x={W - padX} y={t.y - 2} textAnchor="end" className="fill-chart-label-muted" style={{ fontSize: 7.5 }}>
               {t.label}
             </text>
           </g>
@@ -231,7 +238,7 @@ function MonthlyTrendChart({
                   x={cx}
                   y={H - 6}
                   textAnchor="middle"
-                  className={isHighlighted ? "fill-chart-label" : "fill-chart-axis"}
+                  className={isHighlighted ? "fill-chart-label" : "fill-chart-label-muted"}
                   style={{ fontSize: 7.5, letterSpacing: "0.04em" }}
                 >
                   {tick}
@@ -266,13 +273,13 @@ function HorizontalBars({
 }) {
   if (!rows || rows.length === 0) {
     return (
-      <p className="px-2 py-3 text-center text-[10.5px] text-muted-foreground">{emptyMsg}</p>
+      <p className="px-2 py-3 text-center text-[10.5px] text-chart-tooltip-hint">{emptyMsg}</p>
     );
   }
   const slice = rows.slice(0, max);
   const m = Math.max(...slice.map((r) => r.total), 1);
   return (
-    <ul className="space-y-1.5">
+    <ul className="max-h-[min(220px,40vh)] space-y-1.5 overflow-y-auto overscroll-contain pr-0.5 scrollbar-slim">
       {slice.map((r, i) => {
         const widthPct = (r.total / m) * 100;
         const share = totalForShare > 0 ? (r.total / totalForShare) * 100 : 0;
@@ -281,7 +288,7 @@ function HorizontalBars({
         return (
           <li
             key={`${r.name}-${i}`}
-            className="relative overflow-hidden rounded-lg border border-chart-border bg-chart-muted/40 px-2 py-1.5"
+            className="relative overflow-hidden rounded-lg border border-[color:var(--chart-tooltip-border)] bg-chart-tooltip-panel px-2 py-1.5"
           >
             <div
               className="pointer-events-none absolute inset-y-0 left-0 opacity-25"
@@ -291,7 +298,7 @@ function HorizontalBars({
               }}
             />
             <div className="relative flex items-center gap-2">
-              <span className="w-3 shrink-0 text-right text-[9px] font-semibold tabular-nums text-muted-foreground/80">
+              <span className="w-3 shrink-0 text-right text-[9px] font-semibold tabular-nums text-chart-tooltip-hint">
                 {lead}
               </span>
               {ico && <span className="shrink-0 text-[12px] leading-none">{ico}</span>}
@@ -299,7 +306,7 @@ function HorizontalBars({
                 <p className="truncate text-[11px] font-medium leading-snug text-foreground" title={r.name}>
                   {r.name}
                 </p>
-                <p className="text-[9px] leading-none text-muted-foreground tabular-nums">
+                <p className="text-[9px] leading-none text-chart-tooltip-secondary tabular-nums">
                   {r.count} {r.count === 1 ? "txn" : "txns"} · {share.toFixed(1)}%
                 </p>
               </div>
@@ -324,15 +331,15 @@ function KpiTile({
   hint?: string;
 }) {
   return (
-    <div className="min-w-0 rounded-lg border border-chart-border bg-chart-muted/40 px-2 py-1.5">
-      <p className="truncate text-[9px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+    <div className="min-w-0 rounded-lg border border-[color:var(--chart-tooltip-border)] bg-chart-tooltip-panel px-2 py-1.5">
+      <p className="truncate text-[9px] font-semibold uppercase tracking-[0.16em] text-chart-tooltip-label">
         {label}
       </p>
       <p className="mt-0.5 truncate text-[12.5px] font-semibold tabular-nums tracking-tight text-foreground" title={value}>
         {value}
       </p>
       {hint && (
-        <p className="truncate text-[9px] leading-tight text-muted-foreground tabular-nums" title={hint}>
+        <p className="truncate text-[9px] leading-tight text-chart-tooltip-hint tabular-nums" title={hint}>
           {hint}
         </p>
       )}
@@ -345,7 +352,7 @@ function DeltaPill({ delta }: { delta: number | null }) {
   const up = delta > 0;
   const flat = Math.abs(delta) < 0.5;
   const color = flat
-    ? "bg-chart-muted text-muted-foreground ring-chart-border"
+    ? "bg-chart-tooltip-panel text-chart-tooltip-secondary ring-[color:var(--chart-tooltip-border)]"
     : up
       ? "bg-rose-500/15 text-rose-300 ring-rose-400/30"
       : "bg-emerald-500/15 text-emerald-300 ring-emerald-400/30";
@@ -439,7 +446,7 @@ export function AnalyticsDetailTooltip({
   return (
     <div
       ref={ref}
-        className="pointer-events-auto fixed z-[9999] box-border overflow-x-hidden overflow-y-visible rounded-2xl border border-chart-border bg-chart-surface text-card-foreground shadow-[var(--chart-tooltip-shadow)] backdrop-blur-xl"
+        className="pointer-events-auto fixed z-[9999] box-border overflow-x-hidden overflow-y-visible rounded-2xl border text-foreground bg-chart-tooltip"
       style={style}
       role="tooltip"
       onMouseEnter={onMouseEnter}
@@ -493,7 +500,7 @@ function DetailContent({
       />
       <div className="relative min-w-0 space-y-3 px-3 pb-3 pt-3">
         {/* Header */}
-        <header className="flex items-start gap-2.5 border-b border-chart-border pb-2.5">
+        <header className="flex items-start gap-2.5 border-b border-[color:var(--chart-tooltip-border)] pb-2.5">
           {ccyMeta ? (
             <div
               className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full ring-1 ring-chart-border"
@@ -523,7 +530,7 @@ function DetailContent({
             />
           )}
           <div className="min-w-0 flex-1">
-            <p className="text-[9px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+            <p className="text-[9px] font-semibold uppercase tracking-[0.22em] text-chart-tooltip-label">
               {ENTITY_TYPE_LABEL[entity]}
             </p>
             <div className="mt-0.5 flex items-center gap-1.5">
@@ -546,16 +553,22 @@ function DetailContent({
         {loading && !data ? (
           <div className="flex flex-col items-center justify-center gap-2 py-10">
             <div className="h-7 w-7 animate-spin rounded-full border-2 border-chart-border border-t-violet-400" />
-            <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/80">Crunching numbers</p>
+            <p className="text-[10px] uppercase tracking-[0.18em] text-chart-tooltip-hint">Crunching numbers</p>
           </div>
         ) : errorMessage ? (
           <p className="py-6 text-center text-[11px] text-rose-300/80">{errorMessage}</p>
         ) : data && data.count === 0 ? (
-          <p className="py-6 text-center text-[11px] text-muted-foreground">
+          <p className="py-6 text-center text-[11px] text-chart-tooltip-hint">
             No outflows recorded for this slice.
           </p>
         ) : data ? (
-          <Body data={data} currency={currency} accent={accentColor} entity={entity} metrics={metrics!} />
+          <Body
+            data={data}
+            currency={currency}
+            accent={accentColor}
+            entity={entity}
+            metrics={metrics!}
+          />
         ) : null}
       </div>
     </div>
@@ -579,6 +592,9 @@ function Body({
     data.firstSeen && data.lastSeen
       ? `${formatDateShort(data.firstSeen)} → ${formatDateShort(data.lastSeen)}`
       : null;
+
+  const topMerchants = data.topMerchants;
+  const merchantsSum = topMerchants.reduce((s, r) => s + r.total, 0);
 
   return (
     <div className="min-w-0 space-y-2.5">
@@ -628,14 +644,18 @@ function Body({
 
       {/* Breakdowns */}
       <div className="min-w-0 space-y-2">
-        {entity !== "merchant" && data.topMerchants.length > 0 && (
-          <Section title="Top merchants" badge={`${data.topMerchants.length}`}>
+        {entity !== "merchant" && topMerchants.length > 0 && (
+          <Section
+            title="Top merchants"
+            badge={formatCurrency(merchantsSum, currency)}
+          >
             <HorizontalBars
-              rows={data.topMerchants}
+              rows={topMerchants}
               totalForShare={data.total}
               currency={currency}
               accent={accent}
               emptyMsg="No merchant data"
+              max={topMerchants.length}
             />
           </Section>
         )}
@@ -653,7 +673,7 @@ function Body({
       </div>
 
       {dateRange && (
-        <p className="border-t border-chart-border pt-2 text-center text-[9px] uppercase tracking-[0.18em] text-muted-foreground/80 break-words">
+        <p className="border-t border-[color:var(--chart-tooltip-border)] pt-2 text-center text-[9px] uppercase tracking-[0.18em] text-chart-tooltip-hint break-words">
           {dateRange}
         </p>
       )}
@@ -673,10 +693,10 @@ function Section({
   return (
     <section>
       <div className="mb-1 flex items-baseline justify-between">
-        <h3 className="text-[9px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+        <h3 className="text-[9px] font-semibold uppercase tracking-[0.18em] text-chart-tooltip-label">
           {title}
         </h3>
-        {badge && <span className="text-[9px] tabular-nums text-muted-foreground/70">{badge}</span>}
+        {badge && <span className="text-[9px] tabular-nums text-chart-tooltip-hint">{badge}</span>}
       </div>
       {children}
     </section>
@@ -690,6 +710,11 @@ export function AnalyticsDetailDialog({
   value,
   accentColor,
   currency,
+  month,
+  year,
+  level = "category",
+  parentCategory,
+  onViewTransactions,
   onClose,
 }: {
   entity: DetailEntity;
@@ -697,6 +722,11 @@ export function AnalyticsDetailDialog({
   value: string;
   accentColor: string;
   currency?: string;
+  month?: string;
+  year?: string;
+  level?: "category" | "subcategory" | "discretionary";
+  parentCategory?: string;
+  onViewTransactions?: () => void;
   onClose: () => void;
 }) {
   const [data, setData] = useState<AnalyticsDetailResponse | null>(null);
@@ -720,7 +750,17 @@ export function AnalyticsDetailDialog({
     let cancelled = false;
     setLoading(true);
     setErrorMessage(null);
-    void loadAnalyticsDetail(entity, value, currency)
+    const detailLevel =
+      level === "subcategory" ? "subcategory" : ("category" as const);
+    void loadAnalyticsDetail(
+      entity,
+      value,
+      currency,
+      month,
+      year,
+      detailLevel,
+      parentCategory,
+    )
       .then(({ data: nextData, error }) => {
         if (cancelled) return;
         setData(nextData);
@@ -732,7 +772,7 @@ export function AnalyticsDetailDialog({
     return () => {
       cancelled = true;
     };
-  }, [entity, value, currency]);
+  }, [entity, value, currency, month, year, level, parentCategory]);
 
   if (typeof document === "undefined") return null;
 
@@ -758,7 +798,7 @@ export function AnalyticsDetailDialog({
         >
           <X className="h-4 w-4" />
         </button>
-        <div className="overflow-hidden rounded-2xl border border-chart-border bg-chart-surface shadow-[0_24px_64px_-12px_rgba(0,0,0,0.85),inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-xl">
+        <div className="overflow-hidden rounded-2xl border border-[color:var(--chart-tooltip-border)] bg-chart-tooltip">
           <DetailContent
             entity={entity}
             label={label}
@@ -767,6 +807,17 @@ export function AnalyticsDetailDialog({
             loading={loading}
             errorMessage={errorMessage}
           />
+          {onViewTransactions ? (
+            <div className="border-t border-[color:var(--chart-tooltip-border)] px-3 pb-3 pt-2">
+              <button
+                type="button"
+                onClick={onViewTransactions}
+                className="w-full rounded-lg border border-[#0BC18D]/35 bg-[#0BC18D]/10 px-3 py-2 text-[11px] font-semibold text-[#0BC18D] transition-colors hover:bg-[#0BC18D]/18"
+              >
+                View transactions in this period
+              </button>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>,

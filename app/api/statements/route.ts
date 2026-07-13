@@ -50,7 +50,11 @@ export async function GET() {
           accounts.institutionName,
           accounts.accountType,
         )
-        .orderBy(desc(statements.aiProcessedAt), desc(statements.createdAt))
+        .orderBy(
+          desc(sql`COALESCE(MAX(${transactions.postedDate}), ${statements.periodEnd})`),
+          desc(sql`COALESCE(MIN(${transactions.postedDate}), ${statements.periodStart})`),
+          desc(statements.id),
+        )
         .limit(100),
     );
 

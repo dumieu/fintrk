@@ -11,6 +11,7 @@ import {
 } from "@/components/transaction-table-cells";
 import { TransactionTableRow } from "@/components/transaction-table-row";
 import { dispatchTransactionsChanged } from "@/lib/notify-transactions-changed";
+import { transactionMatchesMerchantKey, transactionMerchantKey } from "@/lib/transaction-merchant-key";
 import { cn } from "@/lib/utils";
 
 export type CategoryTransaction = TransactionRowData;
@@ -139,17 +140,18 @@ export function CategoryTransactionsTable({
         const json = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(typeof json.error === "string" ? json.error : "Update failed");
 
-        const merchantName = txn.merchantName?.trim();
+        const merchantKey = transactionMerchantKey(txn.merchantName, txn.rawDescription);
         const updateMerchantRows =
-          merchantName &&
+          merchantKey &&
           ((body.warningFlag !== undefined && typeof json.bulkWarningCount === "number" && json.bulkWarningCount > 1) ||
             (body.applyToAllMerchants === true && typeof json.bulkMerchantCount === "number" && json.bulkMerchantCount > 1) ||
             (body.labelApplyScope === "merchant" && typeof json.bulkLabelCount === "number" && json.bulkLabelCount > 1) ||
             (body.categoryApplyScope === "merchant" && typeof json.bulkCategoryCount === "number" && json.bulkCategoryCount > 1));
         if (updateMerchantRows) {
-          const key = merchantName.toLowerCase();
           onRowsChange((current) =>
-            current.map((row) => (row.merchantName?.trim().toLowerCase() === key ? applyLocal(row) : row)),
+            current.map((row) =>
+              transactionMatchesMerchantKey(row.merchantName, row.rawDescription, merchantKey) ? applyLocal(row) : row,
+            ),
           );
         }
         if (
@@ -193,9 +195,10 @@ export function CategoryTransactionsTable({
   const saveTransactionLabel = useCallback(
     (id: string, label: string | null, scope: "this" | "merchant", mName: string | null) => {
       if (scope === "merchant" && mName) {
-        const mLower = mName.trim().toLowerCase();
         onRowsChange((prev) =>
-          prev.map((t) => (t.merchantName?.trim().toLowerCase() === mLower ? { ...t, label } : t)),
+          prev.map((t) =>
+            transactionMatchesMerchantKey(t.merchantName, t.rawDescription, mName) ? { ...t, label } : t,
+          ),
         );
       } else {
         onRowsChange((prev) => prev.map((t) => (t.id === id ? { ...t, label } : t)));
@@ -207,9 +210,10 @@ export function CategoryTransactionsTable({
   const saveTransactionNote = useCallback(
     (id: string, note: string | null, scope: "this" | "merchant", mName: string | null) => {
       if (scope === "merchant" && mName) {
-        const mLower = mName.trim().toLowerCase();
         onRowsChange((prev) =>
-          prev.map((t) => (t.merchantName?.trim().toLowerCase() === mLower ? { ...t, note } : t)),
+          prev.map((t) =>
+            transactionMatchesMerchantKey(t.merchantName, t.rawDescription, mName) ? { ...t, note } : t,
+          ),
         );
       } else {
         onRowsChange((prev) => prev.map((t) => (t.id === id ? { ...t, note } : t)));
@@ -246,7 +250,7 @@ export function CategoryTransactionsTable({
           categoryLabel: scope === "label" ? label : undefined,
         },
         (row) => {
-          if (scope === "merchant" && merchantName && row.merchantName?.trim().toLowerCase() === merchantName.trim().toLowerCase()) {
+          if (scope === "merchant" && merchantName && transactionMatchesMerchantKey(row.merchantName, row.rawDescription, merchantName)) {
             return { ...row, ...patch };
           }
           if (scope === "label" && label && row.label?.trim() === label.trim()) {

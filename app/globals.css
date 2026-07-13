@@ -117,6 +117,10 @@
   --chart-tooltip-bg: #FFFFFF;
   --chart-tooltip-border: oklch(0.84 0.012 85);
   --chart-tooltip-shadow: 0 8px 32px rgba(15, 23, 42, 0.12), 0 2px 8px rgba(15, 23, 42, 0.08);
+  --chart-tooltip-label: oklch(0.32 0.018 85);
+  --chart-tooltip-secondary: oklch(0.40 0.018 85);
+  --chart-tooltip-hint: oklch(0.48 0.016 85);
+  --chart-tooltip-panel: oklch(0.955 0.008 85);
   --chart-panel-shadow: 0 1px 2px rgba(15, 23, 42, 0.08), 0 4px 20px rgba(15, 23, 42, 0.06);
   --chart-sankey-bg: #F3F2EE;
   --chart-sankey-guide: oklch(0.82 0.012 85);
@@ -191,6 +195,10 @@
   --chart-tooltip-bg: #141414;
   --chart-tooltip-border: rgba(255, 255, 255, 0.12);
   --chart-tooltip-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+  --chart-tooltip-label: rgba(255, 255, 255, 0.78);
+  --chart-tooltip-secondary: rgba(255, 255, 255, 0.88);
+  --chart-tooltip-hint: rgba(255, 255, 255, 0.62);
+  --chart-tooltip-panel: rgba(255, 255, 255, 0.07);
   --chart-panel-shadow: none;
   --chart-sankey-bg: transparent;
   --chart-sankey-guide: rgba(255, 255, 255, 0.04);
@@ -282,6 +290,25 @@
   }
   .stroke-chart-grid {
     stroke: var(--chart-grid);
+  }
+
+  /** Analytics detail tooltip — solid surface + high-contrast typography */
+  .bg-chart-tooltip {
+    background-color: var(--chart-tooltip-bg);
+    border-color: var(--chart-tooltip-border);
+    box-shadow: var(--chart-tooltip-shadow);
+  }
+  .bg-chart-tooltip-panel {
+    background-color: var(--chart-tooltip-panel);
+  }
+  .text-chart-tooltip-label {
+    color: var(--chart-tooltip-label);
+  }
+  .text-chart-tooltip-secondary {
+    color: var(--chart-tooltip-secondary);
+  }
+  .text-chart-tooltip-hint {
+    color: var(--chart-tooltip-hint);
   }
 
   /** Standard page content column — scales with theme max-w-7xl (100rem / 1600px). */
@@ -463,4 +490,126 @@
 .mm-conn {
   stroke-dasharray: 4 14;
   animation: mm-dash 2.8s linear infinite;
+}
+
+/* ── Global quick note (Apple Notes-style corner) ─────────────────────── */
+.quick-note-corner {
+  background: linear-gradient(215deg, #fff7c2 0%, #ffe566 42%, #f5c518 100%);
+  will-change: width, height, transform;
+}
+
+.quick-note-corner--filled {
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+.quick-note-corner--peek {
+  box-shadow:
+    0 16px 40px rgba(0, 0, 0, 0.48),
+    0 0 0 1px rgba(230, 184, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+
+.quick-note-corner-paper {
+  opacity: 1;
+  transition: opacity 0.18s ease;
+}
+
+.quick-note-corner--peek .quick-note-corner-paper {
+  opacity: 0.15;
+}
+
+.quick-note-backdrop {
+  background:
+    radial-gradient(ellipse 80% 60% at 12% 8%, rgba(255, 229, 102, 0.14), transparent 55%),
+    rgba(4, 8, 14, 0.62);
+  backdrop-filter: blur(10px) saturate(1.15);
+}
+
+.quick-note-sheet {
+  background: linear-gradient(180deg, #fffbe8 0%, #fff6cc 38%, #fff3c4 100%);
+  color: #1a1408;
+  will-change: transform, width, height, border-radius;
+}
+
+.quick-note-ruled {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent,
+    transparent 27px,
+    rgba(154, 120, 36, 0.11) 27px,
+    rgba(154, 120, 36, 0.11) 28px
+  );
+  background-position: 0 3.25rem;
+  mask-image: linear-gradient(to bottom, transparent 0, black 3rem);
+}
+
+.quick-note-title,
+.quick-note-body {
+  font-family: var(--font-geist-sans), "SF Pro Text", system-ui, sans-serif;
+}
+
+.quick-note-editor:empty:before,
+.quick-note-editor[data-placeholder]:not(:focus):before {
+  content: attr(data-placeholder);
+  color: color-mix(in srgb, #9a7824 40%, transparent);
+  pointer-events: none;
+}
+
+.quick-note-editor:empty:focus:before {
+  content: attr(data-placeholder);
+  color: color-mix(in srgb, #9a7824 28%, transparent);
+}
+
+.quick-note-editor ul {
+  list-style: disc;
+  padding-left: 1.35rem;
+  margin: 0.35em 0;
+}
+
+.quick-note-editor ol {
+  list-style: decimal;
+  padding-left: 1.35rem;
+  margin: 0.35em 0;
+}
+
+.quick-note-editor li {
+  margin: 0.15em 0;
+}
+
+.quick-note-editor p {
+  margin: 0.15em 0;
+}
+
+.quick-note-editor blockquote {
+  margin: 0.4em 0;
+  padding-left: 0.75rem;
+  border-left: 3px solid color-mix(in srgb, #9a7824 45%, transparent);
+  color: #5c4a12;
+}
+
+.quick-note-editor h1,
+.quick-note-editor h2,
+.quick-note-editor h3 {
+  font-weight: 700;
+  margin: 0.45em 0 0.2em;
+  color: #1a1408;
+}
+
+.quick-note-editor h1 {
+  font-size: 1.45em;
+}
+.quick-note-editor h2 {
+  font-size: 1.25em;
+}
+.quick-note-editor h3 {
+  font-size: 1.1em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quick-note-corner,
+  .quick-note-sheet {
+    will-change: auto;
+  }
 }

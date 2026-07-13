@@ -3,6 +3,11 @@ import { sql } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth-admin";
 import { decryptRow } from "@/lib/crypto/encrypted-fields";
 import { getActiveDecryptionSession, trackSessionAccess } from "@/lib/decryption-session";
+import {
+  CLERK_API_BASE,
+  userAppClerkSecret,
+  type ClerkListUser,
+} from "@/lib/user-app-clerk";
 
 export const dynamic = "force-dynamic";
 
@@ -161,9 +166,36 @@ export async function GET(
       await trackSessionAccess(session.id, "users");
     }
 
+    let plan = "unknown";
+    let planStatus: string | null = null;
+    const clerkSecret = userAppClerkSecret();
+    if (clerkSecret) {
+      try {
+        const res = await fetch(
+          `${CLERK_API_BASE}/users/${encodeURIComponent(clerkUserId)}`,
+          { headers: { Authorization: `Bearer ${clerkSecret}` }, cache: "no-store" },
+        );
+        if (res.ok) {
+          const user = (await res.json()) as ClerkListUser;
+          plan =
+            typeof user.public_metadata?.plan === "string"
+              ? user.public_metadata.plan
+              : "free";
+          planStatus =
+            typeof user.public_metadata?.planStatus === "string"
+              ? user.public_metadata.planStatus
+              : null;
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+
     return NextResponse.json({
       profile: decryptedProfile,
       decrypted: Boolean(session),
+      plan,
+      planStatus,
       counts: (counts as Record<string, unknown>[])[0] || {},
       lifetime: (lifetime as Record<string, unknown>[])[0] || {},
       monthlyTimeline,
@@ -181,6 +213,6 @@ export async function GET(
     });
   } catch (e) {
     console.error("User detail error:", e);
-    return NextResponse.json({ error: e instanceof Error ? e.message : "user_detail_failed" }, { status: 500 });
+    return NextResponse.json({ error: "user_detail_failed" }, { status: 500 });
   }
 }

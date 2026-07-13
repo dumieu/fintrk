@@ -9,7 +9,7 @@ import {
   useCallback,
 } from "react";
 import { createPortal } from "react-dom";
-import { CalendarRange, CalendarDays, Maximize2, X } from "lucide-react";
+import { CalendarRange, CalendarDays, Footprints, Maximize2, X } from "lucide-react";
 import type {
   MonthlyStack,
   MonthlyStackSegment,
@@ -17,8 +17,7 @@ import type {
 } from "@/app/api/analytics/monthly-stacks/route";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/format";
-import { AnalyticsDetailTooltip, detailTipAnchorFromEvent } from "@/components/analytics-detail-tooltip";
-import { useAnalyticsDetail } from "@/components/use-analytics-detail";
+import { AnalyticsDetailDialog } from "@/components/analytics-detail-tooltip";
 import { CategoryTransactionsModal } from "@/components/category-transactions-modal";
 import { AnalyticsCategoryLegend } from "@/components/analytics-category-legend";
 import {
@@ -26,6 +25,10 @@ import {
   analyticsCategoryGradientTop,
 } from "@/lib/analytics-category-colors";
 import { periodKeyToDateRange, formatPeriodKeyLabel } from "@/lib/month-date-range";
+import {
+  TransactionSizeSlider,
+  TXN_SIZE_OPEN,
+} from "@/components/transaction-size-slider";
 import {
   chartChipClass,
   chartIconBadgeClass,
@@ -40,6 +43,7 @@ const REF_LINE_INCOME = "#39FF14";
 const REF_LINE_SPEND = "#FF4444";
 const REF_AVG_MONTHS = 12;
 const DEFAULT_MONTHS = 72;
+const DAILY_WALK_DAYS = 60;
 const CHART_HEIGHT = 660;
 const CHART_HEIGHT_FULL_INIT = 900;
 const CHART_HEIGHT_FULL_MIN = 540;
@@ -49,20 +53,16 @@ const DENSE_BAR_GAP_PX = 2;
 const GRANULARITY_STORAGE_KEY = "fintrk-monthly-stack-granularity";
 const STACK_BY_STORAGE_KEY = "fintrk-monthly-stack-by";
 
-export type ChartTimeGranularity = "month" | "year";
-export type ChartStackBy = "value" | "category";
+export type ChartTimeGranularity = "day" | "month" | "year";
+export type ChartStackBy = "category" | "discretionary";
 
-function readStoredGranularity(): ChartTimeGranularity {
-  if (typeof window === "undefined") return "month";
-  try {
-    const v = window.localStorage.getItem(GRANULARITY_STORAGE_KEY);
-    return v === "year" ? "year" : "month";
-  } catch {
-    return "month";
-  }
-}
+const DISCRETIONARY_STACK_ORDER = [
+  "Non-discretionary",
+  "Semi-discretionary",
+  "Discretionary",
+] as const;
 
-function writeStoredGranularity(value: ChartTimeGranularity) {
+function writeStoredGranularity(value: Exclude<ChartTimeGranularity, "day">) {
   try {
     window.localStorage.setItem(GRANULARITY_STORAGE_KEY, value);
   } catch {
@@ -71,12 +71,13 @@ function writeStoredGranularity(value: ChartTimeGranularity) {
 }
 
 function readStoredStackBy(): ChartStackBy {
-  if (typeof window === "undefined") return "value";
+  if (typeof window === "undefined") return "category";
   try {
     const v = window.localStorage.getItem(STACK_BY_STORAGE_KEY);
-    return v === "category" ? "category" : "value";
+    if (v === "category" || v === "discretionary") return v;
+    return "category";
   } catch {
-    return "value";
+    return "category";
   }
 }
 
@@ -106,8 +107,13 @@ function orderStackSegments(
   stackBy: ChartStackBy,
   categoryOrder: string[],
 ): MonthlyStackSegment[] {
-  if (stackBy === "value") {
-    return [...segments].sort((a, b) => b.amount - a.amount || a.name.localeCompare(b.name));
+  if (stackBy === "discretionary") {
+    const rank = new Map(DISCRETIONARY_STACK_ORDER.map((name, i) => [name, i]));
+    return [...segments].sort((a, b) => {
+      const ra = rank.get(a.name as (typeof DISCRETIONARY_STACK_ORDER)[number]) ?? Number.MAX_SAFE_INTEGER;
+      const rb = rank.get(b.name as (typeof DISCRETIONARY_STACK_ORDER)[number]) ?? Number.MAX_SAFE_INTEGER;
+      return ra - rb || a.name.localeCompare(b.name);
+    });
   }
   const rank = new Map(categoryOrder.map((name, i) => [name, i]));
   return [...segments].sort((a, b) => {
@@ -168,7 +174,25 @@ function aggregateMonthsToYears(months: MonthlyStack[]): MonthlyStack[] {
 }
 
 function applyTimeGranularity(months: MonthlyStack[], granularity: ChartTimeGranularity): MonthlyStack[] {
-  return granularity === "year" ? aggregateMonthsToYears(months) : months;
+  if (granularity === "year") return aggregateMonthsToYears(months);
+  return months;
+}
+
+function dayLabelShort(dayKey: string): string {
+  const day = parseInt(dayKey.slice(8, 10), 10);
+  return Number.isFinite(day) ? String(day) : dayKey.slice(8);
+}
+
+function denseDayShowsMonth(dayKey: string, index: number, days: MonthlyStack[]): boolean {
+  if (index === 0) return true;
+  const prev = days[index - 1]?.month;
+  return !prev || dayKey.slice(0, 7) !== prev.slice(0, 7);
+}
+
+function monthLabelFromDayKey(dayKey: string): string {
+  const [y, m] = dayKey.split("-").map((s) => parseInt(s, 10));
+  const d = new Date(Date.UTC(y, m - 1, 1));
+  return d.toLocaleString("en-US", { month: "short", timeZone: "UTC" });
 }
 
 function monthLabelShort(mk: string): string {
@@ -291,25 +315,58 @@ export function MonthlyStackedSpend({ months: monthsCount = DEFAULT_MONTHS }: { 
   const [drilldownLoading, setDrilldownLoading] = useState(false);
   const [segmentModal, setSegmentModal] = useState<{
     name: string;
-    level: "category" | "subcategory";
+    level: "category" | "subcategory" | "discretionary";
     monthKey: string;
   } | null>(null);
   const [timeGranularity, setTimeGranularity] = useState<ChartTimeGranularity>("month");
-  const [stackBy, setStackBy] = useState<ChartStackBy>("value");
+  const [stackBy, setStackBy] = useState<ChartStackBy>("category");
+  const stackByBeforeWalkRef = useRef<ChartStackBy>("category");
+  const [sizeDraft, setSizeDraft] = useState({ min: 0, max: TXN_SIZE_OPEN });
+  const [sizeApplied, setSizeApplied] = useState({ min: 0, max: TXN_SIZE_OPEN });
+  const sizeReady = true;
 
   useEffect(() => {
-    setTimeGranularity(readStoredGranularity());
+    // Always land on Monthly; Daily Walk is an intentional mode, never the entry default.
     setStackBy(readStoredStackBy());
   }, []);
 
-  const onTimeGranularityChange = useCallback((next: ChartTimeGranularity) => {
-    setTimeGranularity(next);
-    writeStoredGranularity(next);
-  }, []);
+  useEffect(() => {
+    const t = window.setTimeout(() => setSizeApplied(sizeDraft), 220);
+    return () => window.clearTimeout(t);
+  }, [sizeDraft]);
+
+  const onTimeGranularityChange = useCallback(
+    (next: ChartTimeGranularity) => {
+      setTimeGranularity((prev) => {
+        if (next === "day" && prev !== "day") {
+          stackByBeforeWalkRef.current = stackBy;
+          setStackBy("discretionary");
+          writeStoredStackBy("discretionary");
+          setSoloCategory(null);
+          setDrilldown(null);
+          setHiddenCategories(new Set());
+        } else if (prev === "day" && next !== "day") {
+          const restore = stackByBeforeWalkRef.current;
+          setStackBy(restore);
+          writeStoredStackBy(restore);
+        }
+        if (next === "month" || next === "year") {
+          writeStoredGranularity(next);
+        }
+        return next;
+      });
+    },
+    [stackBy],
+  );
 
   const onStackByChange = useCallback((next: ChartStackBy) => {
     setStackBy(next);
     writeStoredStackBy(next);
+    setHiddenCategories(new Set());
+    if (next === "discretionary") {
+      setSoloCategory(null);
+      setDrilldown(null);
+    }
   }, []);
 
   const toggleCategory = useCallback((name: string) => {
@@ -335,7 +392,11 @@ export function MonthlyStackedSpend({ months: monthsCount = DEFAULT_MONTHS }: { 
   }, []);
 
   const openSegmentModal = useCallback(
-    (segment: { name: string; level: "category" | "subcategory"; monthKey: string }) => {
+    (segment: {
+      name: string;
+      level: "category" | "subcategory" | "discretionary";
+      monthKey: string;
+    }) => {
       setSegmentModal(segment);
     },
     [],
@@ -349,9 +410,19 @@ export function MonthlyStackedSpend({ months: monthsCount = DEFAULT_MONTHS }: { 
     }
     let cancelled = false;
     setDrilldownLoading(true);
-    fetch(
-      `/api/analytics/monthly-stacks?months=${monthsCount}&category=${encodeURIComponent(soloCategory)}`,
-    )
+    const params = new URLSearchParams();
+    if (timeGranularity === "day") {
+      params.set("granularity", "day");
+      params.set("days", String(DAILY_WALK_DAYS));
+    } else {
+      params.set("months", String(monthsCount));
+    }
+    params.set("category", soloCategory);
+    if (sizeReady) {
+      if (sizeApplied.min > 0) params.set("minAmount", String(sizeApplied.min));
+      if (sizeApplied.max < TXN_SIZE_OPEN) params.set("maxAmount", String(sizeApplied.max));
+    }
+    fetch(`/api/analytics/monthly-stacks?${params}`)
       .then((r) => r.json())
       .then((j: MonthlyStacksResponse | { error: string }) => {
         if (cancelled) return;
@@ -370,12 +441,24 @@ export function MonthlyStackedSpend({ months: monthsCount = DEFAULT_MONTHS }: { 
     return () => {
       cancelled = true;
     };
-  }, [soloCategory, monthsCount]);
+  }, [soloCategory, monthsCount, timeGranularity, sizeReady, sizeApplied]);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    fetch(`/api/analytics/monthly-stacks?months=${monthsCount}`)
+    setData(null);
+    const params = new URLSearchParams();
+    if (timeGranularity === "day") {
+      params.set("granularity", "day");
+      params.set("days", String(DAILY_WALK_DAYS));
+    } else {
+      params.set("months", String(monthsCount));
+    }
+    if (sizeReady) {
+      if (sizeApplied.min > 0) params.set("minAmount", String(sizeApplied.min));
+      if (sizeApplied.max < TXN_SIZE_OPEN) params.set("maxAmount", String(sizeApplied.max));
+    }
+    fetch(`/api/analytics/monthly-stacks?${params}`)
       .then((r) => r.json())
       .then((j: MonthlyStacksResponse | { error: string }) => {
         if (cancelled) return;
@@ -397,13 +480,21 @@ export function MonthlyStackedSpend({ months: monthsCount = DEFAULT_MONTHS }: { 
     return () => {
       cancelled = true;
     };
-  }, [monthsCount]);
+  }, [monthsCount, timeGranularity, sizeReady, sizeApplied.min, sizeApplied.max]);
+
+  const amountFilterActive =
+    sizeReady && (sizeApplied.min > 0 || sizeApplied.max < TXN_SIZE_OPEN);
 
   const headerChartControls = {
     timeGranularity,
     onTimeGranularityChange,
     stackBy,
     onStackByChange,
+    sizeMin: sizeDraft.min,
+    sizeMax: sizeDraft.max,
+    sizeCurrency: data?.primaryCurrency,
+    onSizeRangeChange: (next: { min: number; max: number }) => setSizeDraft(next),
+    sizeReady,
   };
 
   if (loading && !data) {
@@ -412,7 +503,7 @@ export function MonthlyStackedSpend({ months: monthsCount = DEFAULT_MONTHS }: { 
         <ChartCardHeader {...headerChartControls} />
         <CardContent className="overflow-visible pt-0">
           <div className="flex h-[660px] items-center justify-center text-sm text-muted-foreground">
-            Loading monthly breakdown…
+            {timeGranularity === "day" ? "Loading your 60-day walk…" : "Loading monthly breakdown…"}
           </div>
         </CardContent>
       </Card>
@@ -439,14 +530,48 @@ export function MonthlyStackedSpend({ months: monthsCount = DEFAULT_MONTHS }: { 
             No spending in the selected window.
           </div>
           <AnalyticsCategoryLegend
-            categories={data.categories}
+            categories={
+              stackBy === "discretionary"
+                ? (data.discretionaryCategories ?? [])
+                : data.categories
+            }
             compact
-            soloCategory={soloCategory}
+            soloCategory={stackBy === "discretionary" ? null : soloCategory}
             hiddenCategories={hiddenCategories}
-            onToggleCategory={toggleCategory}
+            onToggleCategory={stackBy === "discretionary" ? undefined : toggleCategory}
             onToggleVisibility={toggleCategoryVisibility}
             onShowAll={showAllCategories}
           />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const chartData: MonthlyStacksResponse =
+    stackBy === "discretionary"
+      ? {
+          ...data,
+          months: data.discretionaryMonths ?? [],
+          categories: data.discretionaryCategories ?? [],
+        }
+      : data;
+
+  if (stackBy === "discretionary" && chartData.months.every((m) => m.total === 0)) {
+    return (
+      <Card className="border-chart-border bg-chart-surface text-card-foreground shadow-chart">
+        <ChartCardHeader
+          onExpand={() => setExpanded(true)}
+          avgMonthlySpendLast12={data.avgMonthlySpendLast12}
+          avgMonthlyIncomeLast12={data.avgMonthlyIncomeLast12}
+          {...headerChartControls}
+        />
+        <CardContent className="overflow-visible pt-0">
+          <div className="flex h-[660px] flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
+            <p>No discretionary-tagged spending in this window.</p>
+            <p className="text-xs text-muted-foreground/80">
+              Tag subcategories as Non-discretionary, Semi-discretionary, or Discretionary in Category Mapping.
+            </p>
+          </div>
         </CardContent>
       </Card>
     );
@@ -456,31 +581,46 @@ export function MonthlyStackedSpend({ months: monthsCount = DEFAULT_MONTHS }: { 
     <Card className="border-chart-border bg-chart-surface text-card-foreground shadow-chart">
       <ChartCardHeader
         onExpand={() => setExpanded(true)}
-        avgMonthlySpendLast12={soloCategory ? null : data.avgMonthlySpendLast12}
-        avgMonthlyIncomeLast12={soloCategory ? null : data.avgMonthlyIncomeLast12}
+        avgMonthlySpendLast12={
+          (soloCategory && stackBy !== "discretionary") ||
+          hiddenCategories.size > 0 ||
+          amountFilterActive
+            ? null
+            : data.avgMonthlySpendLast12
+        }
+        avgMonthlyIncomeLast12={
+          (soloCategory && stackBy !== "discretionary") ||
+          hiddenCategories.size > 0 ||
+          amountFilterActive
+            ? null
+            : data.avgMonthlyIncomeLast12
+        }
         {...headerChartControls}
       />
       <CardContent className="overflow-visible pt-0">
         <ChartView
-          data={data}
-          soloCategory={soloCategory}
+          data={chartData}
+          soloCategory={stackBy === "discretionary" ? null : soloCategory}
           hiddenCategories={hiddenCategories}
-          drilldown={drilldown}
-          drilldownLoading={drilldownLoading}
+          drilldown={stackBy === "discretionary" ? null : drilldown}
+          drilldownLoading={stackBy === "discretionary" ? false : drilldownLoading}
           timeGranularity={timeGranularity}
           stackBy={stackBy}
+          amountFilterActive={amountFilterActive}
           onSegmentClick={openSegmentModal}
         />
         <AnalyticsCategoryLegend
-          categories={data.categories}
-          soloCategory={soloCategory}
+          categories={chartData.categories}
+          soloCategory={stackBy === "discretionary" ? null : soloCategory}
           hiddenCategories={hiddenCategories}
           subcategoryBreakdown={
-            soloCategory && drilldown?.parentCategory === soloCategory
+            stackBy !== "discretionary" &&
+            soloCategory &&
+            drilldown?.parentCategory === soloCategory
               ? drilldown.categories
               : undefined
           }
-          onToggleCategory={toggleCategory}
+          onToggleCategory={stackBy === "discretionary" ? undefined : toggleCategory}
           onToggleVisibility={toggleCategoryVisibility}
           onShowAll={showAllCategories}
         />
@@ -504,16 +644,22 @@ export function MonthlyStackedSpend({ months: monthsCount = DEFAULT_MONTHS }: { 
         typeof document !== "undefined" &&
         createPortal(
           <FullscreenChartModal
-            data={data}
-            soloCategory={soloCategory}
+            data={chartData}
+            soloCategory={stackBy === "discretionary" ? null : soloCategory}
             hiddenCategories={hiddenCategories}
-            drilldown={drilldown}
-            drilldownLoading={drilldownLoading}
+            drilldown={stackBy === "discretionary" ? null : drilldown}
+            drilldownLoading={stackBy === "discretionary" ? false : drilldownLoading}
             timeGranularity={timeGranularity}
             onTimeGranularityChange={onTimeGranularityChange}
             stackBy={stackBy}
             onStackByChange={onStackByChange}
-            onToggleCategory={toggleCategory}
+            amountFilterActive={amountFilterActive}
+            sizeMin={sizeDraft.min}
+            sizeMax={sizeDraft.max}
+            sizeCurrency={data.primaryCurrency}
+            onSizeRangeChange={(next) => setSizeDraft(next)}
+            sizeReady={sizeReady}
+            onToggleCategory={stackBy === "discretionary" ? undefined : toggleCategory}
             onToggleVisibility={toggleCategoryVisibility}
             onShowAllCategories={showAllCategories}
             onClose={() => setExpanded(false)}
@@ -534,7 +680,7 @@ function ChartRefLineLegend({
   avgMonthlyIncomeLast12: number | null | undefined;
   timeGranularity?: ChartTimeGranularity;
 }) {
-  if (timeGranularity === "year") return null;
+  if (timeGranularity === "year" || timeGranularity === "day") return null;
 
   const showSpend = avgMonthlySpendLast12 != null && avgMonthlySpendLast12 > 0;
   const showIncome = avgMonthlyIncomeLast12 != null && avgMonthlyIncomeLast12 > 0;
@@ -581,23 +727,39 @@ function ChartTimeGranularityToggle({
       role="group"
       aria-label="Chart time period"
       className={cn(
-        "pointer-events-auto inline-flex rounded-lg border border-chart-border bg-chart-surface/92 p-0.5 shadow-[0_4px_24px_-8px_rgba(0,0,0,0.55)] backdrop-blur-md ring-1 ring-white/[0.04]",
+        "pointer-events-auto inline-flex items-center gap-0.5 rounded-lg border border-chart-border bg-chart-surface/92 p-0.5 shadow-[0_4px_24px_-8px_rgba(0,0,0,0.55)] backdrop-blur-md ring-1 ring-white/[0.04]",
         className,
       )}
     >
       {(
         [
-          { id: "month" as const, label: "Monthly", Icon: CalendarDays },
-          { id: "year" as const, label: "Yearly", Icon: CalendarRange },
+          {
+            id: "day" as const,
+            label: "Daily Walk",
+            Icon: Footprints,
+            title: "Last 60 days — one bar per day. Stack by Type opens automatically.",
+          },
+          {
+            id: "month" as const,
+            label: "Monthly",
+            Icon: CalendarDays,
+            title: "One bar per month",
+          },
+          {
+            id: "year" as const,
+            label: "Yearly",
+            Icon: CalendarRange,
+            title: "Stack by calendar year (current year = YTD)",
+          },
         ] as const
-      ).map(({ id, label, Icon }) => {
+      ).map(({ id, label, Icon, title }) => {
         const active = value === id;
         return (
           <button
             key={id}
             type="button"
             aria-pressed={active}
-            title={id === "year" ? "Stack by calendar year (current year = YTD)" : "One bar per month"}
+            title={title}
             onClick={() => onChange(id)}
             className={cn(
               "relative inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold transition-all duration-200",
@@ -623,45 +785,40 @@ function ChartStackByToggle({
   onChange: (next: ChartStackBy) => void;
 }) {
   return (
-    <div className="flex items-center gap-1.5">
-      <span className="shrink-0 text-[9px] font-medium uppercase tracking-wider text-muted-foreground/80">
-        Stack by
-      </span>
-      <div
-        role="group"
-        aria-label="Stack segments by"
-        className="pointer-events-auto inline-flex rounded-lg border border-chart-border bg-chart-surface/92 p-0.5 shadow-[0_4px_24px_-8px_rgba(0,0,0,0.55)] backdrop-blur-md ring-1 ring-white/[0.04]"
-      >
-        {(
-          [
-            { id: "value" as const, label: "Value" },
-            { id: "category" as const, label: "Category" },
-          ] as const
-        ).map(({ id, label }) => {
-          const active = value === id;
-          return (
-            <button
-              key={id}
-              type="button"
-              aria-pressed={active}
-              title={
-                id === "category"
-                  ? "Same category order in every bar (overall largest first)"
-                  : "Largest segment at the bottom of each bar"
-              }
-              onClick={() => onChange(id)}
-              className={cn(
-                "relative inline-flex items-center rounded-md px-2 py-1 text-[10px] font-semibold transition-all duration-200",
-                active
-                  ? "bg-[#0BC18D]/18 text-[#0BC18D] shadow-[0_0_16px_-6px_rgba(11,193,141,0.55)]"
-                  : "text-muted-foreground hover:bg-chart-hover hover:text-foreground",
-              )}
-            >
-              {label}
-            </button>
-          );
-        })}
-      </div>
+    <div
+      role="group"
+      aria-label="Stack segments by"
+      className="pointer-events-auto inline-flex rounded-lg border border-chart-border bg-chart-surface/92 p-0.5 shadow-[0_4px_24px_-8px_rgba(0,0,0,0.55)] backdrop-blur-md ring-1 ring-white/[0.04]"
+    >
+      {(
+        [
+          { id: "category" as const, label: "Category" },
+          { id: "discretionary" as const, label: "Type" },
+        ] as const
+      ).map(({ id, label }) => {
+        const active = value === id;
+        return (
+          <button
+            key={id}
+            type="button"
+            aria-pressed={active}
+            title={
+              id === "discretionary"
+                ? "Stack by Non-discretionary, Semi-discretionary, and Discretionary"
+                : "Same category order in every bar (overall largest first)"
+            }
+            onClick={() => onChange(id)}
+            className={cn(
+              "relative inline-flex items-center rounded-md px-2 py-1 text-[10px] font-semibold transition-all duration-200",
+              active
+                ? "bg-[#0BC18D]/18 text-[#0BC18D] shadow-[0_0_16px_-6px_rgba(11,193,141,0.55)]"
+                : "text-muted-foreground hover:bg-chart-hover hover:text-foreground",
+            )}
+          >
+            {label}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -686,8 +843,13 @@ function ChartCardHeader({
   avgMonthlyIncomeLast12,
   timeGranularity = "month",
   onTimeGranularityChange,
-  stackBy = "value",
+  stackBy = "category",
   onStackByChange,
+  sizeMin = 0,
+  sizeMax = TXN_SIZE_OPEN,
+  sizeCurrency,
+  onSizeRangeChange,
+  sizeReady = false,
 }: {
   onExpand?: () => void;
   avgMonthlySpendLast12?: number | null;
@@ -696,6 +858,11 @@ function ChartCardHeader({
   onTimeGranularityChange?: (next: ChartTimeGranularity) => void;
   stackBy?: ChartStackBy;
   onStackByChange?: (next: ChartStackBy) => void;
+  sizeMin?: number;
+  sizeMax?: number;
+  sizeCurrency?: string;
+  onSizeRangeChange?: (next: { min: number; max: number }) => void;
+  sizeReady?: boolean;
 }) {
   return (
     <CardHeader className="relative flex min-h-[2.75rem] items-center justify-center pb-3 pt-0">
@@ -709,13 +876,25 @@ function ChartCardHeader({
         {onStackByChange ? (
           <ChartStackByToggle value={stackBy} onChange={onStackByChange} />
         ) : null}
+        {onSizeRangeChange && sizeReady ? (
+          <TransactionSizeSlider
+            min={sizeMin}
+            max={sizeMax}
+            currencyCode={sizeCurrency}
+            onChange={onSizeRangeChange}
+          />
+        ) : null}
       </div>
       <CardTitle className="pointer-events-none text-center text-sm font-semibold text-foreground">
         <span className="inline-flex items-center justify-center gap-2 whitespace-nowrap">
           <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-[#0BC18D]/30 to-[#5DD3F3]/20 ring-1 ring-chart-border">
-            <CalendarRange className="h-4 w-4 text-[#0BC18D]" />
+            {timeGranularity === "day" ? (
+              <Footprints className="h-4 w-4 text-[#0BC18D]" />
+            ) : (
+              <CalendarRange className="h-4 w-4 text-[#0BC18D]" />
+            )}
           </span>
-          Spend by Category
+          {timeGranularity === "day" ? "Daily Walk — 60 days" : "Spend by Category"}
         </span>
       </CardTitle>
       {onExpand ? (
@@ -742,6 +921,12 @@ function FullscreenChartModal({
   onTimeGranularityChange,
   stackBy,
   onStackByChange,
+  amountFilterActive = false,
+  sizeMin = 0,
+  sizeMax = TXN_SIZE_OPEN,
+  sizeCurrency,
+  onSizeRangeChange,
+  sizeReady = false,
   onToggleCategory,
   onToggleVisibility,
   onShowAllCategories,
@@ -757,11 +942,21 @@ function FullscreenChartModal({
   onTimeGranularityChange: (next: ChartTimeGranularity) => void;
   stackBy: ChartStackBy;
   onStackByChange: (next: ChartStackBy) => void;
-  onToggleCategory: (name: string) => void;
+  amountFilterActive?: boolean;
+  sizeMin?: number;
+  sizeMax?: number;
+  sizeCurrency?: string;
+  onSizeRangeChange?: (next: { min: number; max: number }) => void;
+  sizeReady?: boolean;
+  onToggleCategory?: (name: string) => void;
   onToggleVisibility: (name: string) => void;
   onShowAllCategories: () => void;
   onClose: () => void;
-  onSegmentClick: (segment: { name: string; level: "category" | "subcategory"; monthKey: string }) => void;
+  onSegmentClick: (segment: {
+    name: string;
+    level: "category" | "subcategory" | "discretionary";
+    monthKey: string;
+  }) => void;
 }) {
   useEffect(() => {
     const prev = document.body.style.overflow;
@@ -790,12 +985,24 @@ function FullscreenChartModal({
             onChange={onTimeGranularityChange}
           />
           <ChartStackByToggle value={stackBy} onChange={onStackByChange} />
+          {onSizeRangeChange && sizeReady ? (
+            <TransactionSizeSlider
+              min={sizeMin}
+              max={sizeMax}
+              currencyCode={sizeCurrency}
+              onChange={onSizeRangeChange}
+            />
+          ) : null}
         </div>
         <div className="flex items-center justify-center gap-2 text-sm font-semibold text-foreground">
           <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-[#0BC18D]/30 to-[#5DD3F3]/20 ring-1 ring-chart-border">
-            <Maximize2 className="h-3.5 w-3.5 text-[#0BC18D]" />
+            {timeGranularity === "day" ? (
+              <Footprints className="h-3.5 w-3.5 text-[#0BC18D]" />
+            ) : (
+              <Maximize2 className="h-3.5 w-3.5 text-[#0BC18D]" />
+            )}
           </span>
-          Spend by Category
+          {timeGranularity === "day" ? "Daily Walk — 60 days" : "Spend by Category"}
         </div>
         <button
           type="button"
@@ -815,6 +1022,7 @@ function FullscreenChartModal({
           drilldownLoading={drilldownLoading}
           timeGranularity={timeGranularity}
           stackBy={stackBy}
+          amountFilterActive={amountFilterActive}
           fullscreen
           onSegmentClick={onSegmentClick}
         />
@@ -843,7 +1051,8 @@ function ChartView({
   drilldown = null,
   drilldownLoading = false,
   timeGranularity = "month",
-  stackBy = "value",
+  stackBy = "category",
+  amountFilterActive = false,
   fullscreen = false,
   onSegmentClick,
 }: {
@@ -854,10 +1063,28 @@ function ChartView({
   drilldownLoading?: boolean;
   timeGranularity?: ChartTimeGranularity;
   stackBy?: ChartStackBy;
+  amountFilterActive?: boolean;
   fullscreen?: boolean;
-  onSegmentClick?: (segment: { name: string; level: "category" | "subcategory"; monthKey: string }) => void;
+  onSegmentClick?: (segment: {
+    name: string;
+    level: "category" | "subcategory" | "discretionary";
+    monthKey: string;
+  }) => void;
 }) {
-  const { tip, open, scheduleClose, clearLeave } = useAnalyticsDetail();
+  type SegmentDetailState = {
+    entity: "category" | "discretionary";
+    value: string;
+    label: string;
+    accent: string;
+    currency: string;
+    month?: string;
+    year?: string;
+    monthKey: string;
+    level: "category" | "subcategory" | "discretionary";
+    parentCategory?: string;
+  };
+
+  const [segmentDetail, setSegmentDetail] = useState<SegmentDetailState | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const shineId = useId().replace(/:/g, "");
   const [size, setSize] = useState<{ w: number; h: number }>({
@@ -885,6 +1112,7 @@ function ChartView({
   const { months: rawMonths, primaryCurrency, avgMonthlyIncomeLast12, avgMonthlySpendLast12, categories } = data;
   const hidden = hiddenCategories ?? new Set<string>();
   const categoryFilterActive = soloCategory != null;
+  const visibilityFilterActive = hidden.size > 0;
   const usingSubcategoryStacks =
     categoryFilterActive &&
     soloCategory != null &&
@@ -908,9 +1136,12 @@ function ChartView({
     [monthsGranularity, stackBy],
   );
 
-  const segmentLevel: "category" | "subcategory" = usingSubcategoryStacks
-    ? "subcategory"
-    : "category";
+  const segmentLevel: "category" | "subcategory" | "discretionary" =
+    stackBy === "discretionary"
+      ? "discretionary"
+      : usingSubcategoryStacks
+        ? "subcategory"
+        : "category";
 
   const legendCategories = usingSubcategoryStacks && drilldown
     ? drilldown.categories
@@ -927,11 +1158,22 @@ function ChartView({
     return Array.from(map.entries()).map(([name, color]) => ({ name, color }));
   }, [legendCategories, months]);
 
-  const denseBars = months.length > DENSE_BAR_THRESHOLD;
+  const denseBars = months.length > DENSE_BAR_THRESHOLD || timeGranularity === "day";
   const padL = fullscreen ? 64 : 56;
   const padR = 16;
   const padT = fullscreen ? 12 : 6;
-  const padB = denseBars ? (fullscreen ? 40 : 36) : fullscreen ? 64 : 52;
+  const padB =
+    timeGranularity === "day"
+      ? fullscreen
+        ? 48
+        : 44
+      : denseBars
+        ? fullscreen
+          ? 40
+          : 36
+        : fullscreen
+          ? 64
+          : 52;
   const innerW = size.w - padL - padR;
   const innerH = size.h - padT - padB;
   const barGeometries = useMemo(
@@ -939,11 +1181,17 @@ function ChartView({
     [months.length, padL, innerW, denseBars, fullscreen],
   );
   const denseLabelStride =
-    denseBars && (barGeometries[0]?.barW ?? 0) < 14
-      ? 3
-      : denseBars && (barGeometries[0]?.barW ?? 0) < 22
-        ? 2
-        : 1;
+    timeGranularity === "day"
+      ? (barGeometries[0]?.barW ?? 0) < 12
+        ? 5
+        : (barGeometries[0]?.barW ?? 0) < 18
+          ? 3
+          : 2
+      : denseBars && (barGeometries[0]?.barW ?? 0) < 14
+        ? 3
+        : denseBars && (barGeometries[0]?.barW ?? 0) < 22
+          ? 2
+          : 1;
   const axisFont = fullscreen ? 12 : 10;
   const monthFont = denseBars ? (fullscreen ? 9 : 8) : fullscreen ? 12 : 10;
   const monthYearFont = fullscreen ? 11 : 10;
@@ -956,14 +1204,35 @@ function ChartView({
 
   const yMaxRaw = useMemo(() => {
     const barMax = Math.max(0, ...months.map((m) => m.total));
-    if (categoryFilterActive || timeGranularity === "year") return barMax;
+    // Solo or legend-hide filters: scale only to visible stacks so the chart fills vertically.
+    // Daily Walk / Yearly: always scale to bars only (no income/spend reference envelope).
+    if (
+      categoryFilterActive ||
+      visibilityFilterActive ||
+      amountFilterActive ||
+      timeGranularity === "year" ||
+      timeGranularity === "day"
+    ) {
+      return barMax;
+    }
     return Math.max(barMax, refIncomeValue, refSpendValue);
-  }, [months, refIncomeValue, refSpendValue, categoryFilterActive, timeGranularity]);
+  }, [
+    months,
+    refIncomeValue,
+    refSpendValue,
+    categoryFilterActive,
+    visibilityFilterActive,
+    amountFilterActive,
+    timeGranularity,
+  ]);
   const yScale = useMemo(() => tightYScale(yMaxRaw, innerH), [yMaxRaw, innerH]);
   const yToPx = (v: number) => padT + innerH - (v / yScale.top) * innerH;
 
-  /** Reference lines span the rightmost REF_AVG_MONTHS bars (monthly) or latest year bar. */
-  const refBarsCount = Math.min(REF_AVG_MONTHS, months.length);
+  /** Reference lines: last 12 months (monthly) or last 14 days (daily walk). */
+  const refBarsCount =
+    timeGranularity === "day"
+      ? Math.min(14, months.length)
+      : Math.min(REF_AVG_MONTHS, months.length);
   const refFirstIdx =
     timeGranularity === "year"
       ? Math.max(0, months.length - 1)
@@ -973,7 +1242,11 @@ function ChartView({
     barGeometries[months.length - 1] != null
       ? barGeometries[months.length - 1].x + barGeometries[months.length - 1].barW
       : padL + innerW;
-  const showRefLines = !categoryFilterActive && timeGranularity === "month";
+  const showRefLines =
+    !categoryFilterActive &&
+    !visibilityFilterActive &&
+    !amountFilterActive &&
+    timeGranularity === "month";
   const incomeY = showRefLines && refIncomeValue > 0 ? yToPx(refIncomeValue) : null;
   const spendY = showRefLines && refSpendValue > 0 ? yToPx(refSpendValue) : null;
 
@@ -996,9 +1269,11 @@ function ChartView({
           viewBox={`0 0 ${size.w} ${size.h}`}
           role="img"
           aria-label={
-            timeGranularity === "year"
-              ? "Yearly stacked spend by category"
-              : "Monthly stacked spend by category"
+            timeGranularity === "day"
+              ? "Daily Walk — last 60 days stacked spend"
+              : timeGranularity === "year"
+                ? "Yearly stacked spend by category"
+                : "Monthly stacked spend by category"
           }
           className="block"
         >
@@ -1147,14 +1422,14 @@ function ChartView({
                   yBottom={padT + innerH}
                   yToPx={yToPx}
                   currency={primaryCurrency}
-                  open={open}
-                  scheduleClose={scheduleClose}
                   shineId={shineId}
                   segmentLevel={segmentLevel}
                   timeGranularity={timeGranularity}
-                  onSegmentClick={onSegmentClick}
+                  parentCategory={usingSubcategoryStacks ? (soloCategory ?? undefined) : undefined}
+                  onSegmentOpen={setSegmentDetail}
                   hideLabels={denseBars}
-                  hideEmptyMarker={denseBars}
+                  hideEmptyMarker={denseBars && timeGranularity !== "day"}
+                  showWalkFootprint={timeGranularity === "day"}
                   barRadius={denseBars ? Math.min(2, barW / 3) : 4}
                   segmentLabelMin={fullscreen ? 12 : 14}
                   barLabelFont={fullscreen ? 11 : 9.5}
@@ -1237,6 +1512,35 @@ function ChartView({
                   </text>
                 );
               }
+              if (timeGranularity === "day") {
+                if (i % denseLabelStride !== 0) return null;
+                const dayNum = dayLabelShort(m.month);
+                const showMonth = denseDayShowsMonth(m.month, i, months);
+                return (
+                  <g key={`lbl-${m.month}`}>
+                    <text
+                      x={cx}
+                      y={size.h - padB + 14}
+                      textAnchor="middle"
+                      className="fill-chart-label"
+                      style={{ fontSize: monthFont, fontWeight: 700 }}
+                    >
+                      {dayNum}
+                    </text>
+                    {showMonth ? (
+                      <text
+                        x={cx}
+                        y={size.h - padB + 26}
+                        textAnchor="middle"
+                        className="fill-[#5DD3F3]/80"
+                        style={{ fontSize: Math.max(8, monthFont - 1), fontWeight: 600 }}
+                      >
+                        {monthLabelFromDayKey(m.month)}
+                      </text>
+                    ) : null}
+                  </g>
+                );
+              }
               if (denseBars) {
                 if (i % denseLabelStride !== 0) return null;
                 const short = monthLabelShort(m.month);
@@ -1285,21 +1589,31 @@ function ChartView({
       </div>
 
       {typeof document !== "undefined" &&
-        tip &&
+        segmentDetail &&
         createPortal(
-          <AnalyticsDetailTooltip
-            rect={tip.rect}
-            clientX={tip.clientX}
-            clientY={tip.clientY}
-            avoidRect={tip.avoidRect}
-            entity={tip.entity}
-            label={tip.label}
-            accentColor={tip.accent}
-            data={tip.data}
-            loading={tip.loading}
-            errorMessage={tip.error}
-            onMouseEnter={clearLeave}
-            onMouseLeave={scheduleClose}
+          <AnalyticsDetailDialog
+            entity={segmentDetail.entity}
+            value={segmentDetail.value}
+            label={segmentDetail.label}
+            accentColor={segmentDetail.accent}
+            currency={segmentDetail.currency}
+            month={segmentDetail.month}
+            year={segmentDetail.year}
+            level={segmentDetail.level}
+            parentCategory={segmentDetail.parentCategory}
+            onViewTransactions={
+              onSegmentClick
+                ? () => {
+                    onSegmentClick({
+                      name: segmentDetail.value,
+                      level: segmentDetail.level,
+                      monthKey: segmentDetail.monthKey,
+                    });
+                    setSegmentDetail(null);
+                  }
+                : undefined
+            }
+            onClose={() => setSegmentDetail(null)}
           />,
           document.body,
         )}
@@ -1308,8 +1622,7 @@ function ChartView({
 }
 
 /**
- * Renders one stacked month column. Each segment is hoverable and opens the rich
- * AnalyticsDetailTooltip scoped to (category × month).
+ * Renders one stacked month column. Segment click opens the detail popup scoped to (category × period).
  */
 function MonthBar({
   month,
@@ -1320,15 +1633,15 @@ function MonthBar({
   yBottom,
   yToPx,
   currency,
-  open,
-  scheduleClose,
   shineId,
   segmentLevel = "category",
   timeGranularity = "month",
-  onSegmentClick,
+  parentCategory,
+  onSegmentOpen,
   hideLabels = false,
   barRadius = 4,
   hideEmptyMarker = false,
+  showWalkFootprint = false,
   segmentLabelMin = 14,
   barLabelFont = 9.5,
   totalFont = 10.5,
@@ -1341,20 +1654,54 @@ function MonthBar({
   yBottom: number;
   yToPx: (v: number) => number;
   currency: string;
-  open: ReturnType<typeof useAnalyticsDetail>["open"];
-  scheduleClose: ReturnType<typeof useAnalyticsDetail>["scheduleClose"];
+  onSegmentOpen: (detail: {
+    entity: "category" | "discretionary";
+    value: string;
+    label: string;
+    accent: string;
+    currency: string;
+    month?: string;
+    year?: string;
+    monthKey: string;
+    level: "category" | "subcategory" | "discretionary";
+    parentCategory?: string;
+  }) => void;
   shineId: string;
-  segmentLevel?: "category" | "subcategory";
+  segmentLevel?: "category" | "subcategory" | "discretionary";
   timeGranularity?: ChartTimeGranularity;
-  onSegmentClick?: (segment: { name: string; level: "category" | "subcategory"; monthKey: string }) => void;
+  parentCategory?: string;
   hideLabels?: boolean;
   barRadius?: number;
   hideEmptyMarker?: boolean;
+  showWalkFootprint?: boolean;
   segmentLabelMin?: number;
   barLabelFont?: number;
   totalFont?: number;
 }) {
   if (month.total <= 0) {
+    if (showWalkFootprint) {
+      const rx = Math.max(1.6, Math.min(3.2, barW * 0.45));
+      return (
+        <g className="dw-footprint" opacity={0.55}>
+          <ellipse
+            cx={cx - rx * 0.35}
+            cy={yBottom - 4}
+            rx={rx}
+            ry={rx * 0.55}
+            fill="rgba(93,211,243,0.55)"
+            transform={`rotate(-18 ${cx - rx * 0.35} ${yBottom - 4})`}
+          />
+          <ellipse
+            cx={cx + rx * 0.4}
+            cy={yBottom - 2.5}
+            rx={rx * 0.85}
+            ry={rx * 0.48}
+            fill="rgba(242,201,76,0.4)"
+            transform={`rotate(22 ${cx + rx * 0.4} ${yBottom - 2.5})`}
+          />
+        </g>
+      );
+    }
     if (hideEmptyMarker) return null;
     return (
       <text
@@ -1393,24 +1740,23 @@ function MonthBar({
         return (
           <g
             key={`${month.month}-${seg.name}`}
-            onMouseEnter={(e) => {
+            onClick={(e) => {
+              e.stopPropagation();
               const periodLabel = formatPeriodKeyLabel(month.month);
-              void open({
-                ...detailTipAnchorFromEvent(e),
-                entity: "category",
+              onSegmentOpen({
+                entity: segmentLevel === "discretionary" ? "discretionary" : "category",
                 value: seg.name,
                 label: `${seg.name} · ${periodLabel}`,
                 accent: seg.color,
-                month: timeGranularity === "month" ? month.month : undefined,
+                currency,
+                month: timeGranularity === "year" ? undefined : month.month,
+                year: timeGranularity === "year" ? month.month : undefined,
+                monthKey: month.month,
+                level: segmentLevel,
+                parentCategory,
               });
             }}
-            onMouseLeave={scheduleClose}
-            onClick={(e) => {
-              e.stopPropagation();
-              scheduleClose();
-              onSegmentClick?.({ name: seg.name, level: segmentLevel, monthKey: month.month });
-            }}
-            style={{ cursor: onSegmentClick ? "pointer" : "default" }}
+            style={{ cursor: "pointer" }}
           >
             <rect
               x={x}

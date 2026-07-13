@@ -10,6 +10,7 @@ import { ef, df } from "@/lib/crypto/encryption";
 import { ensureTransactionWarningFlagColumn } from "@/lib/ensure-transaction-warning-flag";
 import { ensureTransactionIgnoresTable } from "@/lib/ensure-transaction-ignores";
 import { excludeCardPaymentsSql, excludeIgnoredSql } from "@/lib/db/excluded-transactions";
+import { eqTransactionMerchantKey, transactionMerchantKey } from "@/lib/transaction-merchant-key";
 import {
   findDoubleChargeSuspects,
   summarizeDoubleChargeMerchants,
@@ -392,7 +393,7 @@ export async function PATCH(request: NextRequest) {
               .set({ note: setPayload.note, updatedAt: new Date() })
               .where(and(
                 eq(transactions.userId, userId),
-                sql`LOWER(TRIM(${transactions.merchantName})) = ${mName}`,
+                eqTransactionMerchantKey(mName),
               ))
               .returning({ id: transactions.id }),
           );
@@ -433,7 +434,7 @@ export async function PATCH(request: NextRequest) {
               .set({ label: setPayload.label, updatedAt: new Date() })
               .where(and(
                 eq(transactions.userId, userId),
-                sql`LOWER(TRIM(${transactions.merchantName})) = ${mName}`,
+                eqTransactionMerchantKey(mName),
               ))
               .returning({ id: transactions.id }),
           );
@@ -456,7 +457,7 @@ export async function PATCH(request: NextRequest) {
               .set({ merchantName: newName, updatedAt: new Date() })
               .where(and(
                 eq(transactions.userId, userId),
-                sql`LOWER(TRIM(${transactions.merchantName})) = ${oldName}`,
+                eqTransactionMerchantKey(oldName),
               ))
               .returning({ id: transactions.id }),
           );
@@ -479,7 +480,7 @@ export async function PATCH(request: NextRequest) {
               .set({ categoryId: parsed.data.categoryId!, updatedAt: new Date() })
               .where(and(
                 eq(transactions.userId, userId),
-                sql`LOWER(TRIM(${transactions.merchantName})) = ${mName}`,
+                eqTransactionMerchantKey(mName),
               ))
               .returning({ id: transactions.id }),
           );
@@ -508,6 +509,7 @@ export async function PATCH(request: NextRequest) {
           .select({
             id: transactions.id,
             merchantName: transactions.merchantName,
+            rawDescription: transactions.rawDescription,
           })
           .from(transactions)
           .where(and(eq(transactions.id, parsed.data.transactionId), eq(transactions.userId, userId)))
@@ -517,7 +519,7 @@ export async function PATCH(request: NextRequest) {
         return NextResponse.json({ error: "Transaction not found" }, { status: 404, headers: NO_STORE });
       }
 
-      const merchantName = targetTxn.merchantName?.trim().toLowerCase() ?? "";
+      const merchantName = transactionMerchantKey(targetTxn.merchantName, targetTxn.rawDescription);
       setPayload.warningFlag = parsed.data.warningFlag;
 
       if (merchantName) {
@@ -547,7 +549,7 @@ export async function PATCH(request: NextRequest) {
             .set({ warningFlag: parsed.data.warningFlag, updatedAt: new Date() })
             .where(and(
               eq(transactions.userId, userId),
-              sql`LOWER(TRIM(${transactions.merchantName})) = ${merchantName}`,
+              eqTransactionMerchantKey(merchantName),
             ))
             .returning({ id: transactions.id }),
         );

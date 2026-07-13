@@ -3,6 +3,7 @@ import { DashboardProGate } from "@/components/dashboard-pro-gate";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { DashboardLayoutChrome } from "@/components/dashboard-layout-chrome";
 import { ProcessingBanner } from "@/components/processing-banner";
+import { AppQuickNote } from "@/components/quick-note/app-quick-note";
 import { UpgradeRedirectGuard } from "@/components/upgrade-redirect-guard";
 import { XrefCapture } from "@/components/xref-capture";
 import { resilientAuth } from "@/lib/auth-resilient";
@@ -27,6 +28,7 @@ export default async function DashboardLayout({
       <DashboardProGate />
       <UpgradeRedirectGuard />
       <XrefCapture />
+      <AppQuickNote />
       <DashboardLayoutChrome sessionActive>{children}</DashboardLayoutChrome>
       <ProcessingBanner />
     </DashboardShell>

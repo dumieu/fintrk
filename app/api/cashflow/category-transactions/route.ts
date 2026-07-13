@@ -14,6 +14,7 @@ import { ensureDoubleChargeWatchlistTable } from "@/lib/ensure-double-charge-wat
 import { doubleChargeWatchlistExclusions } from "@/lib/db/schema";
 import { logServerError } from "@/lib/safe-error";
 import { df } from "@/lib/crypto/encryption";
+import { parseDiscretionaryType } from "@/lib/discretionary-type";
 
 export const dynamic = "force-dynamic";
 
@@ -29,9 +30,13 @@ export async function GET(request: NextRequest) {
     const category = request.nextUrl.searchParams.get("category")?.trim() ?? "";
     const merchant = request.nextUrl.searchParams.get("merchant")?.trim() ?? "";
     const levelRaw = request.nextUrl.searchParams.get("level");
-    const level = levelRaw === "category" || levelRaw === "subcategory" || levelRaw === "label"
-      ? levelRaw
-      : null;
+    const level =
+      levelRaw === "category" ||
+      levelRaw === "subcategory" ||
+      levelRaw === "label" ||
+      levelRaw === "discretionary"
+        ? levelRaw
+        : null;
     const flowRaw = request.nextUrl.searchParams.get("flow");
     const flow = flowRaw === "inflow" || flowRaw === "outflow" || flowRaw === "savings"
       ? flowRaw
@@ -66,13 +71,24 @@ export async function GET(request: NextRequest) {
         ELSE 'outflow'
       END
     `;
+    const discType =
+      !merchantMode && level === "discretionary" ? parseDiscretionaryType(category) : null;
+    if (!merchantMode && level === "discretionary" && !discType) {
+      return NextResponse.json(
+        { error: "Invalid discretionary type" },
+        { status: 400, headers: NO_STORE },
+      );
+    }
+
     const selectionFilter = merchantMode
       ? eq(transactions.merchantName, merchant)
       : level === "category"
         ? eq(categoryLabel, category)
         : level === "subcategory"
           ? eq(leaf.name, category)
-          : sql`trim(coalesce(${transactions.label}, '')) = ${category}`;
+          : level === "discretionary"
+            ? eq(leaf.subcategoryType, discType!)
+            : sql`trim(coalesce(${transactions.label}, '')) = ${category}`;
 
     const shouldExcludeInvestmentInflows = !includeInvestmentInflows;
     const shouldExcludeInvestmentOutflows = !includeInvestmentOutflows;

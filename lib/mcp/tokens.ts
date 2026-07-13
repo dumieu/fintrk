@@ -41,8 +41,8 @@ export function verifyPkce(
   challenge: string | null,
   method: string | null,
 ): boolean {
-  if (!challenge) return true; // no PKCE was used at authorize time
-  if (!verifier) return false;
+  // Public clients (token_endpoint_auth_method "none") must use PKCE.
+  if (!challenge || !verifier) return false;
   if (method === "plain") return verifier === challenge;
   const computed = createHash("sha256").update(verifier).digest("base64url");
   return computed === challenge;
@@ -256,6 +256,8 @@ export async function issueTokenPair(input: {
 export async function rotateRefreshToken(input: {
   refreshToken: string;
   clientId: string;
+  /** Optional gate (e.g. Pro entitlement). On false, the row is revoked. */
+  isAllowed?: (clerkUserId: string) => Promise<boolean>;
 }): Promise<IssuedTokens | null> {
   await ensureMcpTables();
   const refreshHash = hashToken(input.refreshToken);
@@ -276,6 +278,10 @@ export async function rotateRefreshToken(input: {
   }
   // Refresh tokens valid for REFRESH_TOKEN_TTL_MS from issuance of the row.
   if (row.createdAt.getTime() + REFRESH_TOKEN_TTL_MS < Date.now()) {
+    await db.update(mcpTokensTable).set({ revoked: true }).where(eq(mcpTokensTable.id_token, row.id_token));
+    return null;
+  }
+  if (input.isAllowed && !(await input.isAllowed(row.clerkUserId))) {
     await db.update(mcpTokensTable).set({ revoked: true }).where(eq(mcpTokensTable.id_token, row.id_token));
     return null;
   }
