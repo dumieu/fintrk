@@ -321,8 +321,14 @@ export function MonthlyStackedSpend({ months: monthsCount = DEFAULT_MONTHS }: { 
   const [timeGranularity, setTimeGranularity] = useState<ChartTimeGranularity>("month");
   const [stackBy, setStackBy] = useState<ChartStackBy>("category");
   const stackByBeforeWalkRef = useRef<ChartStackBy>("category");
-  const [sizeDraft, setSizeDraft] = useState({ min: 0, max: TXN_SIZE_OPEN });
-  const [sizeApplied, setSizeApplied] = useState({ min: 0, max: TXN_SIZE_OPEN });
+  const [sizeDraft, setSizeDraft] = useState<{ min: number; max: number }>({
+    min: 0,
+    max: TXN_SIZE_OPEN,
+  });
+  const [sizeApplied, setSizeApplied] = useState<{ min: number; max: number }>({
+    min: 0,
+    max: TXN_SIZE_OPEN,
+  });
   const sizeReady = true;
 
   useEffect(() => {

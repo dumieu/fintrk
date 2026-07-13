@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 
 /** Discrete amount bands. Last step means that floor and above (no upper cap). */
 export const TXN_SIZE_STEPS = [0, 20, 40, 60, 80, 100, 300, 500, 1000, 3000, 5000, 10000] as const;
-export const TXN_SIZE_OPEN = TXN_SIZE_STEPS[TXN_SIZE_STEPS.length - 1];
+export const TXN_SIZE_OPEN: number = TXN_SIZE_STEPS[TXN_SIZE_STEPS.length - 1];
 
 function compactSize(n: number, openEnded = false): string {
   if (openEnded && n >= TXN_SIZE_OPEN) return "10K+";
