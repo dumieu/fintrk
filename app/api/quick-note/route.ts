@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
+import { requireAppAuth } from "@/lib/auth-resilient";
 import {
   clearUserQuickNote,
   getUserQuickNote,
@@ -20,8 +20,9 @@ function statusFor(e: unknown): number {
 
 export async function GET() {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
     const note = await getUserQuickNote(userId);
     return NextResponse.json({ note }, { headers: NO_STORE });
   } catch (e) {
@@ -33,8 +34,9 @@ export async function GET() {
 
 export async function PUT(request: Request) {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
     const body = (await request.json().catch(() => ({}))) as {
       title?: string;
       body?: string;
@@ -50,8 +52,9 @@ export async function PUT(request: Request) {
 
 export async function DELETE() {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
     await clearUserQuickNote(userId);
     return NextResponse.json({ ok: true }, { headers: NO_STORE });
   } catch (e) {

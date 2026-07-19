@@ -93,9 +93,10 @@ export function QuickNoteRichEditor({
     const el = editorRef.current;
     if (!el) return;
     if (document.activeElement === el) return;
-    if (el.innerHTML === html) return;
-    el.innerHTML = html || "";
-    lastEmitted.current = html;
+    const safe = sanitizeQuickNoteHtml(html || "");
+    if (el.innerHTML === safe) return;
+    el.innerHTML = safe;
+    lastEmitted.current = safe;
   }, [html]);
 
   const emit = useCallback(() => {

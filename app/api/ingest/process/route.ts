@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
+import { requireAppAuth } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
 import { statements } from "@/lib/db/schema";
 import { processStatement } from "@/lib/process-statement";
@@ -15,30 +15,53 @@ const NO_STORE = { "Cache-Control": "no-store" } as const;
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
 
     const { statementId } = await request.json();
     if (typeof statementId !== "number") {
       return NextResponse.json({ error: "Invalid statementId" }, { status: 400, headers: NO_STORE });
     }
 
-    // Mark as "processing" so processStatement accepts it
+    // Atomic claim: only uploaded/failed may enter processing. Parallel POSTs
+    // while already processing must not both call Gemini.
+    // Stamp aiProcessedAt as processing-started so status timeout uses wall
+    // clock from claim, not statement createdAt (delayed process must not fail).
     const [row] = await resilientQuery(() =>
       db.update(statements)
-        .set({ status: "processing", aiError: null, aiProcessedAt: null })
+        .set({ status: "processing", aiError: null, aiProcessedAt: new Date() })
         .where(
           and(
             eq(statements.id, statementId),
             eq(statements.userId, userId),
-            inArray(statements.status, ["uploaded", "processing", "failed"]),
+            inArray(statements.status, ["uploaded", "failed"]),
           ),
         )
         .returning({ id: statements.id }),
     );
 
     if (!row) {
-      return NextResponse.json({ error: "Statement not found" }, { status: 404, headers: NO_STORE });
+      const [existing] = await resilientQuery(() =>
+        db
+          .select({ id: statements.id, status: statements.status })
+          .from(statements)
+          .where(and(eq(statements.id, statementId), eq(statements.userId, userId)))
+          .limit(1),
+      );
+      if (!existing) {
+        return NextResponse.json({ error: "Statement not found" }, { status: 404, headers: NO_STORE });
+      }
+      if (existing.status === "processing") {
+        return NextResponse.json(
+          { error: "Statement is already processing." },
+          { status: 409, headers: NO_STORE },
+        );
+      }
+      return NextResponse.json(
+        { error: "Statement cannot be processed in its current state." },
+        { status: 409, headers: NO_STORE },
+      );
     }
 
     await processStatement(statementId);

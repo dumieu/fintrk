@@ -46,13 +46,22 @@ export const DEFAULT_PROTOCOL_VERSION = "2025-06-18";
  * exactly the origin the client used (works on localhost and fintrk.io).
  */
 export function getBaseUrl(req: Request): string {
+  // Production: prefer configured origin so OAuth return URLs cannot be skewed
+  // by a forged Host / X-Forwarded-Host on the edge.
+  const configured = process.env.NEXT_PUBLIC_APP_URL?.trim();
+  if (configured && process.env.NODE_ENV === "production") {
+    try {
+      return new URL(configured).origin;
+    } catch {
+      /* fall through to request headers */
+    }
+  }
+
   const h = req.headers;
   const host =
     h.get("x-forwarded-host") ??
     h.get("host") ??
-    (process.env.NEXT_PUBLIC_APP_URL
-      ? new URL(process.env.NEXT_PUBLIC_APP_URL).host
-      : "fintrk.io");
+    (configured ? new URL(configured).host : "fintrk.io");
   const isLocal =
     host.startsWith("localhost") ||
     host.startsWith("127.0.0.1") ||
@@ -88,20 +97,15 @@ export function authorizationServerMetadata(req: Request) {
     registration_endpoint: `${base}${OAUTH_REGISTER_PATH}`,
     response_types_supported: ["code"],
     grant_types_supported: ["authorization_code", "refresh_token"],
-    code_challenge_methods_supported: ["S256", "plain"],
+    code_challenge_methods_supported: ["S256"],
     token_endpoint_auth_methods_supported: ["none"],
     scopes_supported: [...SUPPORTED_SCOPES],
     service_documentation: `${base}/dashboard/connect-ai`,
     // Client ID Metadata Documents (MCP 2025-11-25). Lets clients (Claude,
     // ChatGPT) use their own https metadata URL as the client_id with no
-    // registration step. We accept the URL value without fetching it.
+    // registration step. Authorize fetches and validates the document.
     client_id_metadata_document_supported: true,
   };
-}
-
-/** A CIMD client_id is an https URL the client controls (no DCR record). */
-export function isCimdClientId(clientId: string): boolean {
-  return /^https:\/\//i.test(clientId);
 }
 
 /** Schemes that must never be OAuth redirect targets (XSS / local file theft). */
@@ -126,6 +130,7 @@ export function isAllowedOAuthRedirect(uri: string): boolean {
     const isLocal =
       u.hostname === "localhost" ||
       u.hostname === "127.0.0.1" ||
+      u.hostname === "::1" ||
       u.hostname.endsWith(".local");
     return (
       u.protocol === "https:" ||

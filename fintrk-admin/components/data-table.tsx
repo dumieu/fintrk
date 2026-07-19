@@ -1293,6 +1293,11 @@ export function DataTable({ tableMeta, onTotalRowsChange, onTableStatsChange }: 
     if (!pk && newRowCount === 0) return;
     setSaving(true);
     try {
+      type SaveOp =
+        | { kind: "create"; id: string }
+        | { kind: "update"; pkValue: string }
+        | { kind: "delete"; pkValue: string };
+      const ops: SaveOp[] = [];
       const promises: Promise<Response>[] = [];
 
       // POST new rows
@@ -1304,6 +1309,7 @@ export function DataTable({ tableMeta, onTotalRowsChange, onTableStatsChange }: 
           }
         }
         if (Object.keys(data).length > 0) {
+          ops.push({ kind: "create", id: newRow.id });
           promises.push(
             fetch("/api/rows", {
               method: "POST",
@@ -1314,14 +1320,14 @@ export function DataTable({ tableMeta, onTotalRowsChange, onTableStatsChange }: 
         }
       }
 
-      // PUT edited cells
+      // PUT edited cells - keep PK as text (Number() loses precision on large ids).
       for (const [pkValue, changes] of Object.entries(editedCells)) {
         if (pendingDeletes.has(pkValue)) continue;
-        const numericPk = /^\d+$/.test(pkValue) ? Number(pkValue) : pkValue;
         const typedChanges: Record<string, unknown> = {};
         for (const [colName, val] of Object.entries(changes)) {
           typedChanges[colName] = val === "" ? null : val;
         }
+        ops.push({ kind: "update", pkValue });
         promises.push(
           fetch("/api/rows", {
             method: "PUT",
@@ -1329,7 +1335,7 @@ export function DataTable({ tableMeta, onTotalRowsChange, onTableStatsChange }: 
             body: JSON.stringify({
               table: tableMeta.name,
               primaryKey: pk,
-              primaryValue: numericPk,
+              primaryValue: pkValue,
               data: typedChanges,
             }),
           })
@@ -1338,7 +1344,7 @@ export function DataTable({ tableMeta, onTotalRowsChange, onTableStatsChange }: 
 
       // DELETE marked rows via POST to /api/rows/delete (avoids Next.js DELETE body issues)
       for (const pkValue of pendingDeletes) {
-        const numericPk = /^\d+$/.test(pkValue) ? Number(pkValue) : pkValue;
+        ops.push({ kind: "delete", pkValue });
         promises.push(
           fetch("/api/rows/delete", {
             method: "POST",
@@ -1346,7 +1352,7 @@ export function DataTable({ tableMeta, onTotalRowsChange, onTableStatsChange }: 
             body: JSON.stringify({
               table: tableMeta.name,
               primaryKey: pk,
-              primaryValue: numericPk,
+              primaryValue: pkValue,
             }),
           })
         );
@@ -1354,7 +1360,14 @@ export function DataTable({ tableMeta, onTotalRowsChange, onTableStatsChange }: 
 
       const results = await Promise.all(promises);
       const errors: string[] = [];
-      for (const res of results) {
+      const failedCreateIds = new Set<string>();
+      const failedUpdatePks = new Set<string>();
+      const failedDeletePks = new Set<string>();
+
+      for (let i = 0; i < results.length; i++) {
+        const res = results[i];
+        const op = ops[i];
+        if (!res || !op) continue;
         if (!res.ok) {
           try {
             const err = await safeJson(res);
@@ -1362,10 +1375,24 @@ export function DataTable({ tableMeta, onTotalRowsChange, onTableStatsChange }: 
           } catch {
             errors.push(`HTTP ${res.status}`);
           }
+          if (op.kind === "create") failedCreateIds.add(op.id);
+          else if (op.kind === "update") failedUpdatePks.add(op.pkValue);
+          else failedDeletePks.add(op.pkValue);
         }
       }
 
       if (errors.length > 0) {
+        // Keep only failed pending work so successful mutations are not re-sent
+        // and failed ones remain editable / retryable.
+        setNewRows((prev) => prev.filter((r) => failedCreateIds.has(r.id)));
+        setEditedCells((prev) => {
+          const next: Record<string, Record<string, string>> = {};
+          for (const [pkValue, changes] of Object.entries(prev)) {
+            if (failedUpdatePks.has(pkValue)) next[pkValue] = changes;
+          }
+          return next;
+        });
+        setPendingDeletes(new Set(failedDeletePks));
         toast.error(`${errors.length} failed: ${errors[0]}`);
       } else {
         const parts: string[] = [];
@@ -1373,14 +1400,14 @@ export function DataTable({ tableMeta, onTotalRowsChange, onTableStatsChange }: 
         if (editCount > 0) parts.push(`${editCount} cell(s) updated`);
         if (deleteCount > 0) parts.push(`${deleteCount} row(s) deleted`);
         toast.success(parts.join(", "));
+        setNewRows([]);
+        setEditedCells({});
+        setPendingDeletes(new Set());
+        setActiveCell(null);
+        setFocusedCell(null);
+        clearSelection();
       }
 
-      setNewRows([]);
-      setEditedCells({});
-      setPendingDeletes(new Set());
-      setActiveCell(null);
-      setFocusedCell(null);
-      clearSelection();
       fetchRows();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Save failed");

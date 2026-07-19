@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db, resilientQuery } from "@/lib/db";
 import { accounts } from "@/lib/db/schema";
 import { detectRecurringPatterns } from "@/lib/recurring-detector";
+import { authorizeCron } from "@/lib/cron-auth";
 import { logServerError } from "@/lib/safe-error";
 import { recordCronFailure, recordCronRun } from "@/lib/cron-run";
 
@@ -10,15 +11,8 @@ export const maxDuration = 60;
 
 const CRON_PATH = "/api/cron/recurring";
 
-function verifyCronSecret(request: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET;
-  // Fail closed in production; allow unauthenticated local runs when unset.
-  if (!secret) return process.env.NODE_ENV !== "production";
-  return request.headers.get("authorization") === `Bearer ${secret}`;
-}
-
 export async function GET(request: NextRequest) {
-  if (!verifyCronSecret(request)) {
+  if (!authorizeCron(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

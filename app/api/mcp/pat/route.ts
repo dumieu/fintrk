@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
+import { requireAppAuth, resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
 import { DEFAULT_SCOPE } from "@/lib/mcp/config";
 import { createPat, listPats, revokeAllForUser, revokePat } from "@/lib/mcp/tokens";
-import { hasProAccess } from "@/lib/plan";
 import { logServerError } from "@/lib/safe-error";
 
 export const runtime = "nodejs";
@@ -20,18 +19,11 @@ const deleteSchema = z.union([
   z.object({ all: z.literal(true) }),
 ]);
 
-function upgradeRequired() {
-  return NextResponse.json(
-    { error: "FinTRK Pro required.", code: "UPGRADE_REQUIRED" },
-    { status: 402, headers: NO_STORE },
-  );
-}
-
 export async function GET() {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
-    if (!(await hasProAccess())) return upgradeRequired();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
     const tokens = await listPats(userId);
     return NextResponse.json({ tokens }, { headers: NO_STORE });
   } catch (error) {
@@ -42,9 +34,9 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
-    if (!(await hasProAccess())) return upgradeRequired();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
     const body = await request.json().catch(() => ({}));
     const parsed = createSchema.safeParse(body);
     if (!parsed.success) {
@@ -68,9 +60,9 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    // Allow revoke without Pro so lapsed users can clean up tokens.
     const { userId } = await resilientAuth();
     if (!userId) return unauthorizedResponse();
-    // Allow revoke without Pro so lapsed users can clean up tokens.
     const body = await request.json().catch(() => ({}));
     const parsed = deleteSchema.safeParse(body);
     if (!parsed.success) {

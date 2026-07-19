@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
       `,
       sql`
         SELECT
-          (created_at AT TIME ZONE 'UTC')::date AS day,
+          DATE(created_at AT TIME ZONE 'UTC')::text AS day,
           COUNT(*)::int AS count
         FROM feedback_submissions
         WHERE created_at >= NOW() - INTERVAL '14 days'
@@ -42,14 +42,42 @@ export async function GET(request: NextRequest) {
       `,
       sentimentFilter
         ? sql`
-            SELECT id, clerk_user_id, email, sentiment, message, created_at
+            SELECT
+              id,
+              clerk_user_id,
+              name,
+              email,
+              app_name,
+              sentiment,
+              message,
+              idea_redesign_screen,
+              idea_other_tools,
+              idea_spreadsheet_tracking,
+              idea_first_feature,
+              idea_friend_description,
+              idea_miss_most,
+              created_at
             FROM feedback_submissions
             WHERE sentiment = ${sentimentFilter}
             ORDER BY created_at DESC
             LIMIT 400
           `
         : sql`
-            SELECT id, clerk_user_id, email, sentiment, message, created_at
+            SELECT
+              id,
+              clerk_user_id,
+              name,
+              email,
+              app_name,
+              sentiment,
+              message,
+              idea_redesign_screen,
+              idea_other_tools,
+              idea_spreadsheet_tracking,
+              idea_first_feature,
+              idea_friend_description,
+              idea_miss_most,
+              created_at
             FROM feedback_submissions
             ORDER BY created_at DESC
             LIMIT 400
@@ -74,9 +102,17 @@ export async function GET(request: NextRequest) {
     const items = (listRows as Record<string, unknown>[]).map((r) => ({
       idFeedback: r.id as string,
       clerkUserId: (r.clerk_user_id as string | null) ?? null,
+      name: (r.name as string | null) ?? null,
       email: r.email as string,
+      appName: (r.app_name as string | null) ?? null,
       sentiment: r.sentiment as string,
       message: (r.message as string | null) ?? null,
+      ideaRedesignScreen: (r.idea_redesign_screen as string | null) ?? null,
+      ideaOtherTools: (r.idea_other_tools as string | null) ?? null,
+      ideaSpreadsheetTracking: (r.idea_spreadsheet_tracking as string | null) ?? null,
+      ideaFirstFeature: (r.idea_first_feature as string | null) ?? null,
+      ideaFriendDescription: (r.idea_friend_description as string | null) ?? null,
+      ideaMissMost: (r.idea_miss_most as string | null) ?? null,
       createdAt:
         r.created_at instanceof Date
           ? r.created_at.toISOString()

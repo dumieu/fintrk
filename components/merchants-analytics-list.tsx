@@ -1,16 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { formatCurrency } from "@/lib/format";
-import {
-  AnalyticsDetailDialog,
-  AnalyticsDetailTooltip,
-  detailTipAnchorFromEvent,
-} from "@/components/analytics-detail-tooltip";
-import { useAnalyticsDetail } from "@/components/use-analytics-detail";
 import { CategoryTransactionsModal } from "@/components/category-transactions-modal";
-import { chartChipClass, chartListRowClass, chartMutedClass } from "@/lib/chart-ui";
+import { chartListRowClass, chartMutedClass } from "@/lib/chart-ui";
+import {
+  analyticsChartFiltersToSearchParams,
+  type AnalyticsChartFilters,
+  DEFAULT_ANALYTICS_CHART_FILTERS,
+  ANALYTICS_TXN_SIZE_OPEN,
+} from "@/lib/analytics/workspace-filters";
 import { cn } from "@/lib/utils";
 
 export interface MerchantRow {
@@ -25,10 +25,9 @@ export interface MerchantRow {
 
 const PAGE = 50;
 
-/** Fixed height (~4 rows, room for two-line rows) so the card stays stable when filtering. */
 /** Fills the parent flex container (set via `flex-1` on CardContent). */
 const LIST_HEIGHT = "h-full min-h-[200px] w-full";
-const LIST_SCROLL = `${LIST_HEIGHT} scrollbar-slim min-h-0 flex-1 flex flex-col overflow-y-auto overscroll-contain pr-1 [scrollbar-gutter:stable]`;
+const LIST_SCROLL = `${LIST_HEIGHT} scrollbar-slim min-h-0 flex-1 flex flex-col overflow-y-auto overscroll-contain pb-2 pr-1 [scrollbar-gutter:stable]`;
 
 function merchantKey(m: MerchantRow) {
   return `${m.name}\0${m.currency}`;
@@ -37,9 +36,11 @@ function merchantKey(m: MerchantRow) {
 export function MerchantsAnalyticsList({
   filterQuery = "",
   onDateRangeLabel,
+  chartFilters = DEFAULT_ANALYTICS_CHART_FILTERS,
 }: {
   filterQuery?: string;
   onDateRangeLabel?: (label: string | null) => void;
+  chartFilters?: AnalyticsChartFilters;
 }) {
   const [merchants, setMerchants] = useState<MerchantRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,14 +49,15 @@ export function MerchantsAnalyticsList({
   const scrollRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
-  const { tip, open, scheduleClose, clearLeave, close } = useAnalyticsDetail();
   const [merchantModal, setMerchantModal] = useState<MerchantRow | null>(null);
-  const [detailDialog, setDetailDialog] = useState<MerchantRow | null>(null);
 
   const nextOffsetRef = useRef(0);
   const hasMoreRef = useRef(true);
   const loadingRef = useRef(false);
   const fetchGen = useRef(0);
+  const chartFilterKey = analyticsChartFiltersToSearchParams(chartFilters).toString();
+  const chartFiltersRef = useRef(chartFilters);
+  chartFiltersRef.current = chartFilters;
 
   const loadPage = useCallback(async (reset: boolean) => {
     if (loadingRef.current) return;
@@ -75,7 +77,10 @@ export function MerchantsAnalyticsList({
 
     const off = nextOffsetRef.current;
     try {
-      const r = await fetch(`/api/analytics/merchants?offset=${off}&limit=${PAGE}`);
+      const params = analyticsChartFiltersToSearchParams(chartFiltersRef.current);
+      params.set("offset", String(off));
+      params.set("limit", String(PAGE));
+      const r = await fetch(`/api/analytics/merchants?${params}`);
       const j = await r.json();
       if (gen !== fetchGen.current) return;
 
@@ -105,7 +110,7 @@ export function MerchantsAnalyticsList({
         setLoading(false);
       }
     }
-  }, [onDateRangeLabel]);
+  }, [onDateRangeLabel, chartFilterKey]);
 
   useEffect(() => {
     void loadPage(true);
@@ -194,15 +199,12 @@ export function MerchantsAnalyticsList({
                   <span className="w-5 shrink-0 text-right text-[10px] font-medium tabular-nums text-muted-foreground">
                     {rank}
                   </span>
-                  <MerchantDetailHelpButton
-                    merchant={m}
-                    onHoverOpen={open}
-                    onHoverClose={scheduleClose}
-                    onPin={() => {
-                      close();
-                      setDetailDialog(m);
-                    }}
-                  />
+                  <div
+                    className="grid h-6 w-6 shrink-0 place-items-center rounded-full border border-chart-border bg-chart-muted text-[9px] font-semibold uppercase text-muted-foreground"
+                    aria-hidden
+                  >
+                    {m.name.slice(0, 1) || "?"}
+                  </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <p className="break-words text-xs font-medium leading-snug text-foreground">{m.name}</p>
@@ -236,91 +238,23 @@ export function MerchantsAnalyticsList({
         </>
       )}
 
-      {typeof document !== "undefined" &&
-        tip &&
-        !detailDialog &&
-        createPortal(
-          <AnalyticsDetailTooltip
-            rect={tip.rect}
-            clientX={tip.clientX}
-            clientY={tip.clientY}
-            avoidRect={tip.avoidRect}
-            entity={tip.entity}
-            label={tip.label}
-            accentColor={tip.accent}
-            data={tip.data}
-            loading={tip.loading}
-            errorMessage={tip.error}
-            onMouseEnter={clearLeave}
-            onMouseLeave={scheduleClose}
-          />,
-          document.body,
-        )}
-
-      {detailDialog &&
-        typeof document !== "undefined" &&
-        createPortal(
-          <AnalyticsDetailDialog
-            entity="merchant"
-            value={detailDialog.name}
-            label={detailDialog.name}
-            accentColor="#0BC18D"
-            currency={detailDialog.currency}
-            onClose={() => setDetailDialog(null)}
-          />,
-          document.body,
-        )}
-
       {merchantModal &&
         typeof document !== "undefined" &&
         createPortal(
           <CategoryTransactionsModal
             filter={{ mode: "merchant", name: merchantModal.name }}
             currency={merchantModal.currency}
+            minAmount={chartFilters.minAmount > 0 ? chartFilters.minAmount : undefined}
+            maxAmount={
+              chartFilters.maxAmount < ANALYTICS_TXN_SIZE_OPEN
+                ? chartFilters.maxAmount
+                : undefined
+            }
             onClose={() => setMerchantModal(null)}
           />,
           document.body,
         )}
     </div>
-  );
-}
-
-function MerchantDetailHelpButton({
-  merchant,
-  onHoverOpen,
-  onHoverClose,
-  onPin,
-}: {
-  merchant: MerchantRow;
-  onHoverOpen: ReturnType<typeof useAnalyticsDetail>["open"];
-  onHoverClose: ReturnType<typeof useAnalyticsDetail>["scheduleClose"];
-  onPin: () => void;
-}) {
-  const showTip = (e: MouseEvent<HTMLButtonElement>) => {
-    void onHoverOpen({
-      ...detailTipAnchorFromEvent(e),
-      entity: "merchant",
-      value: merchant.name,
-      label: merchant.name,
-      accent: "#0BC18D",
-      currency: merchant.currency,
-    });
-  };
-
-  return (
-    <button
-      type="button"
-      className={cn(chartChipClass, "grid h-6 w-6 shrink-0 place-items-center rounded-full text-[10px] font-bold leading-none")}
-      aria-label={`Details for ${merchant.name}`}
-      onMouseEnter={showTip}
-      onMouseLeave={onHoverClose}
-      onClick={(e) => {
-        e.stopPropagation();
-        onPin();
-      }}
-    >
-      ?
-    </button>
   );
 }
 

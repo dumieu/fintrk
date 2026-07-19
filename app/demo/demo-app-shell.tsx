@@ -1,10 +1,9 @@
 "use client";
 
 /**
- * DemoAppShell - reproduces the authenticated dashboard chrome (header, page
- * title, ribbon slot, scroll container, side nav) for the public /demo pages,
- * but with a Clerk-free nav that links between /demo/* sections. The actual
- * page bodies are the REAL dashboard page components, rendered as children.
+ * DemoAppShell - full replica of authenticated dashboard chrome for /demo/*.
+ * Reuses real dashboard page bodies; navigation is Clerk-free and scoped to
+ * /demo routes. Writes are no-ops via DemoApiBridge.
  */
 
 import { useState, type ReactNode } from "react";
@@ -26,9 +25,14 @@ import {
   BarChart3,
   ArrowLeftRight,
   Sparkles,
+  BookOpen,
   Landmark,
   Network,
-  LayoutDashboard,
+  Upload,
+  Mail,
+  HelpCircle,
+  Gem,
+  UserRound,
   ArrowRight,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -36,31 +40,153 @@ import { FintrkShortLogo } from "@/components/fintrk-short-logo";
 import { CashflowSummary } from "@/components/cashflow-summary";
 import { CashflowLegendHelpButton } from "@/components/cashflow-legend-help";
 import {
+  isTransactionsStatementsRoute,
+  TransactionsStatementsSlicer,
+} from "@/components/transactions-statements-slicer";
+import {
   DashboardRibbonProvider,
-  useDashboardRibbon,
+  useDashboardRibbonValue,
 } from "@/components/dashboard-ribbon-context";
 
 const ACCENT = "#0BC18D";
 
-const NAV = [
-  { label: "Overview", href: "/demo", icon: LayoutDashboard },
-  { label: "Cashflow", href: "/demo/cashflow", icon: Waves },
-  { label: "Spend Analytics", href: "/demo/analytics", icon: BarChart3 },
-  { label: "Transactions", href: "/demo/transactions", icon: ArrowLeftRight },
-  { label: "Net Worth Atlas", href: "/demo/net-worth", icon: Sparkles },
-  { label: "Accounts", href: "/demo/accounts", icon: Landmark },
-  { label: "Category Mapping", href: "/demo/categories", icon: Network },
-] as const;
+type NavItem = {
+  label: string;
+  href: string;
+  icon: typeof Waves;
+  match?: (p: string) => boolean;
+};
+
+const PRIMARY_NAV: NavItem[] = [
+  {
+    label: "Cashflow",
+    href: "/demo/cashflow",
+    icon: Waves,
+  },
+  {
+    label: "Spend Intelligence",
+    href: "/demo/analytics",
+    icon: BarChart3,
+  },
+  {
+    label: "Transactions & Statements",
+    href: "/demo/transactions",
+    icon: ArrowLeftRight,
+    match: (p) =>
+      p.startsWith("/demo/transactions") || p.startsWith("/demo/upload"),
+  },
+  {
+    label: "Net Worth Atlas",
+    href: "/demo/net-worth",
+    icon: Sparkles,
+  },
+  {
+    label: "Accounts",
+    href: "/demo/accounts",
+    icon: Landmark,
+  },
+  {
+    label: "Categories",
+    href: "/demo/categories",
+    icon: Network,
+  },
+];
+
+const SECONDARY_NAV: NavItem[] = [
+  {
+    label: "Upload statements",
+    href: "/demo/upload",
+    icon: Upload,
+  },
+  {
+    label: "Connect your AI",
+    href: "/demo/connect-ai",
+    icon: Sparkles,
+  },
+  {
+    label: "Profile & settings",
+    href: "/demo/profile",
+    icon: UserRound,
+  },
+  {
+    label: "Plan & Billing",
+    href: "/demo/upgrade",
+    icon: Gem,
+  },
+  {
+    label: "Feedback",
+    href: "/demo/contact",
+    icon: Mail,
+  },
+  {
+    label: "FAQ",
+    href: "/demo/faq",
+    icon: HelpCircle,
+  },
+  {
+    label: "About this demo",
+    href: "/demo",
+    icon: BookOpen,
+    match: (p) => p === "/demo" || p === "/demo/",
+  },
+];
 
 const PAGE_META: Array<{ match: (p: string) => boolean; title: string }> = [
   { match: (p) => p.startsWith("/demo/transactions"), title: "Transactions" },
+  { match: (p) => p.startsWith("/demo/upload"), title: "Upload Statements" },
   { match: (p) => p.startsWith("/demo/cashflow"), title: "Cashflow" },
   { match: (p) => p.startsWith("/demo/analytics"), title: "Spending Intelligence" },
   { match: (p) => p.startsWith("/demo/net-worth"), title: "Net Worth Atlas" },
   { match: (p) => p.startsWith("/demo/accounts"), title: "Accounts" },
-  { match: (p) => p.startsWith("/demo/categories"), title: "Category Mapping" },
+  { match: (p) => p.startsWith("/demo/categories"), title: "Categories" },
+  { match: (p) => p.startsWith("/demo/connect-ai"), title: "Connect your AI" },
+  { match: (p) => p.startsWith("/demo/profile"), title: "Profile" },
+  { match: (p) => p.startsWith("/demo/upgrade"), title: "Plan & Billing" },
+  { match: (p) => p.startsWith("/demo/contact"), title: "Feedback" },
+  { match: (p) => p.startsWith("/demo/faq"), title: "FAQ" },
+  { match: (p) => p === "/demo" || p === "/demo/", title: "Sterling Family Demo" },
 ];
 const FALLBACK = { title: "Demo" };
+
+function NavLink({
+  item,
+  pathname,
+}: {
+  item: NavItem;
+  pathname: string;
+}) {
+  const isActive = item.match
+    ? item.match(pathname)
+    : pathname.startsWith(item.href);
+  const Icon = item.icon;
+  return (
+    <li>
+      <SheetClose
+        nativeButton={false}
+        render={
+          <Link
+            href={item.href}
+            className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+              isActive
+                ? "bg-primary/10 text-foreground"
+                : "text-muted-foreground hover:bg-muted/50"
+            }`}
+          >
+            <Icon
+              className="h-5 w-5 shrink-0"
+              style={
+                item.href === "/demo/upgrade" || item.href === "/demo/connect-ai"
+                  ? { color: ACCENT }
+                  : undefined
+              }
+            />
+            {item.label}
+          </Link>
+        }
+      />
+    </li>
+  );
+}
 
 function DemoNav() {
   const pathname = usePathname() ?? "";
@@ -75,12 +201,15 @@ function DemoNav() {
           </Button>
         }
       />
-      <SheetContent side="left" showCloseButton={false} className="w-72 p-0">
+      <SheetContent side="left" showCloseButton={false} className="flex h-full w-72 flex-col p-0">
         <SheetHeader className="border-b border-border px-5 py-4">
           <div className="flex items-center justify-between gap-2">
             <div className="flex min-w-0 items-center gap-2">
               <FintrkShortLogo size="header" />
-              <SheetTitle className="font-aldhabi text-lg font-bold tracking-tight" style={{ color: ACCENT }}>
+              <SheetTitle
+                className="font-aldhabi text-lg font-bold tracking-tight"
+                style={{ color: ACCENT }}
+              >
                 FinTRK
               </SheetTitle>
               <span className="rounded-full bg-[#0BC18D]/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#0BC18D]">
@@ -92,40 +221,26 @@ function DemoNav() {
           <SheetDescription className="sr-only">Demo navigation menu</SheetDescription>
         </SheetHeader>
 
-        <nav className="flex-1 px-3 py-3">
+        <nav className="flex-1 overflow-y-auto px-3 py-3">
           <ul className="space-y-1">
-            {NAV.map((item) => {
-              const isActive =
-                item.href === "/demo" ? pathname === "/demo" : pathname.startsWith(item.href);
-              const Icon = item.icon;
-              return (
-                <li key={item.href}>
-                  <SheetClose
-                    nativeButton={false}
-                    render={
-                      <Link
-                        href={item.href}
-                        className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                          isActive ? "bg-primary/10 text-foreground" : "text-muted-foreground hover:bg-muted/50"
-                        }`}
-                      >
-                        <Icon className="h-5 w-5 shrink-0" />
-                        {item.label}
-                      </Link>
-                    }
-                  />
-                </li>
-              );
-            })}
+            {PRIMARY_NAV.map((item) => (
+              <NavLink key={item.href} item={item} pathname={pathname} />
+            ))}
+          </ul>
+          <div className="my-3 border-t border-border" />
+          <ul className="space-y-1">
+            {SECONDARY_NAV.map((item) => (
+              <NavLink key={item.href} item={item} pathname={pathname} />
+            ))}
           </ul>
         </nav>
 
         <div className="border-t border-border p-3">
           <Link
-            href="/auth"
+            href="/auth/sign-up"
             className="flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-[#0BC18D] to-[#2CA2FF] px-3 py-2.5 text-sm font-bold text-white transition hover:opacity-90"
           >
-            Start your own free
+            Start your own free trial
             <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
@@ -137,10 +252,11 @@ function DemoNav() {
 function DemoHeader() {
   const pathname = usePathname() ?? "";
   const meta = PAGE_META.find((m) => m.match(pathname)) ?? FALLBACK;
-  const { ribbon } = useDashboardRibbon();
-  const showCashflowSummary = pathname.startsWith("/demo/analytics");
+  const { ribbon } = useDashboardRibbonValue();
+  const showCashflowSummary = pathname.startsWith("/demo/cashflow");
   const showCashflowLegend = pathname.startsWith("/demo/cashflow");
-  const trailing = ribbon ?? (showCashflowSummary ? <CashflowSummary months={12} variant="ribbon" /> : null);
+  const showTxStatementsSlicer = isTransactionsStatementsRoute(pathname);
+  const trailing = ribbon;
 
   return (
     <header className="sticky top-0 z-40 shrink-0 border-b border-border/40 bg-background/80 backdrop-blur-md">
@@ -154,7 +270,17 @@ function DemoHeader() {
             {showCashflowLegend ? <CashflowLegendHelpButton /> : null}
           </div>
         </div>
-        {trailing ? <div className="flex min-w-0 shrink-0 items-center">{trailing}</div> : null}
+        {showTxStatementsSlicer ? (
+          <div className="order-last flex w-full justify-center sm:order-none sm:w-auto">
+            <TransactionsStatementsSlicer />
+          </div>
+        ) : null}
+        {showCashflowSummary || trailing ? (
+          <div className="flex min-w-0 shrink-0 items-center gap-2">
+            {showCashflowSummary ? <CashflowSummary months={12} variant="ribbon" /> : null}
+            {trailing}
+          </div>
+        ) : null}
       </div>
     </header>
   );
@@ -165,7 +291,9 @@ export function DemoAppShell({ children }: { children: ReactNode }) {
     <DashboardRibbonProvider>
       <div className="flex min-h-screen flex-col bg-app-canvas">
         <DemoHeader />
-        <div className="flex min-h-0 flex-1 flex-col">{children}</div>
+        <div className="flex min-h-0 flex-1 flex-col overflow-x-clip overflow-y-auto">
+          {children}
+        </div>
       </div>
     </DashboardRibbonProvider>
   );

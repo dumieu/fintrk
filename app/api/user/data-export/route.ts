@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { currentUser } from "@clerk/nextjs/server";
 
-import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
+import { requireAppAuth } from "@/lib/auth-resilient";
 import { buildUserDataExport } from "@/lib/data-transfer-server";
 import { formatExportFilename, sanitizeExportUserLabel } from "@/lib/data-transfer";
 import { logServerError } from "@/lib/safe-error";
@@ -13,8 +13,9 @@ const NO_STORE = { "Cache-Control": "no-store" } as const;
 
 export async function GET() {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
 
     const clerk = await currentUser().catch(() => null);
     const label =

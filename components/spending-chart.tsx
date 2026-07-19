@@ -2,11 +2,6 @@
 
 import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import {
-  AnalyticsDetailTooltip,
-  detailTipAnchorFromEvent,
-} from "@/components/analytics-detail-tooltip";
-import { useAnalyticsDetail } from "@/components/use-analytics-detail";
 import { CategoryTransactionsModal } from "@/components/category-transactions-modal";
 import { analyticsCategoryGlow } from "@/lib/analytics-category-colors";
 import { chartMutedClass } from "@/lib/chart-ui";
@@ -22,16 +17,25 @@ interface SpendingChartProps {
   bars: SpendingBar[];
   currency: string;
   maxAmount?: number;
+  /** Inclusive ABS amount floor (matches chart size slider). */
+  amountMin?: number;
+  /** Inclusive ABS amount ceiling (matches chart size slider). */
+  amountMax?: number;
 }
 
-export function SpendingChart({ bars, currency, maxAmount }: SpendingChartProps) {
+export function SpendingChart({
+  bars,
+  currency,
+  maxAmount,
+  amountMin,
+  amountMax,
+}: SpendingChartProps) {
   const max = maxAmount ?? Math.max(...bars.map((b) => Math.abs(b.amount)), 1);
   const totalAbs = useMemo(
     () => bars.reduce((s, b) => s + Math.abs(b.amount), 0),
     [bars],
   );
 
-  const { tip, open, scheduleClose, clearLeave } = useAnalyticsDetail();
   const [categoryModal, setCategoryModal] = useState<string | null>(null);
 
   if (bars.length === 0) {
@@ -61,16 +65,6 @@ export function SpendingChart({ bars, currency, maxAmount }: SpendingChartProps)
               key={`${bar.label}-${i}`}
               className="group cursor-pointer"
               onClick={() => setCategoryModal(bar.label)}
-              onMouseEnter={(e) =>
-                void open({
-                  ...detailTipAnchorFromEvent(e),
-                  entity: "category",
-                  value: bar.label,
-                  label: bar.label,
-                  accent: bar.color,
-                })
-              }
-              onMouseLeave={scheduleClose}
             >
               <div className="mb-1 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
                 <span className="flex min-w-0 items-start gap-2">
@@ -114,32 +108,14 @@ export function SpendingChart({ bars, currency, maxAmount }: SpendingChartProps)
         })}
       </div>
 
-      {typeof document !== "undefined" &&
-        tip &&
-        createPortal(
-          <AnalyticsDetailTooltip
-            rect={tip.rect}
-            clientX={tip.clientX}
-            clientY={tip.clientY}
-            avoidRect={tip.avoidRect}
-            entity={tip.entity}
-            label={tip.label}
-            accentColor={tip.accent}
-            data={tip.data}
-            loading={tip.loading}
-            errorMessage={tip.error}
-            onMouseEnter={clearLeave}
-            onMouseLeave={scheduleClose}
-          />,
-          document.body,
-        )}
-
       {categoryModal &&
         typeof document !== "undefined" &&
         createPortal(
           <CategoryTransactionsModal
             filter={{ mode: "category", name: categoryModal, level: "category" }}
             currency={currency}
+            minAmount={amountMin}
+            maxAmount={amountMax}
             onClose={() => setCategoryModal(null)}
           />,
           document.body,

@@ -39,9 +39,12 @@ export function DemoKpiStrip() {
       accent: k.monthNet >= 0 ? "#0BC18D" : "#FF6F69",
     },
     {
-      label: "Net worth (est.)",
+      label: "Net worth",
       value: formatCurrency(k.netWorth, snap.family.homeCurrency),
-      delta: `${snap.accounts.length} accounts`,
+      delta:
+        snap.netWorthItems && snap.netWorthItems.length > 0
+          ? "From Net Worth Atlas"
+          : `${snap.accounts.length} accounts`,
       icon: Wallet,
       accent: "#AD74FF",
     },

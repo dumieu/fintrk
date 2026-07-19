@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
+import { requireAppAuth } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
 import { transactions, accounts, userCategories } from "@/lib/db/schema";
 import {
@@ -133,8 +133,9 @@ export interface MonthlyStacksResponse {
 
 export async function GET(request: NextRequest) {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
 
     const drillCategory = request.nextUrl.searchParams.get("category")?.trim() ?? null;
     if (drillCategory && drillCategory.length > 128) {

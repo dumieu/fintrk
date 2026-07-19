@@ -24,12 +24,12 @@ const TRUST = [
 ];
 
 /**
- * Hero band that surfaces FinTRK's AI connectivity as a top-of-page,
- * non-technical, security-forward value proposition.
+ * Surfaces FinTRK's AI connectivity as a dedicated landing section,
+ * non-technical and security-forward.
  */
 export function AiConnectBand() {
   return (
-    <div className="mx-auto mt-9 max-w-2xl">
+    <div className="mx-auto max-w-2xl">
       <style>{`
         @keyframes fmcp-flow { to { background-position: -16px 0; } }
         @keyframes fmcp-glow { 0%,100% { opacity:.55 } 50% { opacity:1 } }

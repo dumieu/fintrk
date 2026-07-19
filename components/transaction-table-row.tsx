@@ -105,32 +105,34 @@ export function TransactionTableRow({
           </div>
         </div>
       </TransactionInsightHover>
-      <div className="min-w-0 overflow-hidden">
-        <div className="min-w-0 flex flex-wrap items-center gap-1.5 py-0.5 -my-0.5 pr-1">
-          <div className="min-w-0 flex-1">
-            <MerchantNameEditor txn={txn} onSaved={onSavedMerchantName} />
+      <TransactionInsightHover txn={txn}>
+        <div className="min-w-0 overflow-hidden">
+          <div className="min-w-0 flex flex-wrap items-center gap-1.5 py-0.5 -my-0.5 pr-1">
+            <div className="min-w-0 flex-1">
+              <MerchantNameEditor txn={txn} onSaved={onSavedMerchantName} />
+            </div>
+            {txn.doubleChargeSuspect ? (
+              <DoubleChargeSuspectBadge
+                suspect={txn.doubleChargeSuspect}
+                onReviewStrong={onReviewDoubleCharge}
+              />
+            ) : null}
           </div>
-          {txn.doubleChargeSuspect ? (
-            <DoubleChargeSuspectBadge
-              suspect={txn.doubleChargeSuspect}
-              onReviewStrong={onReviewDoubleCharge}
+          <div className="mt-0.5 flex items-start gap-2 text-[12px] text-muted-foreground sm:hidden">
+            <TransactionCategoryIcon
+              categoryName={txn.categoryName}
+              subcategoryName={txn.subcategoryName}
+              size="sm"
+              className="mt-0.5"
             />
-          ) : null}
+            <span className="min-w-0 flex-1 truncate">
+              {txn.subcategoryName
+                ? `${txn.categoryName ?? "—"} · ${txn.subcategoryName}`
+                : (txn.categoryName ?? "Uncategorized")}
+            </span>
+          </div>
         </div>
-        <div className="mt-0.5 flex items-start gap-2 text-[12px] text-muted-foreground sm:hidden">
-          <TransactionCategoryIcon
-            categoryName={txn.categoryName}
-            subcategoryName={txn.subcategoryName}
-            size="sm"
-            className="mt-0.5"
-          />
-          <span className="min-w-0 flex-1 truncate">
-            {txn.subcategoryName
-              ? `${txn.categoryName ?? "—"} · ${txn.subcategoryName}`
-              : (txn.categoryName ?? "Uncategorized")}
-          </span>
-        </div>
-      </div>
+      </TransactionInsightHover>
       <div className="col-span-2 flex min-h-0 items-center sm:col-span-1 sm:h-full sm:min-w-0">
         <TransactionLabelCell
           transactionId={txn.id}

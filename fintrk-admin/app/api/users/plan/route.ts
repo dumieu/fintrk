@@ -25,7 +25,7 @@ export async function PATCH(request: NextRequest) {
   const clerkSecret = userAppClerkSecret();
   if (!clerkSecret) {
     return NextResponse.json(
-      { error: "USER_APP_CLERK_SECRET_KEY (or CLERK_SECRET_KEY) is not configured" },
+      { error: "USER_APP_CLERK_SECRET_KEY is not configured" },
       { status: 503 },
     );
   }
@@ -40,16 +40,27 @@ export async function PATCH(request: NextRequest) {
 
     const getRes = await fetch(
       `${CLERK_API_BASE}/users/${encodeURIComponent(clerkUserId)}`,
-      { headers: { Authorization: `Bearer ${clerkSecret}` }, cache: "no-store" },
+      {
+        headers: { Authorization: `Bearer ${clerkSecret}` },
+        cache: "no-store",
+        redirect: "manual",
+      },
     );
     if (!getRes.ok) {
+      console.error("Clerk user lookup failed:", getRes.status);
       return NextResponse.json(
-        { error: `Clerk user not found (${getRes.status})` },
+        { error: getRes.status === 404 ? "User not found" : "Failed to load Clerk user" },
         { status: getRes.status === 404 ? 404 : 502 },
       );
     }
 
     const existing = (await getRes.json()) as ClerkListUser;
+    if (existing.banned === true) {
+      return NextResponse.json(
+        { error: "Cannot change plan for a banned Clerk user" },
+        { status: 409 },
+      );
+    }
     const prevMeta = { ...(existing.public_metadata ?? {}) };
 
     const nextMeta =
@@ -74,6 +85,7 @@ export async function PATCH(request: NextRequest) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ public_metadata: nextMeta }),
+        redirect: "manual",
       },
     );
 
@@ -85,7 +97,7 @@ export async function PATCH(request: NextRequest) {
 
     const updated = (await patchRes.json()) as ClerkListUser;
     const meta = extractRequestMeta(request);
-    await logAdminAudit({
+    const audited = await logAdminAudit({
       adminIdentifier: gate.email || gate.userId,
       action: action === "grant_pro" ? "plan_grant_pro" : "plan_revoke_pro",
       resource: "clerk_public_metadata",
@@ -97,6 +109,19 @@ export async function PATCH(request: NextRequest) {
         ua: meta.userAgent,
       },
     });
+    if (!audited) {
+      return NextResponse.json(
+        {
+          error: "Plan updated but audit log failed to persist",
+          success: true,
+          plan: (updated.public_metadata?.plan as string) ?? nextMeta.plan,
+          planStatus:
+            (updated.public_metadata?.planStatus as string) ?? nextMeta.planStatus,
+          auditFailed: true,
+        },
+        { status: 500 },
+      );
+    }
 
     return NextResponse.json({
       success: true,

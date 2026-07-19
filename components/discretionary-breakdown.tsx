@@ -7,13 +7,15 @@ import type {
   DiscretionaryResponse,
 } from "@/app/api/analytics/discretionary/route";
 import { formatCurrency } from "@/lib/format";
-import { AnalyticsDetailTooltip, detailTipAnchorFromEvent } from "@/components/analytics-detail-tooltip";
-import { useAnalyticsDetail } from "@/components/use-analytics-detail";
 import { CategoryTransactionsModal } from "@/components/category-transactions-modal";
 import { chartMutedClass } from "@/lib/chart-ui";
+import {
+  analyticsChartFiltersToSearchParams,
+  type AnalyticsChartFilters,
+  DEFAULT_ANALYTICS_CHART_FILTERS,
+  ANALYTICS_TXN_SIZE_OPEN,
+} from "@/lib/analytics/workspace-filters";
 import { cn } from "@/lib/utils";
-
-const DEFAULT_MONTHS = 12;
 
 function compactK(n: number): string {
   const a = Math.abs(n);
@@ -22,17 +24,22 @@ function compactK(n: number): string {
   return Math.round(n).toLocaleString();
 }
 
-export function DiscretionaryBreakdown({ months = DEFAULT_MONTHS }: { months?: number }) {
+export function DiscretionaryBreakdown({
+  filters = DEFAULT_ANALYTICS_CHART_FILTERS,
+}: {
+  filters?: AnalyticsChartFilters;
+}) {
   const [data, setData] = useState<DiscretionaryResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { tip, open, scheduleClose, clearLeave } = useAnalyticsDetail();
   const [leafModal, setLeafModal] = useState<string | null>(null);
+  const filterKey = analyticsChartFiltersToSearchParams(filters).toString();
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    fetch(`/api/analytics/discretionary?months=${months}`)
+    const params = analyticsChartFiltersToSearchParams(filters);
+    fetch(`/api/analytics/discretionary?${params}`)
       .then((r) => r.json())
       .then((j: DiscretionaryResponse | { error: string }) => {
         if (cancelled) return;
@@ -54,7 +61,9 @@ export function DiscretionaryBreakdown({ months = DEFAULT_MONTHS }: { months?: n
     return () => {
       cancelled = true;
     };
-  }, [months]);
+    // filterKey captures all filter fields used in the request
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterKey]);
 
   if (loading && !data) {
     return (
@@ -73,9 +82,9 @@ export function DiscretionaryBreakdown({ months = DEFAULT_MONTHS }: { months?: n
   if (data.total <= 0) {
     return (
       <div className={cn("flex min-h-0 flex-1 flex-col items-center justify-center gap-2", chartMutedClass)}>
-        <p>No discretionary data yet.</p>
+        <p>No discretionary data for this chart filter.</p>
         <p className="text-[11px] text-muted-foreground/70">
-          Tag categories with a discretionary type to populate this view.
+          Try widening the time window, amount range, or category visibility.
         </p>
       </div>
     );
@@ -90,32 +99,10 @@ export function DiscretionaryBreakdown({ months = DEFAULT_MONTHS }: { months?: n
             bucket={b}
             currency={data.primaryCurrency}
             monthsCovered={data.monthsCovered}
-            open={open}
-            scheduleClose={scheduleClose}
             onLeafClick={setLeafModal}
           />
         ))}
       </div>
-
-      {typeof document !== "undefined" &&
-        tip &&
-        createPortal(
-          <AnalyticsDetailTooltip
-            rect={tip.rect}
-            clientX={tip.clientX}
-            clientY={tip.clientY}
-            avoidRect={tip.avoidRect}
-            entity={tip.entity}
-            label={tip.label}
-            accentColor={tip.accent}
-            data={tip.data}
-            loading={tip.loading}
-            errorMessage={tip.error}
-            onMouseEnter={clearLeave}
-            onMouseLeave={scheduleClose}
-          />,
-          document.body,
-        )}
 
       {leafModal &&
         typeof document !== "undefined" &&
@@ -123,6 +110,10 @@ export function DiscretionaryBreakdown({ months = DEFAULT_MONTHS }: { months?: n
           <CategoryTransactionsModal
             filter={{ mode: "category", name: leafModal, level: "subcategory" }}
             currency={data.primaryCurrency}
+            minAmount={filters.minAmount > 0 ? filters.minAmount : undefined}
+            maxAmount={
+              filters.maxAmount < ANALYTICS_TXN_SIZE_OPEN ? filters.maxAmount : undefined
+            }
             onClose={() => setLeafModal(null)}
           />,
           document.body,
@@ -135,22 +126,17 @@ function BucketCard({
   bucket,
   currency,
   monthsCovered,
-  open,
-  scheduleClose,
   onLeafClick,
 }: {
   bucket: DiscretionaryBucket;
   currency: string;
   monthsCovered: number;
-  open: ReturnType<typeof useAnalyticsDetail>["open"];
-  scheduleClose: ReturnType<typeof useAnalyticsDetail>["scheduleClose"];
   onLeafClick: (leafName: string) => void;
 }) {
   const accent = bucket.accent;
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2">
-      {/* Header — colored title + share + total (compact for half-width card) */}
       <div className="text-center">
         <h3
           className="text-[11px] font-bold leading-tight"
@@ -171,8 +157,6 @@ function BucketCard({
         </div>
       </div>
 
-      {/* Card body — soft tinted glass with leaves stacked vertically.
-       *  Internal scroll keeps the card height constant and lets long lists be browsed. */}
       <div
         className="min-h-0 flex-1 overflow-hidden rounded-xl border backdrop-blur-md"
         style={{
@@ -192,20 +176,8 @@ function BucketCard({
                 key={leaf.name}
                 className="group flex cursor-pointer flex-col items-center gap-0.5 py-1.5 transition-colors hover:bg-chart-hover"
                 onClick={() => onLeafClick(leaf.name)}
-                onMouseEnter={(e) =>
-                  void open({
-                    ...detailTipAnchorFromEvent(e),
-                    entity: "category",
-                    value: leaf.name,
-                    label: leaf.name,
-                    accent,
-                  })
-                }
-                onMouseLeave={scheduleClose}
               >
-                <span
-                  className="text-[15px] font-extrabold leading-none tabular-nums tracking-tight text-foreground"
-                >
+                <span className="text-[15px] font-extrabold leading-none tabular-nums tracking-tight text-foreground">
                   {compactK(leaf.monthlyAvg)}
                 </span>
                 <span className="line-clamp-2 px-1 text-center text-[9px] leading-tight text-muted-foreground">
@@ -217,7 +189,6 @@ function BucketCard({
         )}
       </div>
 
-      {/* Footer — bucket-level monthly average */}
       <div className="text-center text-[9px] text-muted-foreground">
         ≈ {compactCurrency(bucket.monthlyAvg, currency)} / mo · {monthsCovered}mo
       </div>

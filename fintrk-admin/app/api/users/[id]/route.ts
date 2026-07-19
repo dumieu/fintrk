@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth-admin";
-import { decryptRow } from "@/lib/crypto/encrypted-fields";
+import { adminRowFields } from "@/lib/crypto/phi-response";
 import { getActiveDecryptionSession, trackSessionAccess } from "@/lib/decryption-session";
 import {
   CLERK_API_BASE,
@@ -96,7 +96,7 @@ export async function GET(
       GROUP BY country_iso ORDER BY count DESC LIMIT 12`,
 
       sql`SELECT
-        COALESCE(t.merchant_name, m.canonical_name, '—') AS merchant,
+        COALESCE(t.merchant_name, m.canonical_name, 'Unknown') AS merchant,
         COUNT(*)::int AS txns,
         SUM(ABS(t.base_amount))::numeric(18,2) AS volume
       FROM transactions t
@@ -154,15 +154,24 @@ export async function GET(
     const profileRow = (profile as Record<string, unknown>[])[0];
     if (!profileRow) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
-    // Decrypt PII / encrypted columns only with an active decryption session.
-    const session = await getActiveDecryptionSession();
-    let decryptedProfile = profileRow;
-    let decryptedStatements = recentStatements;
+    // Decrypt PII only with an active decryption session; otherwise withhold v2: ciphertext.
+    const session = await getActiveDecryptionSession({
+      email: gate.email,
+      userId: gate.userId,
+    });
+    const canDecrypt = Boolean(session);
+    const decryptedProfile = adminRowFields(
+      "users",
+      profileRow as Record<string, unknown>,
+      canDecrypt,
+    );
+    const decryptedStatements = (recentStatements as Record<string, unknown>[]).map((s) =>
+      adminRowFields("statements", s, canDecrypt),
+    );
+    const decryptedTransactions = (recentTransactions as Record<string, unknown>[]).map((t) =>
+      adminRowFields("transactions", t, canDecrypt),
+    );
     if (session) {
-      decryptedProfile = decryptRow("users", profileRow);
-      decryptedStatements = (recentStatements as Record<string, unknown>[]).map((s) =>
-        decryptRow("statements", s),
-      );
       await trackSessionAccess(session.id, "users");
     }
 
@@ -173,7 +182,11 @@ export async function GET(
       try {
         const res = await fetch(
           `${CLERK_API_BASE}/users/${encodeURIComponent(clerkUserId)}`,
-          { headers: { Authorization: `Bearer ${clerkSecret}` }, cache: "no-store" },
+          {
+            headers: { Authorization: `Bearer ${clerkSecret}` },
+            cache: "no-store",
+            redirect: "manual",
+          },
         );
         if (res.ok) {
           const user = (await res.json()) as ClerkListUser;
@@ -193,7 +206,7 @@ export async function GET(
 
     return NextResponse.json({
       profile: decryptedProfile,
-      decrypted: Boolean(session),
+      decrypted: canDecrypt,
       plan,
       planStatus,
       counts: (counts as Record<string, unknown>[])[0] || {},
@@ -205,7 +218,7 @@ export async function GET(
       topMerchants,
       topCategories,
       activeRecurring,
-      recentTransactions,
+      recentTransactions: decryptedTransactions,
       recentStatements: decryptedStatements,
       aiCost: (aiCost as Record<string, unknown>[])[0] || { total_cost: 0, cost_7d: 0, calls: 0 },
       hourly,

@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import {
   Upload,
   ArrowRight,
-  Sparkles,
   ShieldCheck,
   BrainCircuit,
   Wallet,
@@ -31,6 +30,10 @@ import {
 
 import { AiConnectBand } from "@/components/ai-connect-band";
 import { AdvantageValueLine } from "@/components/advantage-value-line";
+import { AnimatedDemoButton } from "@/components/animated-demo-button";
+import { UnauthScrollCue, UnauthSnapScrollInit } from "@/components/unauth-snap-scroll";
+import { UnauthSignalRail } from "@/components/unauth-signal-rail";
+import { fintrkPlanDisplayPriceUsd } from "@/lib/plan-pricing";
 
 const CapitalFlowBackground = dynamic(
   () => import("@/components/capital-flow-background").then((m) => ({ default: m.CapitalFlowBackground })),
@@ -73,9 +76,10 @@ export default async function Unauth1() {
 
   return (
     <div className="overflow-x-hidden text-white">
+      <UnauthSnapScrollInit />
       {/* ──────────────────────── Header ──────────────────────── */}
       <header
-        className="sticky top-0 z-50 border-b border-white/10 backdrop-blur-md"
+        className="fixed inset-x-0 top-0 z-50 border-b border-white/10 backdrop-blur-md"
         style={{ background: "rgba(3, 10, 14, 0.74)" }}
       >
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
@@ -91,35 +95,23 @@ export default async function Unauth1() {
             >
               FinTRK
             </span>
-            <span className="hidden text-xs uppercase tracking-widest text-emerald-200/50 sm:inline">.io</span>
           </Link>
-          <nav className="flex items-start gap-3 sm:gap-5" aria-label="Main navigation">
+          <nav className="flex items-center gap-3 sm:gap-5" aria-label="Main navigation">
             <Link
               href={SIGN_IN_URL}
-              className="hidden text-sm text-white/65 transition-colors hover:text-white sm:inline pt-2"
+              className="text-sm text-white/65 transition-colors hover:text-white"
             >
               Sign In
             </Link>
-            <div className="flex flex-col items-center gap-1">
-              <Link href={SIGN_UP_URL}>
-                <Button
-                  size="sm"
-                  className="border-0 text-emerald-950 shadow-[0_0_24px_rgba(11,193,141,0.35)] hover:opacity-95"
-                  style={{ background: `linear-gradient(90deg, ${GREEN}, ${BLUE})` }}
-                >
-                  Get Started
-                </Button>
-              </Link>
-              <AdvantageValueLine tone="dark" align="center" compact />
-            </div>
           </nav>
         </div>
       </header>
 
       <main>
-        {/* ────────────────────── Hero ────────────────────── */}
+        {/* Hero — full viewport splash; one scroll lands on AI connect band */}
         <section
-          className="relative min-h-[680px] overflow-hidden sm:min-h-[760px] lg:min-h-[820px]"
+          data-unauth-snap="hero"
+          className="relative flex min-h-svh flex-col overflow-x-clip"
           style={{
             background:
               "radial-gradient(1200px 720px at 18% -10%, #013a2c 0%, transparent 60%), radial-gradient(950px 620px at 88% 6%, #0a1f47 0%, transparent 55%), radial-gradient(800px 600px at 60% 110%, #1a1140 0%, transparent 55%), linear-gradient(180deg, #02110d 0%, #051a18 48%, #04101f 100%)",
@@ -144,93 +136,102 @@ export default async function Unauth1() {
             aria-hidden="true"
           />
 
-          <div className="relative z-10 px-4 pb-14 pt-12 sm:px-6 sm:pb-16 sm:pt-20 lg:pb-24 lg:pt-24">
-            <div className="mx-auto max-w-5xl text-center">
-              <p className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.05] px-4 py-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-white/80 backdrop-blur-sm sm:text-xs">
-                <Sparkles className="h-3.5 w-3.5" style={{ color: GOLD }} aria-hidden />
-                Budgeting, tracking &amp; retirement planning in one place
-              </p>
-              <h1
-                id="hero-heading"
-                className="mx-auto max-w-4xl text-3xl font-bold leading-[1.08] tracking-tight text-white sm:text-5xl lg:text-[3.85rem]"
-              >
-                See where every dollar goes
-                <span className="block pt-2">
+          <div className="relative z-10 flex flex-1 flex-col items-center justify-center px-4 pb-20 pt-[4.25rem] sm:px-6 sm:pb-24 sm:pt-[4.75rem]">
+            <div className="mx-auto w-full max-w-5xl text-center">
+              <div className="mb-4 flex justify-center sm:mb-5">
+                <span
+                  className="relative inline-flex max-w-[min(100%,24rem)] items-center justify-center overflow-hidden rounded-full px-[1px] py-[1px] sm:max-w-none"
+                  style={{
+                    background: `linear-gradient(110deg, ${GOLD} 0%, ${GREEN} 35%, ${BLUE} 70%, ${PURPLE} 100%)`,
+                    boxShadow:
+                      "0 0 0 1px rgba(255,255,255,0.06), 0 0 24px rgba(11,193,141,0.22), 0 0 40px rgba(44,162,255,0.12)",
+                  }}
+                >
                   <span
+                    className="relative inline-flex items-center rounded-full px-3.5 py-1.5 sm:px-4 sm:py-1.5"
                     style={{
-                      background: `linear-gradient(90deg, ${GREEN} 0%, ${BLUE} 45%, ${PURPLE} 78%, ${GOLD} 100%)`,
-                      WebkitBackgroundClip: "text",
-                      WebkitTextFillColor: "transparent",
-                      backgroundClip: "text",
+                      background:
+                        "linear-gradient(180deg, rgba(2,17,13,0.96) 0%, rgba(4,16,31,0.98) 100%)",
                     }}
                   >
-                    and exactly where it takes you.
-                  </span>
-                </span>
-              </h1>
-              <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-white/80 sm:text-lg">
-                FinTRK turns the statements you already have into your household&rsquo;s
-                complete financial picture: cashflow, spending, and net worth, organized
-                automatically. Then the Net Worth Atlas projects your wealth, retirement,
-                and financial independence to age 100, and shows you which moves change
-                the outcome. No bank logins. No spreadsheets.
-              </p>
-
-              <div className="mt-9 flex flex-col items-center gap-2">
-                <Link href={SIGN_UP_URL} className="block">
-                  <Button
-                    size="lg"
-                    className="group h-12 w-full border-0 px-7 text-base font-semibold text-emerald-950 shadow-[0_0_36px_rgba(11,193,141,0.45)] transition-all hover:scale-[1.02] hover:shadow-[0_0_56px_rgba(11,193,141,0.7)] sm:w-auto"
-                    style={{ background: `linear-gradient(90deg, ${GREEN}, ${BLUE})` }}
-                  >
-                    <Upload className="mr-2 h-4 w-4 shrink-0 transition-transform group-hover:-translate-y-0.5" aria-hidden />
-                    Upload Your First Statement
-                    <ArrowRight className="ml-2 h-4 w-4 shrink-0 transition-transform group-hover:translate-x-0.5" aria-hidden />
-                  </Button>
-                </Link>
-                <AdvantageValueLine tone="dark" align="center" />
-              </div>
-              <p className="mt-3 text-[11px] uppercase tracking-widest text-white/40">
-                Private by design · Encrypted at rest · Your data stays yours
-              </p>
-
-              <AiConnectBand />
-
-              <div className="mx-auto mt-12 grid max-w-2xl grid-cols-3 gap-3 sm:gap-6">
-                {[
-                  { k: "30s", v: "Statement to organized", c: GREEN },
-                  { k: "Age 100", v: "Every plan projected to", c: BLUE },
-                  { k: "400", v: "Market simulations per plan", c: PURPLE },
-                ].map((s) => (
-                  <div
-                    key={s.k}
-                    className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-3 backdrop-blur-sm"
-                  >
-                    <div
-                      className="text-xl font-bold sm:text-3xl"
+                    <span
+                      className="text-[10px] font-semibold tracking-[0.04em] sm:text-[11px] sm:tracking-[0.06em]"
                       style={{
-                        background: `linear-gradient(135deg, ${s.c}, ${BLUE})`,
+                        background: `linear-gradient(90deg, ${GOLD} 0%, ${GREEN} 42%, ${BLUE} 100%)`,
                         WebkitBackgroundClip: "text",
                         WebkitTextFillColor: "transparent",
                         backgroundClip: "text",
                       }}
                     >
-                      {s.k}
-                    </div>
-                    <div className="mt-1 text-[10px] uppercase tracking-wider text-white/55 sm:text-xs">
-                      {s.v}
-                    </div>
+                      The world&rsquo;s top household budgeting app
+                    </span>
+                  </span>
+                </span>
+              </div>
+              <h1
+                id="hero-heading"
+                className="mx-auto max-w-4xl text-3xl font-bold leading-[1.08] tracking-tight text-white sm:text-5xl lg:text-[3.85rem]"
+              >
+                See where every dollar goes
+              </h1>
+              <UnauthSignalRail />
+
+              <div className="mt-9 flex flex-col items-center gap-4">
+                <div className="flex w-full flex-col items-stretch gap-3 sm:w-auto sm:flex-row sm:items-start sm:justify-center">
+                  <div className="flex w-full flex-col items-center gap-2 sm:w-auto">
+                    <Link href={SIGN_UP_URL} className="block w-full sm:w-auto">
+                      <Button
+                        size="lg"
+                        className="group h-12 w-full border-0 px-7 text-base font-semibold text-emerald-950 shadow-[0_0_36px_rgba(11,193,141,0.45)] transition-all hover:scale-[1.02] hover:shadow-[0_0_56px_rgba(11,193,141,0.7)] sm:w-auto"
+                        style={{ background: `linear-gradient(90deg, ${GREEN}, ${BLUE})` }}
+                      >
+                        <Upload className="mr-2 h-4 w-4 shrink-0 transition-transform group-hover:-translate-y-0.5" aria-hidden />
+                        Start Free Trial
+                        <ArrowRight className="ml-2 h-4 w-4 shrink-0 transition-transform group-hover:translate-x-0.5" aria-hidden />
+                      </Button>
+                    </Link>
+                    <p className="text-xs text-white/55">
+                      then {fintrkPlanDisplayPriceUsd("annually")}/month. Billed yearly.
+                    </p>
+                    <AdvantageValueLine tone="dark" align="center" />
                   </div>
-                ))}
+                  <AnimatedDemoButton hero className="mt-0 w-full justify-center sm:w-auto" />
+                </div>
               </div>
             </div>
           </div>
+
+          <UnauthScrollCue targetId="ai-connect" />
 
           <div
             className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-32"
             style={{ background: "linear-gradient(180deg, transparent 0%, #050a12 82%, #050a12 100%)" }}
             aria-hidden="true"
           />
+        </section>
+
+        {/* ── AI Connect ── */}
+        <section
+          id="ai-connect"
+          data-unauth-snap="landing"
+          className="relative border-t border-white/[0.06] px-4 py-10 sm:px-6 sm:py-14"
+          style={{
+            background:
+              "linear-gradient(180deg, #050a12 0%, #04161a 42%, #05101c 58%, #050a12 100%)",
+          }}
+          aria-label="Connect FinTRK to ChatGPT, Claude, and Perplexity"
+        >
+          <div
+            className="pointer-events-none absolute inset-0"
+            style={{
+              background:
+                "radial-gradient(ellipse 70% 55% at 50% 40%, rgba(11,193,141,.08), transparent 65%), radial-gradient(ellipse 50% 40% at 50% 100%, rgba(44,162,255,.05), transparent)",
+            }}
+            aria-hidden="true"
+          />
+          <div className="relative z-10 mx-auto max-w-5xl">
+            <AiConnectBand />
+          </div>
         </section>
 
         {/* ────────────────── Three Pillars ────────────────── */}
@@ -729,8 +730,8 @@ export default async function Unauth1() {
                 {
                   icon: ShieldCheck,
                   color: GREEN,
-                  title: "Encrypted end to end",
-                  text: "Encrypted in transit and at rest. Statements are processed privately and the raw files can be wiped any time from your settings.",
+                  title: "AES-256 encrypted at rest",
+                  text: "TLS in transit, AES-256-GCM at rest. Every statement you upload is compressed and encrypted before it touches the database, kept for you to re-open or download, and wiped permanently the moment you delete it.",
                 },
                 {
                   icon: Landmark,
@@ -814,21 +815,16 @@ export default async function Unauth1() {
                     className="group h-12 w-full border-0 px-8 text-base font-semibold text-emerald-950 shadow-[0_0_44px_rgba(11,193,141,0.5)] transition-all hover:scale-[1.02] hover:shadow-[0_0_64px_rgba(11,193,141,0.75)] sm:w-auto"
                     style={{ background: `linear-gradient(90deg, ${GREEN}, ${BLUE})` }}
                   >
-                    Create Your Account
+                    Start Free Trial
                     <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" aria-hidden />
                   </Button>
                 </Link>
+                <p className="text-xs text-white/55">
+                  then {fintrkPlanDisplayPriceUsd("annually")}/month. Billed yearly.
+                </p>
                 <AdvantageValueLine tone="dark" align="center" />
               </div>
-              <Link href={SIGN_IN_URL}>
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="h-12 w-full border-white/20 bg-white/[0.04] px-7 text-base font-medium text-white/90 hover:border-white/40 hover:bg-white/[0.08] hover:text-white sm:w-auto"
-                >
-                  I already have an account
-                </Button>
-              </Link>
+              <AnimatedDemoButton hero className="w-full justify-center sm:w-auto" />
             </div>
             <p className="mt-4 text-[11px] uppercase tracking-widest text-white/40">
               Private by design · Encrypted from upload to delete
@@ -854,7 +850,7 @@ export default async function Unauth1() {
               <span className="text-xs text-white/40">Track. Understand. Project.</span>
             </div>
             <p className="text-[11px] text-white/40">
-              &copy; {new Date().getFullYear()} FinTRK. Budgeting, tracking &amp; financial planning for households.
+              &copy; {new Date().getFullYear()} XTRK LLC. Budgeting, tracking &amp; financial planning for households.
             </p>
           </div>
         </footer>

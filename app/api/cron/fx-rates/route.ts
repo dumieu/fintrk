@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, resilientQuery } from "@/lib/db";
 import { fxRates } from "@/lib/db/schema";
+import { authorizeCron } from "@/lib/cron-auth";
 import { logServerError } from "@/lib/safe-error";
 import { recordCronFailure, recordCronRun } from "@/lib/cron-run";
 
@@ -11,15 +12,8 @@ const CRON_PATH = "/api/cron/fx-rates";
 const FRANKFURTER_API = "https://api.frankfurter.dev";
 const MAJOR_CURRENCIES = ["USD", "EUR", "GBP", "CHF", "JPY", "CAD", "AUD", "NZD", "SEK", "NOK", "DKK", "PLN", "CZK", "HUF", "RON", "BGN", "TRY", "ZAR", "BRL", "MXN", "INR", "CNY", "HKD", "SGD", "KRW", "THB", "MYR", "PHP", "IDR", "AED", "SAR", "ILS"];
 
-function verifyCronSecret(request: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET;
-  // Fail closed in production; allow unauthenticated local runs when unset.
-  if (!secret) return process.env.NODE_ENV !== "production";
-  return request.headers.get("authorization") === `Bearer ${secret}`;
-}
-
 export async function GET(request: NextRequest) {
-  if (!verifyCronSecret(request)) {
+  if (!authorizeCron(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

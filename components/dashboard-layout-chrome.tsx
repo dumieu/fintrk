@@ -2,7 +2,16 @@
 
 import type { ReactNode } from "react";
 import { DashboardHeader } from "@/components/dashboard-header";
-import { DashboardRibbonProvider, useDashboardRibbon } from "@/components/dashboard-ribbon-context";
+import {
+  DashboardRibbonProvider,
+  useDashboardRibbonValue,
+} from "@/components/dashboard-ribbon-context";
+
+/** Subscribes to ribbon state alone so page trees do not re-render on ribbon updates. */
+function DashboardHeaderSlot({ sessionActive = false }: { sessionActive?: boolean }) {
+  const { ribbon } = useDashboardRibbonValue();
+  return <DashboardHeader ribbon={ribbon} sessionActive={sessionActive} />;
+}
 
 function DashboardLayoutChromeInner({
   children,
@@ -11,10 +20,10 @@ function DashboardLayoutChromeInner({
   children: ReactNode;
   sessionActive?: boolean;
 }) {
-  const { ribbon } = useDashboardRibbon();
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <DashboardHeader ribbon={ribbon} sessionActive={sessionActive} />
+      <DashboardHeaderSlot sessionActive={sessionActive} />
+      {/* Single flex scrollport — fill-height pages own their scroll. */}
       <div className="flex min-h-0 flex-1 flex-col overflow-x-clip overflow-y-auto overscroll-y-contain [scrollbar-gutter:stable]">
         {children}
       </div>

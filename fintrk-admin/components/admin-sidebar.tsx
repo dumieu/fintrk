@@ -130,7 +130,7 @@ const PRIMARY_NAV = [
 
 export function AdminSidebar({ collapsed = false, onCollapsedChange }: Props) {
   const pathname = usePathname();
-  const { signOut } = useClerk();
+  const clerkPresent = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim());
   const [tables, setTables] = useState<TableInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const onTablesRoute = pathname.startsWith("/tables");
@@ -179,7 +179,6 @@ export function AdminSidebar({ collapsed = false, onCollapsedChange }: Props) {
   }, [tables, filter]);
 
   const toggleCollapse = () => onCollapsedChange?.(!collapsed);
-  const handleLogout = () => signOut({ redirectUrl: "/login" });
 
   if (collapsed) {
     return (
@@ -308,17 +307,28 @@ export function AdminSidebar({ collapsed = false, onCollapsedChange }: Props) {
 
       <Separator className="bg-slate-700/50" />
 
-      <div className="flex items-center gap-3 px-5 py-3">
-        <UserButton appearance={{ elements: { avatarBox: "h-8 w-8" } }} />
-        <button
-          onClick={handleLogout}
-          className="flex flex-1 items-center gap-3 rounded-lg px-2 py-2 text-sm text-slate-400 transition-all hover:bg-red-500/10 hover:text-red-400 cursor-pointer"
-        >
-          <LogOut className="h-4 w-4" />
-          Sign Out
-        </button>
-      </div>
+      {clerkPresent ? (
+        <ClerkAccountFooter />
+      ) : (
+        <div className="px-5 py-3 text-[11px] text-slate-500">Offline admin (no Clerk)</div>
+      )}
     </aside>
+  );
+}
+
+function ClerkAccountFooter() {
+  const { signOut } = useClerk();
+  return (
+    <div className="flex items-center gap-3 px-5 py-3">
+      <UserButton appearance={{ elements: { avatarBox: "h-8 w-8" } }} />
+      <button
+        onClick={() => signOut({ redirectUrl: "/login" })}
+        className="flex flex-1 items-center gap-3 rounded-lg px-2 py-2 text-sm text-slate-400 transition-all hover:bg-red-500/10 hover:text-red-400 cursor-pointer"
+      >
+        <LogOut className="h-4 w-4" />
+        Sign Out
+      </button>
+    </div>
   );
 }
 

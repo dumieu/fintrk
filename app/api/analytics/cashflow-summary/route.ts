@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
+import { requireAppAuth } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
 import { transactions, accounts } from "@/lib/db/schema";
 import {
@@ -47,8 +47,9 @@ export interface CashflowSummaryResponse {
  */
 export async function GET(request: NextRequest) {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
 
     const rawMonths = parseInt(
       request.nextUrl.searchParams.get("months") ?? String(DEFAULT_MAX_MONTHS),

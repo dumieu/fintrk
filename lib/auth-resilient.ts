@@ -1,6 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
+import { hasProAccess } from "@/lib/plan";
 
 const NO_STORE = { "Cache-Control": "no-store" } as const;
 
@@ -70,4 +71,29 @@ export function unauthorizedResponse() {
     },
     { status: 401, headers: NO_STORE }
   );
+}
+
+export function upgradeRequiredResponse() {
+  return NextResponse.json(
+    { error: "FinTRK Pro required.", code: "UPGRADE_REQUIRED" },
+    { status: 402, headers: NO_STORE },
+  );
+}
+
+/**
+ * Session + Pro gate for protected app APIs. Middleware only enforces when the
+ * session claim carries plan fields; this falls back to live publicMetadata so
+ * free users cannot call /api/* directly when the claim is missing/misconfigured.
+ * Demo pin (no Clerk session) is allowed for synthetic reads.
+ */
+export async function requireAppAuth(): Promise<
+  { ok: true; userId: string } | { ok: false; response: NextResponse }
+> {
+  const { userId } = await resilientAuth();
+  if (!userId) return { ok: false, response: unauthorizedResponse() };
+  if (userId === DEMO_USER_ID) return { ok: true, userId };
+  if (!(await hasProAccess())) {
+    return { ok: false, response: upgradeRequiredResponse() };
+  }
+  return { ok: true, userId };
 }

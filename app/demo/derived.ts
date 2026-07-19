@@ -84,11 +84,22 @@ export function computeKpis(snap: DemoSnapshot): DemoKpis {
     }
   }
 
-  // Net worth = sum of all account balances (using same compute as accountBalances).
+  // Prefer Atlas net-worth items (house, mortgage, cars, …) when present so
+  // marketing KPIs match /demo/net-worth. Fall back to account balances.
   let netWorth = 0;
-  for (const ab of accountBalances(snap)) {
-    if (ab.type === "credit") netWorth -= Math.abs(ab.balance); // outstanding debt
-    else netWorth += ab.balance;
+  const nwItems = snap.netWorthItems;
+  if (nwItems && nwItems.length > 0) {
+    for (const item of nwItems) {
+      if (item.is_active === false) continue;
+      const a = Math.abs(num(item.amount));
+      if (item.kind === "liability") netWorth -= a;
+      else netWorth += a;
+    }
+  } else {
+    for (const ab of accountBalances(snap)) {
+      if (ab.type === "credit") netWorth -= Math.abs(ab.balance);
+      else netWorth += ab.balance;
+    }
   }
 
   // Recurring KPI = active outflow subscriptions / bills only (not income).

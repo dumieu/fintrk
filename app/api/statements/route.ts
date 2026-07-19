@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { and, desc, eq, sql } from "drizzle-orm";
-import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
+import { requireAppAuth } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
 import { accounts, statements, transactions } from "@/lib/db/schema";
 import { excludeIgnoredSql } from "@/lib/db/excluded-transactions";
@@ -12,14 +12,19 @@ const NO_STORE = { "Cache-Control": "no-store" } as const;
 
 export async function GET() {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
 
     const rows = await resilientQuery(() =>
       db
         .select({
           id: statements.id,
           fileName: statements.fileName,
+          fileMimeType: statements.fileMimeType,
+          fileSize: statements.fileSize,
+          storedSize: statements.storedSize,
+          hasFile: sql<boolean>`(${statements.fileBlob} IS NOT NULL)`,
           accountName: accounts.accountName,
           institutionName: accounts.institutionName,
           accountType: accounts.accountType,
@@ -33,7 +38,7 @@ export async function GET() {
           createdAt: statements.createdAt,
         })
         .from(statements)
-        .leftJoin(accounts, eq(statements.accountId, accounts.id))
+        .leftJoin(accounts, and(eq(statements.accountId, accounts.id), eq(accounts.userId, userId)))
         .leftJoin(
           transactions,
           and(
@@ -62,6 +67,10 @@ export async function GET() {
       statements: rows.map((row) => ({
         id: row.id,
         name: row.fileName,
+        mimeType: row.fileMimeType,
+        sizeBytes: row.fileSize ?? null,
+        storedSize: row.storedSize ?? null,
+        hasFile: Boolean(row.hasFile),
         account: row.accountName
           ? {
               name: df(row.accountName),

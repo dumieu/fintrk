@@ -9,6 +9,7 @@ import {
 } from "@/lib/mcp/tokens";
 import { hasProAccessForClerkUserId } from "@/lib/plan";
 import { logServerError } from "@/lib/safe-error";
+import { checkRateLimit, clientIpFrom, getRateLimitHeaders } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,6 +48,20 @@ async function readParams(req: NextRequest): Promise<URLSearchParams> {
 }
 
 export async function POST(req: NextRequest) {
+  const rl = checkRateLimit(`${clientIpFrom(req)}:mcp-token`, "api-mcp-token");
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "temporarily_unavailable", error_description: "Rate limit exceeded" },
+      {
+        status: 429,
+        headers: corsHeaders({
+          "Cache-Control": "no-store",
+          ...getRateLimitHeaders(rl.remaining, rl.resetAt),
+        }),
+      },
+    );
+  }
+
   const params = await readParams(req);
   const grantType = params.get("grant_type");
   purgeExpiredCodes();

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { ensureStripeCatalog } from "@/lib/setup-stripe-catalog";
 import { hasStripeKey } from "@/lib/stripe";
+import { authorizeCron } from "@/lib/cron-auth";
 import { logServerError } from "@/lib/safe-error";
 import { recordCronFailure, recordCronRun } from "@/lib/cron-run";
 
@@ -10,16 +11,9 @@ export const runtime = "nodejs";
 
 const CRON_PATH = "/api/cron/setup-stripe";
 
-function verifyCronSecret(request: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET;
-  // Fail closed in production; allow unauthenticated local runs when unset.
-  if (!secret) return process.env.NODE_ENV !== "production";
-  return request.headers.get("authorization") === `Bearer ${secret}`;
-}
-
 /** One-time / repeatable Stripe catalog bootstrap (FinTRK Pro prices). */
 export async function GET(request: NextRequest) {
-  if (!verifyCronSecret(request)) {
+  if (!authorizeCron(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

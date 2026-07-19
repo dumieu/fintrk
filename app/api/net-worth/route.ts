@@ -7,7 +7,7 @@
  *   PATCH  /api/net-worth/items    -> { item }                    (bulk-replace, see items/route.ts)
  */
 import { NextResponse } from "next/server";
-import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
+import { requireAppAuth } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
 import { netWorthItems, netWorthSettings } from "@/lib/db/schema";
 import { eq, and, asc } from "drizzle-orm";
@@ -68,8 +68,9 @@ const DEFAULTS = settingsSchema.parse({
 
 export async function GET() {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
 
     const [items, settingsRow] = await Promise.all([
       resilientQuery(() =>
@@ -130,8 +131,9 @@ export async function GET() {
 
 export async function PUT(req: Request) {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
 
     const body = await req.json();
     const parsed = settingsSchema.parse(body);

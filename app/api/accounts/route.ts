@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
+import { requireAppAuth } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
 import { accounts } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
@@ -25,8 +25,9 @@ function decryptAccount<T extends Partial<AccountRow>>(row: T): T {
 
 export async function GET() {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
 
     const rows = await resilientQuery(() =>
       db.select().from(accounts).where(eq(accounts.userId, userId)).orderBy(accounts.createdAt),
@@ -41,8 +42,9 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
 
     const body = await request.json();
     const parsed = createAccountSchema.safeParse(body);
@@ -50,11 +52,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400, headers: NO_STORE });
     }
 
-    const { institutionName, accountName, ...rest } = parsed.data;
+    const { institutionName, accountName, maskedNumber: rawMask, ...rest } = parsed.data;
+    const maskedNumber =
+      typeof rawMask === "string" && rawMask.trim() ? rawMask.trim() : undefined;
     const [created] = await resilientQuery(() =>
       db.insert(accounts).values({
         userId,
         ...rest,
+        maskedNumber,
         accountName: ef(accountName) ?? accountName,
         ...(institutionName !== undefined ? { institutionName: ef(institutionName) } : {}),
       }).returning(),
@@ -69,8 +74,9 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
 
     const body = await request.json();
     const parsed = updateAccountSchema.safeParse(body);
@@ -78,10 +84,17 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400, headers: NO_STORE });
     }
 
-    const { id, institutionName, accountName, ...updates } = parsed.data;
+    const { id, institutionName, accountName, maskedNumber: rawMask, ...updates } = parsed.data;
+    const maskedNumber =
+      rawMask === undefined
+        ? undefined
+        : typeof rawMask === "string" && rawMask.trim()
+          ? rawMask.trim()
+          : null;
     const [updated] = await resilientQuery(() =>
       db.update(accounts).set({
         ...updates,
+        ...(maskedNumber !== undefined ? { maskedNumber } : {}),
         ...(institutionName !== undefined ? { institutionName: ef(institutionName) } : {}),
         ...(accountName !== undefined ? { accountName: ef(accountName) ?? "" } : {}),
         updatedAt: new Date(),
@@ -101,8 +114,9 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
 
     const body = await request.json();
     const parsed = z.object({ id: z.string().uuid() }).safeParse(body);
@@ -110,9 +124,11 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "Invalid account ID" }, { status: 400, headers: NO_STORE });
     }
 
+    // Clear mask so UNIQUE(user, type, mask, currency) frees for a new card
+    // with the same last-four; historical txns stay on this inactive row.
     const [updated] = await resilientQuery(() =>
       db.update(accounts)
-        .set({ isActive: false, updatedAt: new Date() })
+        .set({ isActive: false, maskedNumber: null, updatedAt: new Date() })
         .where(and(eq(accounts.id, parsed.data.id), eq(accounts.userId, userId)))
         .returning(),
     );

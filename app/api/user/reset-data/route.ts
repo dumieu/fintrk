@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
+import { requireAppAuth } from "@/lib/auth-resilient";
 import { wipeUserData } from "@/lib/wipe-user-data";
 import { logServerError } from "@/lib/safe-error";
 
@@ -16,8 +16,9 @@ const NO_STORE = { "Cache-Control": "no-store" } as const;
  */
 export async function DELETE() {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
 
     const counts = await wipeUserData(userId);
 

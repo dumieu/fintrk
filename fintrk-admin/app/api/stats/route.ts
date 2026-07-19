@@ -63,15 +63,19 @@ export async function GET() {
         [{}],
       ),
 
-      // 3. 30-day sparklines
+      // 3. 30-day sparklines (UTC days - matches users list charts / avoids local TZ skew)
       safe(
         sql`WITH days AS (
-            SELECT generate_series(CURRENT_DATE - 29, CURRENT_DATE, '1 day'::interval)::date AS day
+            SELECT generate_series(
+              ((NOW() AT TIME ZONE 'UTC')::date - 29),
+              (NOW() AT TIME ZONE 'UTC')::date,
+              '1 day'::interval
+            )::date AS day
           ),
-          u  AS (SELECT DATE(created_at) AS day, COUNT(*)::int AS c FROM users          WHERE created_at >= CURRENT_DATE - 29 GROUP BY 1),
-          tx AS (SELECT DATE(created_at) AS day, COUNT(*)::int AS c FROM transactions   WHERE created_at >= CURRENT_DATE - 29 GROUP BY 1),
-          st AS (SELECT DATE(created_at) AS day, COUNT(*)::int AS c FROM statements     WHERE created_at >= CURRENT_DATE - 29 GROUP BY 1),
-          ai AS (SELECT DATE(generated_at) AS day, COUNT(*)::int AS c FROM ai_insights  WHERE generated_at >= CURRENT_DATE - 29 GROUP BY 1)
+          u  AS (SELECT DATE(created_at AT TIME ZONE 'UTC') AS day, COUNT(*)::int AS c FROM users          WHERE created_at >= NOW() - INTERVAL '30 days' GROUP BY 1),
+          tx AS (SELECT DATE(created_at AT TIME ZONE 'UTC') AS day, COUNT(*)::int AS c FROM transactions   WHERE created_at >= NOW() - INTERVAL '30 days' GROUP BY 1),
+          st AS (SELECT DATE(created_at AT TIME ZONE 'UTC') AS day, COUNT(*)::int AS c FROM statements     WHERE created_at >= NOW() - INTERVAL '30 days' GROUP BY 1),
+          ai AS (SELECT DATE(generated_at AT TIME ZONE 'UTC') AS day, COUNT(*)::int AS c FROM ai_insights  WHERE generated_at >= NOW() - INTERVAL '30 days' GROUP BY 1)
           SELECT
             days.day::text  AS day,
             COALESCE(u.c, 0)  AS users,
@@ -156,14 +160,14 @@ export async function GET() {
         [],
       ),
 
-      // 10. Statement processing pulse (last 30 days, by status)
+      // 10. Statement processing pulse (last 30 days, by status) - UTC day keys
       safe(
         sql`SELECT
-          DATE(created_at)::text AS day,
+          DATE(created_at AT TIME ZONE 'UTC')::text AS day,
           status,
           COUNT(*)::int          AS count
         FROM statements
-        WHERE created_at >= CURRENT_DATE - 29
+        WHERE created_at >= NOW() - INTERVAL '30 days'
         GROUP BY 1,2
         ORDER BY 1`,
         [],

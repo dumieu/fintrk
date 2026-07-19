@@ -196,13 +196,13 @@ export default function MyProfilePage() {
       <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col gap-4 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6">
         <div className="flex items-center justify-end">
           <Link href="/dashboard/transactions">
-            <Button variant="ghost" className="text-foreground hover:bg-white/10">
+            <Button variant="ghost" className="text-foreground hover:bg-chart-hover">
               Back
             </Button>
           </Link>
         </div>
 
-        <Card className="border-chart-border bg-chart-muted text-white">
+        <Card className="border-chart-border bg-chart-muted text-foreground">
           <CardHeader>
             <CardTitle className="text-lg">AI Travel Detection</CardTitle>
           </CardHeader>
@@ -227,7 +227,7 @@ export default function MyProfilePage() {
                   </label>
                   <button
                     type="button"
-                    className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground focus-visible:outline focus-visible:ring-2 focus-visible:ring-[#0BC18D]/40"
+                    className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-chart-hover hover:text-foreground focus-visible:outline focus-visible:ring-2 focus-visible:ring-[#0BC18D]/40"
                     title={DETECT_TRAVEL_CURRENCY_HELP}
                     aria-label={DETECT_TRAVEL_CURRENCY_HELP}
                   >
@@ -262,7 +262,7 @@ export default function MyProfilePage() {
           </CardContent>
         </Card>
 
-        <Card className="border-chart-border bg-chart-muted text-white">
+        <Card className="border-chart-border bg-chart-muted text-foreground">
           <CardHeader>
             <CardTitle className="text-lg">Data backup</CardTitle>
           </CardHeader>
@@ -308,7 +308,7 @@ export default function MyProfilePage() {
                 variant="outline"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={exporting || importing}
-                className="border-chart-border bg-card text-foreground hover:bg-white/10 disabled:opacity-50"
+                className="border-chart-border bg-card text-foreground hover:bg-chart-hover disabled:opacity-50"
               >
                 {importing ? (
                   <>
@@ -349,7 +349,7 @@ export default function MyProfilePage() {
 
             <p className="text-[11px] text-muted-foreground">
               Filename pattern:{" "}
-              <code className={cn("rounded bg-black/30 px-1 py-0.5 text-[11px]")}>
+              <code className={cn("rounded bg-muted px-1 py-0.5 text-[11px] text-foreground")}>
                 fintrk_&#123;name&#125;_&#123;YYYY-MM-DD&#125;.json
               </code>
             </p>

@@ -3,6 +3,8 @@ import { sql } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth-admin";
 import { ensureErrorLogsTable } from "@/lib/ensure-error-logs";
 import { explainError } from "@/lib/error-explanations";
+import { phiTextForAdminResponse } from "@/lib/crypto/phi-response";
+import { getActiveDecryptionSession, trackSessionAccess } from "@/lib/decryption-session";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +28,37 @@ interface RawError {
   } | null;
 }
 
+function adminUserJoin(
+  r: Record<string, unknown>,
+  clerkKey: "user_id" | "clerk_user_id",
+  canDecrypt: boolean,
+): RawError["user"] {
+  const clerkUserId = r[clerkKey] as string | null | undefined;
+  if (!clerkUserId) return null;
+  const email = phiTextForAdminResponse(
+    r.primary_email as string | null | undefined,
+    canDecrypt,
+  );
+  const first = phiTextForAdminResponse(
+    r.first_name as string | null | undefined,
+    canDecrypt,
+  );
+  const last = phiTextForAdminResponse(
+    r.last_name as string | null | undefined,
+    canDecrypt,
+  );
+  const name = [first, last].filter(Boolean).join(" ").trim() || email || "Unknown";
+  return {
+    clerkUserId,
+    name,
+    email,
+    imageUrl: phiTextForAdminResponse(
+      r.image_url as string | null | undefined,
+      canDecrypt,
+    ),
+  };
+}
+
 export async function GET() {
   const gate = await requireAdmin();
   if (!gate.ok) return NextResponse.json({ error: gate.reason }, { status: 401 });
@@ -35,6 +68,15 @@ export async function GET() {
   });
 
   try {
+    const session = await getActiveDecryptionSession({
+      email: gate.email,
+      userId: gate.userId,
+    });
+    const canDecrypt = Boolean(session);
+    if (session) {
+      await trackSessionAccess(session.id, "users");
+    }
+
     const [statementErrs, uploadErrs, logErrs] = await Promise.all([
       sql`
         SELECT
@@ -108,7 +150,14 @@ export async function GET() {
     const items: RawError[] = [];
 
     for (const r of statementErrs as Record<string, unknown>[]) {
-      const message = ((r.ai_error as string) || `Statement processing failed (status=${r.status})`).slice(0, 4000);
+      const rawAi = (r.ai_error as string) || null;
+      const aiPlain = phiTextForAdminResponse(rawAi, canDecrypt);
+      const message = (
+        aiPlain ||
+        (rawAi && !canDecrypt
+          ? `Statement processing failed (status=${r.status}; error encrypted)`
+          : `Statement processing failed (status=${r.status})`)
+      ).slice(0, 4000);
       items.push({
         source: "statement",
         id: `statement:${r.id}`,
@@ -121,16 +170,7 @@ export async function GET() {
         createdAt: r.created_at as string,
         resolvedAt: null,
         resolvedComment: null,
-        user: r.user_id
-          ? {
-              clerkUserId: r.user_id as string,
-              name:
-                [r.first_name, r.last_name].filter(Boolean).join(" ").trim() ||
-                ((r.primary_email as string) ?? "Unknown"),
-              email: (r.primary_email as string) ?? null,
-              imageUrl: (r.image_url as string) ?? null,
-            }
-          : null,
+        user: adminUserJoin(r, "user_id", canDecrypt),
       });
     }
 
@@ -147,16 +187,7 @@ export async function GET() {
         createdAt: r.created_at as string,
         resolvedAt: null,
         resolvedComment: null,
-        user: r.user_id
-          ? {
-              clerkUserId: r.user_id as string,
-              name:
-                [r.first_name, r.last_name].filter(Boolean).join(" ").trim() ||
-                ((r.primary_email as string) ?? "Unknown"),
-              email: (r.primary_email as string) ?? null,
-              imageUrl: (r.image_url as string) ?? null,
-            }
-          : null,
+        user: adminUserJoin(r, "user_id", canDecrypt),
       });
     }
 
@@ -173,16 +204,7 @@ export async function GET() {
         createdAt: r.created_at as string,
         resolvedAt: (r.resolved_at as string) ?? null,
         resolvedComment: (r.resolved_comment as string) ?? null,
-        user: r.clerk_user_id
-          ? {
-              clerkUserId: r.clerk_user_id as string,
-              name:
-                [r.first_name, r.last_name].filter(Boolean).join(" ").trim() ||
-                ((r.primary_email as string) ?? "Unknown"),
-              email: (r.primary_email as string) ?? null,
-              imageUrl: (r.image_url as string) ?? null,
-            }
-          : null,
+        user: adminUserJoin(r, "clerk_user_id", canDecrypt),
       });
     }
 
@@ -193,11 +215,13 @@ export async function GET() {
       explanation: explainError(e.context, e.message, e.code),
     }));
 
-    // ── Aggregate charts ──────────────────────────────────────────────────
     const contextCounts: Record<string, number> = {};
     const severityCounts: Record<string, number> = {};
     const sourceCounts: Record<string, number> = {};
-    const userCounts: Record<string, { count: number; name: string; email: string | null; imageUrl: string | null }> = {};
+    const userCounts: Record<
+      string,
+      { count: number; name: string; email: string | null; imageUrl: string | null }
+    > = {};
     const dailyCounts: Record<string, number> = {};
 
     for (const e of errorsWithExplanation) {
@@ -210,16 +234,21 @@ export async function GET() {
       if (e.user?.clerkUserId) {
         const k = e.user.clerkUserId;
         if (!userCounts[k]) {
-          userCounts[k] = { count: 0, name: e.user.name, email: e.user.email, imageUrl: e.user.imageUrl };
+          userCounts[k] = {
+            count: 0,
+            name: e.user.name,
+            email: e.user.email,
+            imageUrl: e.user.imageUrl,
+          };
         }
         userCounts[k].count++;
       }
     }
 
-    const today = new Date();
+    // Axis in UTC to match dailyCounts keys from toISOString (avoids local/UTC skew).
     const dailyTrend = Array.from({ length: 14 }, (_, i) => {
-      const d = new Date(today);
-      d.setDate(d.getDate() - (13 - i));
+      const d = new Date();
+      d.setUTCDate(d.getUTCDate() - (13 - i));
       const key = d.toISOString().slice(0, 10);
       return { date: key, count: dailyCounts[key] ?? 0 };
     });
@@ -236,12 +265,19 @@ export async function GET() {
 
     return NextResponse.json({
       errors: errorsWithExplanation,
+      decrypted: canDecrypt,
       charts: {
         topErrors,
         topUsers,
         dailyTrend,
-        severityCounts: Object.entries(severityCounts).map(([name, count]) => ({ name, count })),
-        sourceCounts: Object.entries(sourceCounts).map(([name, count]) => ({ name, count })),
+        severityCounts: Object.entries(severityCounts).map(([name, count]) => ({
+          name,
+          count,
+        })),
+        sourceCounts: Object.entries(sourceCounts).map(([name, count]) => ({
+          name,
+          count,
+        })),
         totalErrors: errorsWithExplanation.length,
       },
     });

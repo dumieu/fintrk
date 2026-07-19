@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
+import { requireAppAuth } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
 import { doubleChargeWatchlistExclusions } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
@@ -13,8 +13,9 @@ const NO_STORE = { "Cache-Control": "no-store" } as const;
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
     await ensureDoubleChargeWatchlistTable();
 
     const body = await request.json();
@@ -47,8 +48,9 @@ export async function POST(request: NextRequest) {
 
 export async function GET() {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
     await ensureDoubleChargeWatchlistTable();
 
     const rows = await resilientQuery(() =>

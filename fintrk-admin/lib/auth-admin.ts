@@ -6,6 +6,11 @@ const ADMIN_EMAILS = (process.env.ADMIN_EMAILS ?? "")
   .map((e) => e.trim().toLowerCase())
   .filter(Boolean);
 
+const clerkConfigured = Boolean(
+  process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim() &&
+    process.env.CLERK_SECRET_KEY?.trim(),
+);
+
 export interface AdminGate {
   ok: true;
   userId: string;
@@ -16,8 +21,20 @@ export interface AdminDenied {
   reason: "unauthenticated" | "not_admin";
 }
 
-/** Resolve the current request's admin status. Use in API routes. */
+/**
+ * Resolve the current request's admin status.
+ * Soft-skip (offline console) only when Clerk keys are missing AND not production.
+ * Production without Clerk keys fails closed. With Clerk: ADMIN_EMAILS allow-list
+ * (dev: any signed-in if empty; prod fail-closed when empty).
+ */
 export async function requireAdmin(): Promise<AdminGate | AdminDenied> {
+  if (!clerkConfigured) {
+    if (process.env.NODE_ENV === "production") {
+      return { ok: false, reason: "unauthenticated" };
+    }
+    return { ok: true, userId: "offline-admin", email: "offline@fintrk.local" };
+  }
+
   const { userId } = await auth();
   if (!userId) return { ok: false, reason: "unauthenticated" };
 
@@ -28,11 +45,9 @@ export async function requireAdmin(): Promise<AdminGate | AdminDenied> {
     "";
 
   if (ADMIN_EMAILS.length === 0) {
-    // Fail closed: never expose admin if the allow-list is empty in production.
     if (process.env.NODE_ENV === "production") {
       return { ok: false, reason: "not_admin" };
     }
-    // Dev convenience: any signed-in Clerk user is admin when no list is set.
     return { ok: true, userId, email };
   }
 
@@ -43,3 +58,4 @@ export async function requireAdmin(): Promise<AdminGate | AdminDenied> {
 }
 
 export const adminEmailsConfigured = ADMIN_EMAILS.length;
+export const isClerkConfigured = clerkConfigured;

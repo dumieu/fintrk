@@ -271,6 +271,7 @@ export function TransactionInsightHover({ txn, children }: { txn: TransactionIns
         className="group/txninsight relative flex min-h-0 min-w-0 cursor-default items-center self-stretch"
         onMouseEnter={() => setOpen(true)}
         onMouseLeave={() => setOpen(false)}
+        onMouseDown={() => setOpen(false)}
         onFocus={() => setOpen(true)}
         onBlur={(e) => {
           if (!e.currentTarget.contains(e.relatedTarget as Node)) setOpen(false);

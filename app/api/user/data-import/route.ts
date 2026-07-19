@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
+import { requireAppAuth } from "@/lib/auth-resilient";
 import { importUserDataExport } from "@/lib/data-transfer-server";
 import { isFintrkDataExport, type FintrkImportMode } from "@/lib/data-transfer";
 import { logServerError } from "@/lib/safe-error";
@@ -55,8 +55,9 @@ async function parseImportBody(
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
 
     const { mode, data } = await parseImportBody(request);
     if (!isFintrkDataExport(data)) {

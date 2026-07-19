@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { HamburgerAccountFooter } from "@/components/hamburger-account-footer";
 import {
   Sheet,
   SheetContent,
@@ -16,15 +15,11 @@ import {
 import { Button } from "@/components/ui/button";
 import {
   Menu,
-  User,
-  Upload,
   ArrowLeftRight,
   BarChart3,
-  Landmark,
   Mail,
   HelpCircle,
   LogIn,
-  Network,
   Waves,
   Sparkles,
   Gem,
@@ -39,16 +34,17 @@ export function HamburgerMenu({ sessionActive = false }: { sessionActive?: boole
   const basePath = "/dashboard";
   const [sheetOpen, setSheetOpen] = useState(false);
 
-  const hasClerkKeys = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
-
   const navItems = [
-    { label: "Upload Statement", href: `${basePath}/upload`, icon: Upload },
-    { label: "Transactions", href: `${basePath}/transactions`, icon: ArrowLeftRight },
+    {
+      label: "Transactions & Statements",
+      href: `${basePath}/transactions`,
+      icon: ArrowLeftRight,
+      match: (p: string) =>
+        p.startsWith(`${basePath}/transactions`) || p.startsWith(`${basePath}/upload`),
+    },
+    { label: "Spend Intelligence", href: `${basePath}/analytics`, icon: BarChart3 },
     { label: "Cashflow", href: `${basePath}/cashflow`, icon: Waves },
-    { label: "Spend Analytics", href: `${basePath}/analytics`, icon: BarChart3 },
     { label: "Net Worth Atlas", href: `${basePath}/net-worth`, icon: Sparkles },
-    { label: "Accounts", href: `${basePath}/accounts`, icon: Landmark },
-    { label: "Category Mapping", href: `${basePath}/categories`, icon: Network },
   ];
 
   return (
@@ -77,26 +73,11 @@ export function HamburgerMenu({ sessionActive = false }: { sessionActive?: boole
 
         <nav className="flex-1 px-3 py-3">
           <ul className="space-y-1">
-            <li>
-              <SheetClose
-                nativeButton={false}
-                render={
-                  <Link
-                    href={`${basePath}/profile`}
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                      pathname.startsWith(`${basePath}/profile`)
-                        ? "bg-primary/10"
-                        : "text-muted-foreground hover:bg-muted/50"
-                    }`}
-                  >
-                    <User className="w-5 h-5 shrink-0" />
-                    My Profile
-                  </Link>
-                }
-              />
-            </li>
             {navItems.map((item) => {
-              const isActive = pathname.startsWith(item.href);
+              const isActive =
+                "match" in item && item.match
+                  ? item.match(pathname ?? "")
+                  : (pathname ?? "").startsWith(item.href);
               const Icon = item.icon;
               return (
                 <li key={item.href}>
@@ -173,7 +154,7 @@ export function HamburgerMenu({ sessionActive = false }: { sessionActive?: boole
                     }`}
                   >
                     <Mail className="w-5 h-5 shrink-0" />
-                    Contact
+                    Feedback
                   </Link>
                 }
               />
@@ -199,13 +180,8 @@ export function HamburgerMenu({ sessionActive = false }: { sessionActive?: boole
           </ul>
         </nav>
 
-        <div className="mt-auto shrink-0 border-t border-border px-3 py-3">
-          {sessionActive || hasClerkKeys ? (
-            <HamburgerAccountFooter
-              sessionActive={sessionActive}
-              onClose={() => setSheetOpen(false)}
-            />
-          ) : (
+        {!sessionActive ? (
+          <div className="mt-auto shrink-0 border-t border-border px-3 py-3">
             <SheetClose
               nativeButton={false}
               render={
@@ -218,8 +194,8 @@ export function HamburgerMenu({ sessionActive = false }: { sessionActive?: boole
                 </Link>
               }
             />
-          )}
-        </div>
+          </div>
+        ) : null}
       </SheetContent>
     </Sheet>
   );

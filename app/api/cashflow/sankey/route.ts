@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
+import { requireAppAuth } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
 import { transactions, userCategories, users } from "@/lib/db/schema";
 import { excludeCardPaymentsSql, excludeIgnoredSql } from "@/lib/db/excluded-transactions";
@@ -84,8 +84,9 @@ function serializeFlow(b: FlowBucket) {
 
 export async function GET(request: NextRequest) {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
 
     const dateFrom = request.nextUrl.searchParams.get("dateFrom") || undefined;
     const dateTo = request.nextUrl.searchParams.get("dateTo") || undefined;
@@ -149,8 +150,8 @@ export async function GET(request: NextRequest) {
           n: sql<number>`COUNT(*)::int`,
         })
         .from(transactions)
-        .leftJoin(leaf, eq(transactions.categoryId, leaf.id))
-        .leftJoin(parent, eq(leaf.parentId, parent.id))
+        .leftJoin(leaf, and(eq(transactions.categoryId, leaf.id), eq(leaf.userId, userId)))
+        .leftJoin(parent, and(eq(leaf.parentId, parent.id), eq(parent.userId, userId)))
         .where(
           and(
             eq(transactions.userId, userId),
@@ -186,8 +187,8 @@ export async function GET(request: NextRequest) {
           parentFlow: parent.flowType,
         })
         .from(transactions)
-        .leftJoin(leaf, eq(transactions.categoryId, leaf.id))
-        .leftJoin(parent, eq(leaf.parentId, parent.id))
+        .leftJoin(leaf, and(eq(transactions.categoryId, leaf.id), eq(leaf.userId, userId)))
+        .leftJoin(parent, and(eq(leaf.parentId, parent.id), eq(parent.userId, userId)))
         .where(
           and(
             eq(transactions.userId, userId),
@@ -287,8 +288,8 @@ export async function GET(request: NextRequest) {
           cnt: sql<number>`COUNT(*)::int`,
         })
         .from(transactions)
-        .leftJoin(leaf, eq(transactions.categoryId, leaf.id))
-        .leftJoin(parent, eq(leaf.parentId, parent.id))
+        .leftJoin(leaf, and(eq(transactions.categoryId, leaf.id), eq(leaf.userId, userId)))
+        .leftJoin(parent, and(eq(leaf.parentId, parent.id), eq(parent.userId, userId)))
         .where(
           and(
             eq(transactions.userId, userId),

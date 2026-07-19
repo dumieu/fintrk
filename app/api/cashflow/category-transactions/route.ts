@@ -1,10 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { alias } from "drizzle-orm/pg-core";
 import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
-import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
+import { requireAppAuth } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
 import { accounts, statements, transactions, userCategories } from "@/lib/db/schema";
-import { excludeCardPaymentsSql, excludeIgnoredSql, spendingIntelligenceOutflowSql } from "@/lib/db/excluded-transactions";
+import {
+  excludeCardPaymentsSql,
+  excludeIgnoredSql,
+  spendingIntelligenceInflowSql,
+  spendingIntelligenceOutflowSql,
+} from "@/lib/db/excluded-transactions";
+import {
+  amountRangeSqlParts,
+  parseAmountRangeParam,
+} from "@/lib/analytics/amount-range";
 import {
   doubleChargeMerchantKey,
   findDoubleChargeSuspects,
@@ -20,15 +29,21 @@ export const dynamic = "force-dynamic";
 
 const NO_STORE = { "Cache-Control": "no-store" } as const;
 
+/** Cap for non–Spend Intelligence drill-downs. SI segment popups must load every matching row. */
+const DEFAULT_TXN_LIMIT = 200;
+const SPENDING_INTELLIGENCE_TXN_LIMIT = 10_000;
+
 type CategoryFlow = "inflow" | "outflow" | "savings";
 
 export async function GET(request: NextRequest) {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
 
     const category = request.nextUrl.searchParams.get("category")?.trim() ?? "";
     const merchant = request.nextUrl.searchParams.get("merchant")?.trim() ?? "";
+    const selectionAll = request.nextUrl.searchParams.get("selection") === "all";
     const levelRaw = request.nextUrl.searchParams.get("level");
     const level =
       levelRaw === "category" ||
@@ -47,6 +62,10 @@ export async function GET(request: NextRequest) {
       if (!flow) {
         return NextResponse.json({ error: "Invalid merchant selection" }, { status: 400, headers: NO_STORE });
       }
+    } else if (selectionAll) {
+      if (!flow) {
+        return NextResponse.json({ error: "Invalid flow selection" }, { status: 400, headers: NO_STORE });
+      }
     } else if (!category || !level || !flow) {
       return NextResponse.json({ error: "Invalid category selection" }, { status: 400, headers: NO_STORE });
     }
@@ -56,6 +75,11 @@ export async function GET(request: NextRequest) {
     const currency = request.nextUrl.searchParams.get("currency")?.toUpperCase() || undefined;
     const scope = request.nextUrl.searchParams.get("scope")?.trim() ?? "";
     const spendingIntelligence = scope === "spending-intelligence";
+    const amountRange = parseAmountRangeParam(
+      request.nextUrl.searchParams.get("minAmount"),
+      request.nextUrl.searchParams.get("maxAmount"),
+    );
+    const amountParts = amountRangeSqlParts(amountRange);
     const includeInvestmentInflows =
       request.nextUrl.searchParams.get("includeInvestmentInflows") === "true";
     const includeInvestmentOutflows =
@@ -72,8 +96,10 @@ export async function GET(request: NextRequest) {
       END
     `;
     const discType =
-      !merchantMode && level === "discretionary" ? parseDiscretionaryType(category) : null;
-    if (!merchantMode && level === "discretionary" && !discType) {
+      !merchantMode && !selectionAll && level === "discretionary"
+        ? parseDiscretionaryType(category)
+        : null;
+    if (!merchantMode && !selectionAll && level === "discretionary" && !discType) {
       return NextResponse.json(
         { error: "Invalid discretionary type" },
         { status: 400, headers: NO_STORE },
@@ -82,6 +108,8 @@ export async function GET(request: NextRequest) {
 
     const selectionFilter = merchantMode
       ? eq(transactions.merchantName, merchant)
+      : selectionAll
+        ? sql`true`
       : level === "category"
         ? eq(categoryLabel, category)
         : level === "subcategory"
@@ -104,8 +132,10 @@ export async function GET(request: NextRequest) {
         OR lower(coalesce(${parent.slug}, '')) LIKE '%-investment'
       )
     `;
-    const investmentExclusionFilter = shouldExcludeInvestmentInflows || shouldExcludeInvestmentOutflows
-      ? sql`
+    /** SI predicates already exclude investments; keep this only for cashflow drills. */
+    const investmentExclusionFilter =
+      !spendingIntelligence && (shouldExcludeInvestmentInflows || shouldExcludeInvestmentOutflows)
+        ? sql`
           NOT (
             ${investmentCategoryFilter}
             AND (
@@ -122,73 +152,107 @@ export async function GET(request: NextRequest) {
             )
           )
         `
-      : undefined;
+        : undefined;
 
-    const rows = await resilientQuery(() =>
-      db
-        .select({
-          id: transactions.id,
-          postedDate: transactions.postedDate,
-          rawDescription: transactions.rawDescription,
-          referenceId: transactions.referenceId,
-          merchantName: transactions.merchantName,
-          baseAmount: transactions.baseAmount,
-          baseCurrency: transactions.baseCurrency,
-          foreignAmount: transactions.foreignAmount,
-          foreignCurrency: transactions.foreignCurrency,
-          implicitFxRate: transactions.implicitFxRate,
-          implicitFxSpreadBps: transactions.implicitFxSpreadBps,
-          categoryId: transactions.categoryId,
-          categoryConfidence: transactions.categoryConfidence,
-          categoryName: sql<string | null>`
-            COALESCE(
-              CASE WHEN ${parent.id} IS NOT NULL THEN ${parent.name} END,
-              ${leaf.name}
-            )
-          `.as("categoryName"),
-          subcategoryName: sql<string | null>`
-            CASE WHEN ${parent.id} IS NOT NULL THEN ${leaf.name} ELSE NULL END
-          `.as("subcategoryName"),
-          countryIso: transactions.countryIso,
-          isRecurring: transactions.isRecurring,
-          warningFlag: transactions.warningFlag,
-          aiConfidence: transactions.aiConfidence,
-          balanceAfter: transactions.balanceAfter,
-          note: transactions.note,
-          label: transactions.label,
-          accountId: transactions.accountId,
-          statementId: transactions.statementId,
-          accountType: accounts.accountType,
-          accountCardNetwork: accounts.cardNetwork,
-          accountMaskedNumber: accounts.maskedNumber,
-          accountInstitutionName: accounts.institutionName,
-          accountName: accounts.accountName,
-          statementFileName: statements.fileName,
-          statementPeriodStart: statements.periodStart,
-          statementPeriodEnd: statements.periodEnd,
-        })
-        .from(transactions)
-        .leftJoin(accounts, eq(transactions.accountId, accounts.id))
-        .leftJoin(statements, eq(transactions.statementId, statements.id))
-        .leftJoin(leaf, eq(transactions.categoryId, leaf.id))
-        .leftJoin(parent, eq(leaf.parentId, parent.id))
-        .where(
-          and(
-            eq(transactions.userId, userId),
-            excludeCardPaymentsSql(), excludeIgnoredSql(),
-            selectionFilter,
-            eq(flowExpr, flow),
+    /**
+     * Spend Intelligence popups must use the same universe as the chart bars:
+     * SI inflow/outflow SQL only (no extra flowExpr), plus optional amount range.
+     * Cashflow drills keep the legacy flowExpr filter.
+     */
+    const whereClause = and(
+      eq(transactions.userId, userId),
+      excludeCardPaymentsSql(),
+      excludeIgnoredSql(),
+      selectionFilter,
+      ...(spendingIntelligence
+        ? [
+            flow === "inflow"
+              ? spendingIntelligenceInflowSql()
+              : spendingIntelligenceOutflowSql(),
+          ]
+        : [
+            eq(flowExpr, flow!),
             ...(flow === "inflow" ? [sql`${transactions.baseAmount}::numeric > 0`] : []),
-            ...(currency ? [eq(transactions.baseCurrency, currency)] : []),
-            ...(dateFrom ? [gte(transactions.postedDate, dateFrom)] : []),
-            ...(dateTo ? [lte(transactions.postedDate, dateTo)] : []),
-            ...(investmentExclusionFilter ? [investmentExclusionFilter] : []),
-            ...(spendingIntelligence ? [spendingIntelligenceOutflowSql()] : []),
-          ),
-        )
-        .orderBy(desc(transactions.postedDate), desc(transactions.id))
-        .limit(200),
+          ]),
+      ...(currency ? [eq(transactions.baseCurrency, currency)] : []),
+      ...(dateFrom ? [gte(transactions.postedDate, dateFrom)] : []),
+      ...(dateTo ? [lte(transactions.postedDate, dateTo)] : []),
+      ...(investmentExclusionFilter ? [investmentExclusionFilter] : []),
+      ...amountParts,
     );
+
+    const rowLimit = spendingIntelligence
+      ? SPENDING_INTELLIGENCE_TXN_LIMIT
+      : DEFAULT_TXN_LIMIT;
+
+    const [rows, sumRows] = await Promise.all([
+      resilientQuery(() =>
+        db
+          .select({
+            id: transactions.id,
+            postedDate: transactions.postedDate,
+            rawDescription: transactions.rawDescription,
+            referenceId: transactions.referenceId,
+            merchantName: transactions.merchantName,
+            baseAmount: transactions.baseAmount,
+            baseCurrency: transactions.baseCurrency,
+            foreignAmount: transactions.foreignAmount,
+            foreignCurrency: transactions.foreignCurrency,
+            implicitFxRate: transactions.implicitFxRate,
+            implicitFxSpreadBps: transactions.implicitFxSpreadBps,
+            categoryId: transactions.categoryId,
+            categoryConfidence: transactions.categoryConfidence,
+            categoryName: sql<string | null>`
+              COALESCE(
+                CASE WHEN ${parent.id} IS NOT NULL THEN ${parent.name} END,
+                ${leaf.name}
+              )
+            `.as("categoryName"),
+            subcategoryName: sql<string | null>`
+              CASE WHEN ${parent.id} IS NOT NULL THEN ${leaf.name} ELSE NULL END
+            `.as("subcategoryName"),
+            countryIso: transactions.countryIso,
+            isRecurring: transactions.isRecurring,
+            warningFlag: transactions.warningFlag,
+            aiConfidence: transactions.aiConfidence,
+            balanceAfter: transactions.balanceAfter,
+            note: transactions.note,
+            label: transactions.label,
+            accountId: transactions.accountId,
+            statementId: transactions.statementId,
+            accountType: accounts.accountType,
+            accountCardNetwork: accounts.cardNetwork,
+            accountMaskedNumber: accounts.maskedNumber,
+            accountInstitutionName: accounts.institutionName,
+            accountName: accounts.accountName,
+            statementFileName: statements.fileName,
+            statementPeriodStart: statements.periodStart,
+            statementPeriodEnd: statements.periodEnd,
+          })
+          .from(transactions)
+          .leftJoin(accounts, and(eq(transactions.accountId, accounts.id), eq(accounts.userId, userId)))
+          .leftJoin(statements, and(eq(transactions.statementId, statements.id), eq(statements.userId, userId)))
+          .leftJoin(leaf, and(eq(transactions.categoryId, leaf.id), eq(leaf.userId, userId)))
+          .leftJoin(parent, and(eq(leaf.parentId, parent.id), eq(parent.userId, userId)))
+          .where(whereClause)
+          .orderBy(desc(transactions.postedDate), desc(transactions.id))
+          .limit(rowLimit),
+      ),
+      resilientQuery(() =>
+        db
+          .select({
+            sumAbs: sql<string>`COALESCE(SUM(ABS(CAST(${transactions.baseAmount} AS numeric))), 0)`,
+            count: sql<number>`COUNT(*)::int`,
+          })
+          .from(transactions)
+          .leftJoin(leaf, and(eq(transactions.categoryId, leaf.id), eq(leaf.userId, userId)))
+          .leftJoin(parent, and(eq(leaf.parentId, parent.id), eq(parent.userId, userId)))
+          .where(whereClause),
+      ),
+    ]);
+
+    const sumAbs = Number.parseFloat(sumRows[0]?.sumAbs ?? "0") || 0;
+    const matchCount = sumRows[0]?.count ?? rows.length;
 
     const data = rows.map((row) => ({
       ...row,
@@ -247,11 +311,26 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({ data: enriched, total: enriched.length }, { headers: NO_STORE });
+    return NextResponse.json(
+      {
+        data: enriched,
+        total: enriched.length,
+        matchCount,
+        sumAbs,
+        truncated: matchCount > enriched.length,
+      },
+      { headers: NO_STORE },
+    );
   } catch (err) {
     logServerError("api/cashflow/category-transactions", err);
     return NextResponse.json(
-      { error: "Failed to load cashflow category transactions", data: [], total: 0 },
+      {
+        error: "Failed to load cashflow category transactions",
+        data: [],
+        total: 0,
+        sumAbs: 0,
+        matchCount: 0,
+      },
       { status: 500, headers: NO_STORE },
     );
   }

@@ -1,5 +1,10 @@
 import { sql } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth-admin";
+import { isEncrypted } from "@/lib/crypto/encryption";
+import { encryptedColumnsFor } from "@/lib/crypto/encrypted-fields";
+import { phiTextForAdminResponse } from "@/lib/crypto/phi-response";
+import { getActiveDecryptionSession, trackSessionAccess } from "@/lib/decryption-session";
+import { isSecretsRedactColumn } from "@/lib/protected-tables";
 import { parseLimitParam } from "@/lib/utils";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -55,21 +60,54 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const query = `
+    // Never dump MCP hashes or statement upload blobs into filter chips.
+    if (isSecretsRedactColumn(table, column)) {
+      return NextResponse.json({ values: [], hasNull: false, total: 0 });
+    }
+
+    // Null presence is a separate EXISTS: ORDER BY … NULLS LAST + LIMIT never
+    // reaches the null row when distinct non-nulls fill the page.
+    const valuesQuery = `
       SELECT DISTINCT "${column}"::text AS value
       FROM "${table}"
-      ORDER BY 1 NULLS LAST
+      WHERE "${column}" IS NOT NULL
+      ORDER BY 1
       LIMIT $1
     `;
-    const result = await sql.query(query, [limit + 1]);
+    const nullQuery = `
+      SELECT EXISTS (
+        SELECT 1 FROM "${table}" WHERE "${column}" IS NULL
+      ) AS has_null
+    `;
+    const [result, nullRows] = await Promise.all([
+      sql.query(valuesQuery, [limit]),
+      sql.query(nullQuery, []),
+    ]);
+    const hasNull = Boolean(nullRows[0]?.has_null);
+
+    const session = await getActiveDecryptionSession({
+      email: gate.email,
+      userId: gate.userId,
+    });
+    const canDecrypt = Boolean(session);
+    const encryptedCols = encryptedColumnsFor(table);
+    const columnMayBeEncrypted = encryptedCols.has(column);
+
+    if (session && columnMayBeEncrypted) {
+      await trackSessionAccess(session.id, table);
+    }
 
     const values: string[] = [];
-    let hasNull = false;
     for (const r of result) {
-      if (r.value === null) {
-        hasNull = true;
+      const s = String(r.value);
+      // Without BTG, skip AES-GCM ciphertext so filter chips cannot dump v2: blobs.
+      if (!canDecrypt && isEncrypted(s)) continue;
+      if (columnMayBeEncrypted || isEncrypted(s)) {
+        const plain = phiTextForAdminResponse(s, canDecrypt);
+        if (plain == null) continue;
+        values.push(plain);
       } else {
-        values.push(r.value);
+        values.push(s);
       }
     }
 
@@ -77,6 +115,7 @@ export async function GET(request: NextRequest) {
       values,
       hasNull,
       total: values.length + (hasNull ? 1 : 0),
+      decrypted: canDecrypt && columnMayBeEncrypted,
     });
   } catch (error) {
     console.error("GET column values error:", error);

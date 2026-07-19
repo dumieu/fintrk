@@ -4,6 +4,7 @@ import { accounts, transactions, recurringPatterns, aiInsights, userCategories }
 import { excludeCardPaymentsSql, excludeIgnoredSql, excludeRecurringCardPaymentsSql, excludeRecurringIgnoredSql } from "@/lib/db/excluded-transactions";
 import { ai, GEMINI_MODEL } from "@/lib/gemini";
 import { logAiCost } from "@/lib/ai-cost";
+import { authorizeCron } from "@/lib/cron-auth";
 import { logServerError } from "@/lib/safe-error";
 import { recordCronFailure, recordCronRun } from "@/lib/cron-run";
 import { ef, efJson } from "@/lib/crypto/encryption";
@@ -14,15 +15,8 @@ export const maxDuration = 120;
 
 const CRON_PATH = "/api/cron/insights";
 
-function verifyCronSecret(request: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET;
-  // Fail closed in production; allow unauthenticated local runs when unset.
-  if (!secret) return process.env.NODE_ENV !== "production";
-  return request.headers.get("authorization") === `Bearer ${secret}`;
-}
-
 export async function GET(request: NextRequest) {
-  if (!verifyCronSecret(request)) {
+  if (!authorizeCron(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -47,7 +41,13 @@ export async function GET(request: NextRequest) {
               total: sql<string>`SUM(ABS(CAST(${transactions.baseAmount} AS numeric)))`,
               count: sql<number>`COUNT(*)::int`,
             }).from(transactions)
-              .leftJoin(userCategories, eq(transactions.categoryId, userCategories.id))
+              .leftJoin(
+                userCategories,
+                and(
+                  eq(transactions.categoryId, userCategories.id),
+                  eq(userCategories.userId, userId),
+                ),
+              )
               .where(
                 and(eq(transactions.userId, userId), excludeCardPaymentsSql(), excludeIgnoredSql(), gte(transactions.postedDate, dateFrom), sql`CAST(${transactions.baseAmount} AS numeric) < 0`),
               ).groupBy(userCategories.name).orderBy(sql`SUM(ABS(CAST(${transactions.baseAmount} AS numeric))) DESC`).limit(15),

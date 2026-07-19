@@ -29,6 +29,7 @@ import { config } from "dotenv";
 config({ path: ".env.local" });
 
 import { neon } from "@neondatabase/serverless";
+import { buildDedupeSignature } from "../lib/txn-dedupe";
 
 if (!process.env.DATABASE_URL) {
   console.error("DATABASE_URL is required");
@@ -399,21 +400,38 @@ interface TxnDraft {
 }
 
 async function bulkInsertTransactions(rows: TxnDraft[]): Promise<void> {
+  // Waterproof dedupe keys (same formula as real ingest) + per-account occurrence
+  // so identical same-day lines (e.g. two Starbucks) both insert cleanly.
+  const occByKey = new Map<string, number>();
+  const enriched = rows.map((r) => {
+    const dedupeSignature = buildDedupeSignature(
+      r.postedDate,
+      r.baseAmount,
+      r.rawDescription,
+    );
+    const key = `${r.accountId}|${dedupeSignature}`;
+    const occurrenceIndex = occByKey.get(key) ?? 0;
+    occByKey.set(key, occurrenceIndex + 1);
+    return { ...r, dedupeSignature, occurrenceIndex };
+  });
+
   const CHUNK = 250;
-  for (let i = 0; i < rows.length; i += CHUNK) {
-    const slice = rows.slice(i, i + CHUNK);
+  for (let i = 0; i < enriched.length; i += CHUNK) {
+    const slice = enriched.slice(i, i + CHUNK);
     const values: unknown[] = [];
     const tuples: string[] = [];
     let p = 1;
     for (const r of slice) {
       tuples.push(
-        `($${p++}, $${p++}::uuid, $${p++}::date, $${p++}, $${p++}, $${p++}, $${p++}, $${p++}::numeric, $${p++}, $${p++}::numeric, $${p++}, $${p++}::numeric, $${p++}, $${p++}::boolean)`,
+        `($${p++}, $${p++}::uuid, $${p++}::date, $${p++}, $${p++}, $${p++}, $${p++}, $${p++}, $${p++}, $${p++}::numeric, $${p++}, $${p++}::numeric, $${p++}, $${p++}::numeric, $${p++}, $${p++}::boolean)`,
       );
       values.push(
         DEMO_USER_ID,
         r.accountId,
         r.postedDate,
         r.rawDescription,
+        r.dedupeSignature,
+        r.occurrenceIndex,
         r.merchantId,
         r.merchantName,
         r.categoryId,
@@ -428,7 +446,7 @@ async function bulkInsertTransactions(rows: TxnDraft[]): Promise<void> {
     }
     const q = `
       INSERT INTO transactions
-        (user_id, account_id, posted_date, raw_description, merchant_id, merchant_name, category_id, base_amount, base_currency, foreign_amount, foreign_currency, implicit_fx_rate, country_iso, is_recurring)
+        (user_id, account_id, posted_date, raw_description, dedupe_signature, occurrence_index, merchant_id, merchant_name, category_id, base_amount, base_currency, foreign_amount, foreign_currency, implicit_fx_rate, country_iso, is_recurring)
       VALUES ${tuples.join(", ")}
       ON CONFLICT DO NOTHING
     `;
@@ -889,6 +907,50 @@ async function main() {
 
   console.log("\ud83d\udcbe Inserting transactions...");
   await bulkInsertTransactions(drafts);
+
+  // Sample labels/notes so Transactions UI isn't an empty feature surface in demo.
+  console.log("\ud83c\udff7\ufe0f  Seeding sample labels & notes...");
+  await sql`
+    UPDATE transactions SET label = 'Family trip'
+    WHERE user_id = ${DEMO_USER_ID}
+      AND country_iso IS NOT NULL AND country_iso <> 'US'
+      AND id IN (
+        SELECT id FROM transactions
+        WHERE user_id = ${DEMO_USER_ID}
+          AND country_iso IS NOT NULL AND country_iso <> 'US'
+        ORDER BY posted_date DESC
+        LIMIT 12
+      )
+  `;
+  await sql`
+    UPDATE transactions SET note = 'Split with Elena'
+    WHERE user_id = ${DEMO_USER_ID}
+      AND merchant_name ILIKE '%restaurant%'
+      AND id IN (
+        SELECT id FROM transactions
+        WHERE user_id = ${DEMO_USER_ID} AND merchant_name ILIKE '%restaurant%'
+        ORDER BY posted_date DESC
+        LIMIT 8
+      )
+  `;
+  await sql`
+    UPDATE transactions SET label = 'Kids activities', warning_flag = false
+    WHERE user_id = ${DEMO_USER_ID}
+      AND (
+        merchant_name ILIKE '%soccer%' OR merchant_name ILIKE '%piano%'
+        OR merchant_name ILIKE '%camp%' OR merchant_name ILIKE '%orthodont%'
+      )
+      AND id IN (
+        SELECT id FROM transactions
+        WHERE user_id = ${DEMO_USER_ID}
+          AND (
+            merchant_name ILIKE '%soccer%' OR merchant_name ILIKE '%piano%'
+            OR merchant_name ILIKE '%camp%' OR merchant_name ILIKE '%orthodont%'
+          )
+        ORDER BY posted_date DESC
+        LIMIT 15
+      )
+  `;
 
   console.log("\ud83d\udd01 Seeding recurring patterns...");
   await seedRecurringPatterns(slugToId, merchantIdByName);

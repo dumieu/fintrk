@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Loader2, CheckCircle2, AlertCircle, X } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useAppHref } from "@/lib/app-base-path";
 
 interface StatementStatus {
   id: number;
@@ -27,6 +28,7 @@ export function ProcessingBanner() {
   const [data, setData] = useState<StatusResponse | null>(null);
   const [dismissed, setDismissed] = useState<Set<number>>(new Set());
   const router = useRouter();
+  const transactionsHref = useAppHref("/transactions");
 
   const poll = useCallback(async () => {
     try {
@@ -99,7 +101,7 @@ export function ProcessingBanner() {
             }`}
             onClick={() => {
               if (stmt.status === "completed") {
-                router.push("/dashboard/transactions");
+                router.push(transactionsHref);
               }
               dismiss(stmt.id);
             }}

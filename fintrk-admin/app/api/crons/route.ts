@@ -57,6 +57,8 @@ async function fetchProjectCrons(
   const url = `https://api.vercel.com/v9/projects/${projectId}?${params}`;
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
+    // redirect: "manual" so a 3xx cannot forward the Vercel token off-origin.
+    redirect: "manual",
   });
   if (!res.ok) return null;
   const data = await res.json();
@@ -91,9 +93,9 @@ export async function GET() {
     string,
     { def: VercelCronDef; cronsPayload: VercelCronsPayload }
   >();
-  const token = process.env.VERCEL_API_TOKEN;
-  const teamId = process.env.VERCEL_TEAM_ID;
-  const userProjectId = process.env.VERCEL_PROJECT_USER_APP_ID;
+  const token = process.env.VERCEL_API_TOKEN?.trim();
+  const teamId = process.env.VERCEL_TEAM_ID?.trim();
+  const userProjectId = process.env.VERCEL_PROJECT_USER_APP_ID?.trim();
 
   if (token && userProjectId) {
     try {

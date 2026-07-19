@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
+import { requireAppAuth } from "@/lib/auth-resilient";
 import { checkIngestDedupe } from "@/lib/ingest-dedupe";
 
 export const dynamic = "force-dynamic";
@@ -15,8 +15,9 @@ interface FileCheck {
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
 
     const { files } = (await request.json()) as { files: FileCheck[] };
     if (!Array.isArray(files) || files.length === 0) {

@@ -5,15 +5,31 @@ import {
   OAUTH_AUTHORIZE_PATH,
   SUPPORTED_SCOPES,
   getBaseUrl,
-  isAllowedOAuthRedirect,
-  isCimdClientId,
 } from "@/lib/mcp/config";
+import { isCimdClientId, resolveCimdForAuthorize } from "@/lib/mcp/cimd";
 import { createAuthCode, getClient } from "@/lib/mcp/tokens";
 import { hasProAccess } from "@/lib/plan";
 import { logServerError } from "@/lib/safe-error";
+import { checkRateLimit, clientIpFrom, getRateLimitHeaders } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+function authorizeRateLimited(req: NextRequest): NextResponse | null {
+  const rl = checkRateLimit(`${clientIpFrom(req)}:mcp-authorize`, "api-mcp-authorize");
+  if (rl.allowed) return null;
+  return new NextResponse(
+    `<!doctype html><meta charset="utf-8"><title>FinTRK</title><body style="font-family:system-ui;background:#060d14;color:#fff;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0"><div style="max-width:420px;padding:32px;text-align:center"><h1 style="font-size:18px">Too many requests</h1><p style="color:#b3aebd">Please wait a moment and try connecting again.</p></div></body>`,
+    {
+      status: 429,
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        "Cache-Control": "no-store",
+        ...getRateLimitHeaders(rl.remaining, rl.resetAt),
+      },
+    },
+  );
+}
 
 interface AuthParams {
   responseType: string;
@@ -92,37 +108,26 @@ async function validate(params: AuthParams) {
     return { ok: false as const, html: htmlError("Missing client_id or redirect_uri.") };
   }
 
-  // OAuth 2.1 / public clients: PKCE is required (token auth method is "none").
+  // OAuth 2.1 / public clients: PKCE S256 is required (token auth method is "none").
   if (!params.codeChallenge) {
     return { ok: false as const, html: htmlError("PKCE code_challenge is required.") };
   }
-  if (
-    params.codeChallengeMethod &&
-    params.codeChallengeMethod !== "S256" &&
-    params.codeChallengeMethod !== "plain"
-  ) {
-    return { ok: false as const, html: htmlError("Unsupported code_challenge_method.") };
+  if (params.codeChallengeMethod !== "S256") {
+    return { ok: false as const, html: htmlError("code_challenge_method must be S256.") };
   }
 
-  // CIMD (Client ID Metadata Document): the client_id is an https URL the
-  // client controls. No registration record exists; accept the provided
-  // redirect_uri without a pre-registered allow-list.
+  // CIMD: fetch the https client_id document and require redirect_uri membership.
   if (isCimdClientId(params.clientId)) {
-    if (!isAllowedOAuthRedirect(params.redirectUri)) {
-      return { ok: false as const, html: htmlError("Invalid redirect address for this application.") };
-    }
-    let clientName = "An AI assistant";
-    try {
-      clientName = new URL(params.clientId).hostname;
-    } catch {
-      /* keep default */
+    const cimd = await resolveCimdForAuthorize(params.clientId, params.redirectUri);
+    if (!cimd.ok) {
+      return { ok: false as const, html: htmlError(cimd.reason) };
     }
     return {
       ok: true as const,
       client: {
-        clientId: params.clientId,
-        clientName,
-        redirectUris: [params.redirectUri],
+        clientId: cimd.doc.clientId,
+        clientName: cimd.doc.clientName,
+        redirectUris: cimd.doc.redirectUris,
         grantTypes: ["authorization_code", "refresh_token"],
         tokenEndpointAuthMethod: "none",
       },
@@ -187,6 +192,9 @@ function renderConsent(params: AuthParams, clientName: string, userLabel: string
 }
 
 export async function GET(req: NextRequest) {
+  const limited = authorizeRateLimited(req);
+  if (limited) return limited;
+
   const params = readParams(req.nextUrl.searchParams);
   const check = await validate(params);
   if (!check.ok) return check.html;
@@ -228,6 +236,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const limited = authorizeRateLimited(req);
+  if (limited) return limited;
+
   let form: FormData;
   try {
     form = await req.formData();

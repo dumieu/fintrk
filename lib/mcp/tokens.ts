@@ -35,17 +35,24 @@ function constantTimeEqualHex(a: string, b: string): boolean {
   }
 }
 
-/** Verify a PKCE S256 (or plain) code_verifier against the stored challenge. */
+function safeEqualUtf8(a: string, b: string): boolean {
+  const ba = Buffer.from(a);
+  const bb = Buffer.from(b);
+  if (ba.length !== bb.length) return false;
+  return timingSafeEqual(ba, bb);
+}
+
+/** Verify a PKCE S256 code_verifier against the stored challenge. */
 export function verifyPkce(
   verifier: string,
   challenge: string | null,
   method: string | null,
 ): boolean {
-  // Public clients (token_endpoint_auth_method "none") must use PKCE.
+  // Public clients (token_endpoint_auth_method "none") must use PKCE S256.
   if (!challenge || !verifier) return false;
-  if (method === "plain") return verifier === challenge;
+  if (method !== "S256") return false;
   const computed = createHash("sha256").update(verifier).digest("base64url");
-  return computed === challenge;
+  return safeEqualUtf8(computed, challenge);
 }
 
 /* ── one-time table bootstrap (always-on, mirrors phi_audit_buffer) ──── */
@@ -287,7 +294,8 @@ export async function rotateRefreshToken(input: {
   }
   const accessToken = randomToken("ftk_at_");
   const refreshToken = randomToken("ftk_rt_");
-  await db
+  // Optimistic lock on refresh_hash: concurrent rotators cannot both mint a pair.
+  const [updated] = await db
     .update(mcpTokensTable)
     .set({
       tokenHash: hashToken(accessToken),
@@ -295,7 +303,15 @@ export async function rotateRefreshToken(input: {
       expiresAt: new Date(Date.now() + ACCESS_TOKEN_TTL_MS),
       lastUsedAt: new Date(),
     })
-    .where(eq(mcpTokensTable.id_token, row.id_token));
+    .where(
+      and(
+        eq(mcpTokensTable.id_token, row.id_token),
+        eq(mcpTokensTable.refreshHash, refreshHash),
+        eq(mcpTokensTable.revoked, false),
+      ),
+    )
+    .returning({ id: mcpTokensTable.id_token });
+  if (!updated) return null;
   return {
     accessToken,
     refreshToken,

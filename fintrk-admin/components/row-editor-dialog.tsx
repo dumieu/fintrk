@@ -102,8 +102,8 @@ export function RowEditorDialog({ open, onOpenChange, table, columns, primaryKey
         if (c.type === "jsonb" || c.type === "json") {
           try { data[c.name] = JSON.parse(str); } catch { data[c.name] = str; }
         } else if (isNumeric(c)) {
-          const n = Number(str);
-          data[c.name] = Number.isFinite(n) ? n : str;
+          // Pass as text - Number() corrupts bigint / large numeric values.
+          data[c.name] = str;
         } else {
           data[c.name] = str;
         }

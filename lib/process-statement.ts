@@ -9,8 +9,8 @@ import { logAiCost } from "@/lib/ai-cost";
 import { logServerError } from "@/lib/safe-error";
 import { aiResponseSchema } from "@/lib/validations/ingest";
 import { ef, df } from "@/lib/crypto/encryption";
-import { eq, and, asc, desc, sql, inArray } from "drizzle-orm";
-import { assignOccurrenceIndices, buildDedupeSignature, isStrongReferenceId } from "@/lib/txn-dedupe";
+import { eq, and, asc, desc, sql, inArray, isNull } from "drizzle-orm";
+import { assignOccurrenceIndices, buildDedupeSignature, isStrongReferenceId, normalizeBaseAmount } from "@/lib/txn-dedupe";
 
 /**
  * Queries the categories table and the user's transactions to build:
@@ -38,7 +38,13 @@ async function buildUserContext(userId: string) {
           merchantName: transactions.merchantName,
         })
         .from(transactions)
-        .innerJoin(userCategories, eq(transactions.categoryId, userCategories.id))
+        .innerJoin(
+          userCategories,
+          and(
+            eq(transactions.categoryId, userCategories.id),
+            eq(userCategories.userId, userId),
+          ),
+        )
         .where(
           and(
             eq(transactions.userId, userId),
@@ -140,7 +146,18 @@ function buildSystemInstruction(
 
 For EACH transaction, you MUST:
 
-1. DATES: Extract posted_date (YYYY-MM-DD).
+1. DATES (CRITICAL - exactly ONE transaction per statement line, worldwide):
+   - Statements from any country or bank may print MORE THAN ONE date per transaction. There are two conceptual date types:
+       (a) the TRANSACTION date = when the purchase/payment/withdrawal actually occurred (the economic event);
+       (b) the POSTING date = when the bank recorded/cleared/settled it on the account.
+     When two or more dates appear on one line, they almost always describe the SAME single transaction, NOT separate transactions.
+   - Column labels vary by bank, region, and language. Do NOT rely on any specific wording. Recognize the date type from meaning, position, and locale, not from an exact label. Non-exhaustive examples of the same two concepts across labels/languages:
+       * Transaction date: "Transaction Date", "Trans Date", "Trans. Date", "Txn Date", "Purchase Date", "Sale Date", "Value Date", "Date of Transaction", "Date d'operation", "Fecha de operacion", "Buchungsdatum vs Belegdatum (Belegdatum = transaction)", "Data operazione", "Data transacao", "Datum transakce", "取引日", "交易日", "거래일".
+       * Posting date: "Posting Date", "Post Date", "Posted", "Booking Date", "Settlement Date", "Date de comptabilisation", "Fecha de contabilizacion", "Buchungsdatum", "Data contabile", "Data lancamento", "記帳日", "入账日", "처리일".
+     Also handle single-date statements, date ranges, and dates embedded inside the description text.
+   - You MUST emit EXACTLY ONE transaction object per statement line. NEVER output two transactions because a line shows two (or more) dates, wraps across multiple visual lines, or repeats a reference number.
+   - Set posted_date (YYYY-MM-DD) to the TRANSACTION date (concept (a) above) whenever any transaction/purchase/value date is present. ONLY when no transaction date exists at all should you fall back to the posting/booking/settlement date. If exactly one date is present, use it. Be consistent: apply the same choice to every row of the statement.
+   - Always normalize to YYYY-MM-DD regardless of the source format (e.g. DD/MM/YYYY, MM/DD/YYYY, DD-MMM-YY, YYYY年MM月DD日). Infer day/month order from the statement's country, currency, and surrounding dates; never swap day and month.
 
 2. DESCRIPTIONS:
    - raw_description: exact text from the statement, unmodified
@@ -337,10 +354,10 @@ type AccountPickRow = {
 };
 
 /**
- * Multi-tier account matching. Each tier is strictly gated — we never
+ * Multi-tier account matching. Each tier is strictly gated - we never
  * fall through to a looser match if a tighter one was possible.
  *
- * Tier 1: exact type + exact last-four digits
+ * Tier 1: exact type + exact last-four digits (narrow by exact mask / institution / network when ambiguous)
  * Tier 2: exact type + same institution (only when statement has NO last-four)
  * Tier 3: exact type, single candidate (only when statement has NO last-four)
  *
@@ -348,7 +365,11 @@ type AccountPickRow = {
  */
 function pickAccountForStatement(
   rows: AccountPickRow[],
-  meta: { account_type: string; institution_name?: string | null | undefined },
+  meta: {
+    account_type: string;
+    institution_name?: string | null | undefined;
+    card_network?: string | null | undefined;
+  },
   statementLastFour: string | undefined,
 ): AccountPickRow | undefined {
   const sameType = (a: AccountPickRow) => a.accountType === meta.account_type;
@@ -358,9 +379,34 @@ function pickAccountForStatement(
     const byDigits = rows.filter(
       (a) => sameType(a) && lastFourFromStoredMasked(a.maskedNumber) === statementLastFour,
     );
-    if (byDigits.length >= 1) return byDigits[0];
-    // If we have a last-four from the statement but no existing account matches,
-    // do NOT fall through — this is a distinct account that needs to be created.
+    if (byDigits.length === 0) {
+      // Last-four present but no match - distinct account; do not fall through.
+      return undefined;
+    }
+    if (byDigits.length === 1) return byDigits[0];
+
+    // Multiple cards can share last-four with different stored mask strings.
+    // Never pick an arbitrary sibling - narrow, else create/recheck by exact mask.
+    const exactMask = `••••${statementLastFour}`;
+    let candidates = byDigits.filter((a) => a.maskedNumber === exactMask);
+    if (candidates.length === 0) candidates = byDigits;
+    if (candidates.length === 1) return candidates[0];
+
+    const inst = normInstitution(meta.institution_name);
+    if (inst) {
+      const byInst = candidates.filter((a) => normInstitution(a.institutionName) === inst);
+      if (byInst.length === 1) return byInst[0];
+      if (byInst.length > 1) candidates = byInst;
+    }
+
+    const network = (meta.card_network ?? "").trim().toLowerCase();
+    if (network) {
+      const byNet = candidates.filter(
+        (a) => (a.cardNetwork ?? "").trim().toLowerCase() === network,
+      );
+      if (byNet.length === 1) return byNet[0];
+    }
+
     return undefined;
   }
 
@@ -383,6 +429,83 @@ function pickAccountForStatement(
   if (typedNoMask.length === 1) return typedNoMask[0];
 
   return undefined;
+}
+
+/** Insert a masked account; on unique race, resolve the winning row by mask. */
+async function insertAccountWithMaskRaceRetry(args: {
+  userId: string;
+  statementId: number;
+  meta: {
+    account_type: string;
+    primary_currency: string;
+    country_iso?: string | null;
+    institution_name?: string | null;
+  };
+  cardNetworkFromAi: string | undefined;
+  maskedFromAi: string;
+}): Promise<string> {
+  const { userId, statementId, meta, cardNetworkFromAi, maskedFromAi } = args;
+  const type = meta.account_type as
+    | "checking"
+    | "savings"
+    | "credit"
+    | "investment"
+    | "loan"
+    | "unknown";
+  try {
+    const [newAccount] = await resilientQuery(() =>
+      db
+        .insert(accounts)
+        .values({
+          userId,
+          accountName:
+            ef(meta.institution_name ?? `${meta.primary_currency} Account`) ??
+            `${meta.primary_currency} Account`,
+          accountType: type,
+          cardNetwork: cardNetworkFromAi,
+          primaryCurrency: meta.primary_currency,
+          countryIso: meta.country_iso ?? undefined,
+          institutionName: ef(meta.institution_name ?? null) ?? undefined,
+          maskedNumber: maskedFromAi,
+        })
+        .returning({ id: accounts.id }),
+    );
+    return newAccount.id;
+  } catch (insertErr: unknown) {
+    const isDuplicate = insertErr instanceof Error && insertErr.message.includes("unique");
+    if (!isDuplicate) throw insertErr;
+    const [existing] = await resilientQuery(() =>
+      db
+        .select({ id: accounts.id, isActive: accounts.isActive })
+        .from(accounts)
+        .where(
+          and(
+            eq(accounts.userId, userId),
+            eq(accounts.primaryCurrency, meta.primary_currency),
+            eq(accounts.accountType, type),
+            eq(accounts.maskedNumber, maskedFromAi),
+          ),
+        )
+        .limit(1),
+    );
+    if (!existing?.id) {
+      logServerError(
+        `process-statement/${statementId}`,
+        new Error("Duplicate account insert but no matching row found after retry"),
+      );
+      throw new Error("Account creation race: could not resolve account row");
+    }
+    // Legacy soft-deletes may still hold the mask; reclaim for this statement.
+    if (!existing.isActive) {
+      await resilientQuery(() =>
+        db
+          .update(accounts)
+          .set({ isActive: true, updatedAt: new Date() })
+          .where(and(eq(accounts.id, existing.id), eq(accounts.userId, userId))),
+      );
+    }
+    return existing.id;
+  }
 }
 
 /**
@@ -487,15 +610,22 @@ function isTravelOverrideMatch(
 }
 
 async function markUploadLogFailed(userId: string, fileName: string, fileSize: number, fileHash: string | null) {
-  await db.update(fileUploadLog)
+  const hashClause =
+    fileHash == null || fileHash === ""
+      ? isNull(fileUploadLog.fileHash)
+      : eq(fileUploadLog.fileHash, fileHash);
+  await db
+    .update(fileUploadLog)
     .set({ outcome: "failed" })
     .where(
       and(
         eq(fileUploadLog.userId, userId),
         eq(fileUploadLog.fileName, fileName),
         eq(fileUploadLog.fileSize, fileSize),
+        hashClause,
       ),
-    ).catch(() => {});
+    )
+    .catch(() => {});
 }
 
 /** Normalize empty strings so Zod `.length(3)` fields don't fail on `""` (treated as present, not null). */
@@ -747,7 +877,13 @@ export async function processStatement(statementId: number) {
         institutionName: accounts.institutionName,
       })
         .from(accounts)
-        .where(and(eq(accounts.userId, userId), eq(accounts.primaryCurrency, meta.primary_currency))),
+        .where(
+          and(
+            eq(accounts.userId, userId),
+            eq(accounts.primaryCurrency, meta.primary_currency),
+            eq(accounts.isActive, true),
+          ),
+        ),
     ),
     resilientQuery(() =>
       db
@@ -781,67 +917,67 @@ export async function processStatement(statementId: number) {
       updates.institutionName = ef(meta.institution_name) ?? meta.institution_name;
     }
     if (Object.keys(updates).length > 0) {
-      db.update(accounts).set(updates).where(eq(accounts.id, accountId)).catch(() => {});
+      // Await + owner scope: fire-and-forget previously dropped unique conflicts
+      // (e.g. mask already on a sibling account) with no log.
+      await resilientQuery(() =>
+        db
+          .update(accounts)
+          .set({ ...updates, updatedAt: new Date() })
+          .where(and(eq(accounts.id, accountId), eq(accounts.userId, userId))),
+      ).catch((err) => logServerError(`process-statement/${statementId}/account-update`, err));
     }
   } else {
-    // Re-query right before insert to guard against a parallel insert
-    // that snuck in between the initial query and now.
-    const recheck = await resilientQuery(() =>
-      db.select({ id: accounts.id })
-        .from(accounts)
-        .where(
-          and(
-            eq(accounts.userId, userId),
-            eq(accounts.primaryCurrency, meta.primary_currency),
-            eq(accounts.accountType, meta.account_type as "checking" | "savings" | "credit" | "investment" | "unknown"),
-            ...(maskedFromAi ? [eq(accounts.maskedNumber, maskedFromAi)] : []),
-          ),
-        )
-        .limit(1),
-    );
-
-    if (recheck.length > 0) {
-      accountId = recheck[0].id;
+    // Race recheck is only safe when we have a masked number (unique key).
+    // Without a mask, Postgres UNIQUE treats NULL masks as distinct - a bare
+    // type+currency recheck would steal an unrelated masked sibling account.
+    if (maskedFromAi) {
+      const recheck = await resilientQuery(() =>
+        db
+          .select({ id: accounts.id })
+          .from(accounts)
+          .where(
+            and(
+              eq(accounts.userId, userId),
+              eq(accounts.primaryCurrency, meta.primary_currency),
+              eq(
+                accounts.accountType,
+                meta.account_type as "checking" | "savings" | "credit" | "investment" | "unknown",
+              ),
+              eq(accounts.maskedNumber, maskedFromAi),
+            ),
+          )
+          .limit(1),
+      );
+      if (recheck.length > 0) {
+        accountId = recheck[0]!.id;
+      } else {
+        accountId = await insertAccountWithMaskRaceRetry({
+          userId,
+          statementId,
+          meta,
+          cardNetworkFromAi,
+          maskedFromAi,
+        });
+      }
     } else {
-      try {
-        const [newAccount] = await resilientQuery(() =>
-          db.insert(accounts).values({
+      const [newAccount] = await resilientQuery(() =>
+        db
+          .insert(accounts)
+          .values({
             userId,
-            accountName: ef(meta.institution_name ?? `${meta.primary_currency} Account`) ?? `${meta.primary_currency} Account`,
+            accountName:
+              ef(meta.institution_name ?? `${meta.primary_currency} Account`) ??
+              `${meta.primary_currency} Account`,
             accountType: meta.account_type,
             cardNetwork: cardNetworkFromAi,
             primaryCurrency: meta.primary_currency,
             countryIso: meta.country_iso ?? undefined,
             institutionName: ef(meta.institution_name ?? null) ?? undefined,
-            maskedNumber: maskedFromAi,
-          }).returning({ id: accounts.id }),
-        );
-        accountId = newAccount.id;
-      } catch (insertErr: unknown) {
-        const isDuplicate = insertErr instanceof Error && insertErr.message.includes("unique");
-        if (!isDuplicate) throw insertErr;
-        const [existing] = await resilientQuery(() =>
-          db.select({ id: accounts.id })
-            .from(accounts)
-            .where(
-              and(
-                eq(accounts.userId, userId),
-                eq(accounts.primaryCurrency, meta.primary_currency),
-                eq(accounts.accountType, meta.account_type as "checking" | "savings" | "credit" | "investment" | "unknown"),
-                ...(maskedFromAi ? [eq(accounts.maskedNumber, maskedFromAi)] : []),
-              ),
-            )
-            .limit(1),
-        );
-        if (!existing?.id) {
-          logServerError(
-            `process-statement/${statementId}`,
-            new Error("Duplicate account insert but no matching row found after retry"),
-          );
-          throw new Error("Account creation race: could not resolve account row");
-        }
-        accountId = existing.id;
-      }
+            maskedNumber: undefined,
+          })
+          .returning({ id: accounts.id }),
+      );
+      accountId = newAccount.id;
     }
   }
 
@@ -944,10 +1080,14 @@ export async function processStatement(statementId: number) {
         })),
       ).onConflictDoNothing(),
     );
-    const allMerchants = await resilientQuery(() =>
-      db.select({ id: merchants.id, canonicalName: merchants.canonicalName }).from(merchants),
+    const merchantNames = Array.from(uniqueMerchants.values()).map((m) => m.canonical);
+    const matchedMerchants = await resilientQuery(() =>
+      db
+        .select({ id: merchants.id, canonicalName: merchants.canonicalName })
+        .from(merchants)
+        .where(inArray(merchants.canonicalName, merchantNames)),
     );
-    for (const m of allMerchants) merchantIdCache.set(m.canonicalName.toLowerCase(), m.id);
+    for (const m of matchedMerchants) merchantIdCache.set(m.canonicalName.toLowerCase(), m.id);
   }
 
   const BATCH_SIZE = 100;
@@ -1015,28 +1155,49 @@ export async function processStatement(statementId: number) {
     };
   });
 
-  // Soft skip: strong bank refs that already exist on this account are known duplicates
-  // even if AI rewrote the raw description (signature would otherwise miss them).
+  // Strong bank references uniquely identify a transaction. The SAME reference can
+  // resurface with a different date column (Transaction Date vs Posting Date), a
+  // reworded description, or even under a SECOND account record for the same card
+  // (e.g. the masked number was extracted on one ingest but not another). Dedupe on
+  // (reference, signed amount) both WITHIN this batch AND against every existing
+  // transaction for the user (not just this account) so none of that variance can
+  // double-load a row. Signed amount (not absolute) keeps the two legitimate sides of
+  // a transfer (+X / -X) that happen to share a reference as distinct rows.
+  const refIdentity = (ref: string, signedAmount: number | string) =>
+    `${ref}\u0000${normalizeBaseAmount(signedAmount)}`;
+
   const strongRefs = [...new Set(txnRows.map((r) => r.referenceId).filter(Boolean))] as string[];
-  const existingRefSet = new Set<string>();
+  const existingRefKeys = new Set<string>();
   if (strongRefs.length > 0) {
     const existingRefs = await resilientQuery(() =>
       db
-        .select({ referenceId: transactions.referenceId })
+        .select({
+          referenceId: transactions.referenceId,
+          baseAmount: transactions.baseAmount,
+        })
         .from(transactions)
         .where(
           and(
-            eq(transactions.accountId, accountId),
+            eq(transactions.userId, userId),
             inArray(transactions.referenceId, strongRefs),
           ),
         ),
     );
     for (const row of existingRefs) {
-      if (row.referenceId) existingRefSet.add(row.referenceId);
+      if (row.referenceId) {
+        existingRefKeys.add(refIdentity(row.referenceId, row.baseAmount));
+      }
     }
   }
 
-  const rowsToInsert = txnRows.filter((r) => !(r.referenceId && existingRefSet.has(r.referenceId)));
+  const seenRefKeys = new Set<string>();
+  const rowsToInsert = txnRows.filter((r) => {
+    if (!r.referenceId) return true;
+    const key = refIdentity(r.referenceId, r.baseAmount);
+    if (existingRefKeys.has(key) || seenRefKeys.has(key)) return false;
+    seenRefKeys.add(key);
+    return true;
+  });
   const softRefDupes = txnRows.length - rowsToInsert.length;
 
   const batches: typeof rowsToInsert[] = [];

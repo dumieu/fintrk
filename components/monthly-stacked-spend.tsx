@@ -7,41 +7,57 @@ import {
   useRef,
   useState,
   useCallback,
+  type MouseEvent as ReactMouseEvent,
 } from "react";
 import { createPortal } from "react-dom";
-import { CalendarRange, CalendarDays, Footprints, Maximize2, X } from "lucide-react";
+import { CalendarRange, CalendarDays, Maximize2, RotateCcw, X } from "lucide-react";
 import type {
   MonthlyStack,
   MonthlyStackSegment,
   MonthlyStacksResponse,
 } from "@/app/api/analytics/monthly-stacks/route";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/format";
-import { AnalyticsDetailDialog } from "@/components/analytics-detail-tooltip";
 import { CategoryTransactionsModal } from "@/components/category-transactions-modal";
 import { AnalyticsCategoryLegend } from "@/components/analytics-category-legend";
 import {
   analyticsCategoryGradientId,
   analyticsCategoryGradientTop,
 } from "@/lib/analytics-category-colors";
-import { periodKeyToDateRange, formatPeriodKeyLabel } from "@/lib/month-date-range";
+import { periodKeyToDateRange, formatPeriodKeyLabel, monthKeyToDateRange } from "@/lib/month-date-range";
+import {
+  type AnalyticsChartFilters,
+} from "@/lib/analytics/workspace-filters";
 import {
   TransactionSizeSlider,
   TXN_SIZE_OPEN,
 } from "@/components/transaction-size-slider";
 import {
-  chartChipClass,
-  chartIconBadgeClass,
-  chartMutedClass,
-  chartOverlayClass,
-  chartOverlayPillClass,
-  chartTitleClass,
+  chartControlClass,
+  chartTooltipShellClass,
 } from "@/lib/chart-ui";
 import { cn } from "@/lib/utils";
 
 const REF_LINE_INCOME = "#39FF14";
 const REF_LINE_SPEND = "#FF4444";
 const REF_AVG_MONTHS = 12;
+
+/** Calendar range covering the rightmost N month bars (matches the avg reference-line span). */
+function refLineMonthDateRange(
+  months: { month: string }[],
+  n: number = REF_AVG_MONTHS,
+): { dateFrom: string; dateTo: string } | null {
+  if (months.length === 0) return null;
+  const slice = months.slice(-Math.min(n, months.length));
+  const fromKey = slice[0]?.month;
+  const toKey = slice[slice.length - 1]?.month;
+  if (!fromKey || !toKey) return null;
+  if (!/^\d{4}-\d{2}$/.test(fromKey) || !/^\d{4}-\d{2}$/.test(toKey)) return null;
+  return {
+    dateFrom: monthKeyToDateRange(fromKey).dateFrom,
+    dateTo: monthKeyToDateRange(toKey).dateTo,
+  };
+}
 const DEFAULT_MONTHS = 72;
 const DAILY_WALK_DAYS = 60;
 const CHART_HEIGHT = 660;
@@ -201,10 +217,32 @@ function monthLabelShort(mk: string): string {
   return d.toLocaleString("en-US", { month: "short", timeZone: "UTC" });
 }
 
-function denseMonthShowsYear(mk: string, index: number, months: MonthlyStack[]): boolean {
-  if (index === 0) return true;
-  const prev = months[index - 1]?.month;
-  return !prev || mk.slice(0, 4) !== prev.slice(0, 4);
+/** Year spans for x-axis year row + delimiters (monthly dense / sparse). */
+function computeYearBands(
+  months: MonthlyStack[],
+  geometries: { cx: number; x: number; barW: number }[],
+): { year: string; midX: number; startX: number; endX: number }[] {
+  if (months.length === 0 || geometries.length === 0) return [];
+  const bands: { year: string; midX: number; startX: number; endX: number }[] = [];
+  let i = 0;
+  while (i < months.length) {
+    const year = months[i].month.slice(0, 4);
+    const start = i;
+    while (i < months.length && months[i].month.slice(0, 4) === year) i += 1;
+    const end = i - 1;
+    const g0 = geometries[start];
+    const g1 = geometries[end];
+    if (!g0 || !g1) continue;
+    const startX = g0.x;
+    const endX = g1.x + g1.barW;
+    bands.push({
+      year,
+      midX: (startX + endX) / 2,
+      startX,
+      endX,
+    });
+  }
+  return bands;
 }
 
 function computeBarGeometries(
@@ -304,7 +342,17 @@ function filterMonthsByHiddenCategories(
   });
 }
 
-export function MonthlyStackedSpend({ months: monthsCount = DEFAULT_MONTHS }: { months?: number }) {
+export function MonthlyStackedSpend({
+  months: monthsCount = DEFAULT_MONTHS,
+  /** Fill parent height/width; chart resizes with the container (no fixed 660px). */
+  fill = false,
+  /** Emits chart filters so Insights panel cards stay aligned. */
+  onFiltersChange,
+}: {
+  months?: number;
+  fill?: boolean;
+  onFiltersChange?: (filters: AnalyticsChartFilters) => void;
+}) {
   const [data, setData] = useState<MonthlyStacksResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -317,6 +365,10 @@ export function MonthlyStackedSpend({ months: monthsCount = DEFAULT_MONTHS }: { 
     name: string;
     level: "category" | "subcategory" | "discretionary";
     monthKey: string;
+  } | null>(null);
+  const [incomeModalRange, setIncomeModalRange] = useState<{
+    dateFrom: string;
+    dateTo: string;
   } | null>(null);
   const [timeGranularity, setTimeGranularity] = useState<ChartTimeGranularity>("month");
   const [stackBy, setStackBy] = useState<ChartStackBy>("category");
@@ -340,6 +392,29 @@ export function MonthlyStackedSpend({ months: monthsCount = DEFAULT_MONTHS }: { 
     const t = window.setTimeout(() => setSizeApplied(sizeDraft), 220);
     return () => window.clearTimeout(t);
   }, [sizeDraft]);
+
+  useEffect(() => {
+    if (!onFiltersChange) return;
+    onFiltersChange({
+      timeGranularity,
+      months: monthsCount,
+      days: DAILY_WALK_DAYS,
+      minAmount: sizeApplied.min,
+      maxAmount: sizeApplied.max,
+      soloCategory: stackBy === "category" ? soloCategory : null,
+      hiddenCategories: [...hiddenCategories],
+      stackBy,
+    });
+  }, [
+    onFiltersChange,
+    timeGranularity,
+    monthsCount,
+    sizeApplied.min,
+    sizeApplied.max,
+    soloCategory,
+    hiddenCategories,
+    stackBy,
+  ]);
 
   const onTimeGranularityChange = useCallback(
     (next: ChartTimeGranularity) => {
@@ -375,6 +450,28 @@ export function MonthlyStackedSpend({ months: monthsCount = DEFAULT_MONTHS }: { 
     }
   }, []);
 
+  const resetAllChartFilters = useCallback(() => {
+    setTimeGranularity("month");
+    writeStoredGranularity("month");
+    setStackBy("category");
+    writeStoredStackBy("category");
+    stackByBeforeWalkRef.current = "category";
+    setSizeDraft({ min: 0, max: TXN_SIZE_OPEN });
+    setSizeApplied({ min: 0, max: TXN_SIZE_OPEN });
+    setSoloCategory(null);
+    setHiddenCategories(new Set());
+    setDrilldown(null);
+    setSegmentModal(null);
+  }, []);
+
+  const chartFiltersDirty =
+    timeGranularity !== "month" ||
+    stackBy !== "category" ||
+    sizeDraft.min > 0 ||
+    sizeDraft.max < TXN_SIZE_OPEN ||
+    soloCategory != null ||
+    hiddenCategories.size > 0;
+
   const toggleCategory = useCallback((name: string) => {
     setSoloCategory((prev) => (prev === name ? null : name));
   }, []);
@@ -396,6 +493,16 @@ export function MonthlyStackedSpend({ months: monthsCount = DEFAULT_MONTHS }: { 
     setSoloCategory(null);
     setHiddenCategories(new Set());
   }, []);
+
+  const openIncomeModal = useCallback(() => {
+    if (!data) return;
+    const monthsForRange =
+      stackBy === "discretionary"
+        ? (data.discretionaryMonths ?? data.months)
+        : data.months;
+    const range = refLineMonthDateRange(monthsForRange);
+    if (range) setIncomeModalRange(range);
+  }, [data, stackBy]);
 
   const openSegmentModal = useCallback(
     (segment: {
@@ -501,14 +608,32 @@ export function MonthlyStackedSpend({ months: monthsCount = DEFAULT_MONTHS }: { 
     sizeCurrency: data?.primaryCurrency,
     onSizeRangeChange: (next: { min: number; max: number }) => setSizeDraft(next),
     sizeReady,
+    onResetFilters: resetAllChartFilters,
+    filtersDirty: chartFiltersDirty,
+    onIncomeClick: openIncomeModal,
   };
+
+  const shellClass = cn(
+    "text-card-foreground",
+    fill
+      ? "flex h-full min-h-0 flex-1 flex-col gap-0 overflow-hidden border-0 bg-transparent py-0 shadow-none ring-0"
+      : "border-chart-border bg-chart-surface shadow-chart",
+  );
+  const contentClass = cn(
+    "overflow-visible pt-0",
+    fill && "flex min-h-0 flex-1 flex-col overflow-hidden px-0 pb-0",
+  );
+  const placeholderClass = cn(
+    "flex items-center justify-center text-sm text-muted-foreground",
+    fill ? "min-h-0 flex-1" : "h-[660px]",
+  );
 
   if (loading && !data) {
     return (
-      <Card className="border-chart-border bg-chart-surface text-card-foreground shadow-chart">
+      <Card className={shellClass}>
         <ChartCardHeader {...headerChartControls} />
-        <CardContent className="overflow-visible pt-0">
-          <div className="flex h-[660px] items-center justify-center text-sm text-muted-foreground">
+        <CardContent className={contentClass}>
+          <div className={placeholderClass}>
             {timeGranularity === "day" ? "Loading your 60-day walk…" : "Loading monthly breakdown…"}
           </div>
         </CardContent>
@@ -517,10 +642,10 @@ export function MonthlyStackedSpend({ months: monthsCount = DEFAULT_MONTHS }: { 
   }
   if (error || !data) {
     return (
-      <Card className="border-chart-border bg-chart-surface text-card-foreground shadow-chart">
+      <Card className={shellClass}>
         <ChartCardHeader {...headerChartControls} />
-        <CardContent className="overflow-visible pt-0">
-          <div className="flex h-[660px] items-center justify-center text-sm text-rose-300/80">
+        <CardContent className={contentClass}>
+          <div className={cn(placeholderClass, "text-rose-300/80")}>
             {error ?? "Failed to load monthly breakdown."}
           </div>
         </CardContent>
@@ -529,10 +654,10 @@ export function MonthlyStackedSpend({ months: monthsCount = DEFAULT_MONTHS }: { 
   }
   if (data.months.every((m) => m.total === 0)) {
     return (
-      <Card className="border-chart-border bg-chart-surface text-card-foreground shadow-chart">
+      <Card className={shellClass}>
         <ChartCardHeader {...headerChartControls} />
-        <CardContent className="overflow-visible pt-0">
-          <div className="flex h-[660px] items-center justify-center text-sm text-muted-foreground">
+        <CardContent className={contentClass}>
+          <div className={placeholderClass}>
             No spending in the selected window.
           </div>
           <AnalyticsCategoryLegend
@@ -564,15 +689,15 @@ export function MonthlyStackedSpend({ months: monthsCount = DEFAULT_MONTHS }: { 
 
   if (stackBy === "discretionary" && chartData.months.every((m) => m.total === 0)) {
     return (
-      <Card className="border-chart-border bg-chart-surface text-card-foreground shadow-chart">
+      <Card className={shellClass}>
         <ChartCardHeader
           onExpand={() => setExpanded(true)}
           avgMonthlySpendLast12={data.avgMonthlySpendLast12}
           avgMonthlyIncomeLast12={data.avgMonthlyIncomeLast12}
           {...headerChartControls}
         />
-        <CardContent className="overflow-visible pt-0">
-          <div className="flex h-[660px] flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
+        <CardContent className={contentClass}>
+          <div className={cn(placeholderClass, "flex-col gap-2")}>
             <p>No discretionary-tagged spending in this window.</p>
             <p className="text-xs text-muted-foreground/80">
               Tag subcategories as Non-discretionary, Semi-discretionary, or Discretionary in Category Mapping.
@@ -584,7 +709,7 @@ export function MonthlyStackedSpend({ months: monthsCount = DEFAULT_MONTHS }: { 
   }
 
   return (
-    <Card className="border-chart-border bg-chart-surface text-card-foreground shadow-chart">
+    <Card className={shellClass}>
       <ChartCardHeader
         onExpand={() => setExpanded(true)}
         avgMonthlySpendLast12={
@@ -603,7 +728,7 @@ export function MonthlyStackedSpend({ months: monthsCount = DEFAULT_MONTHS }: { 
         }
         {...headerChartControls}
       />
-      <CardContent className="overflow-visible pt-0">
+      <CardContent className={contentClass}>
         <ChartView
           data={chartData}
           soloCategory={stackBy === "discretionary" ? null : soloCategory}
@@ -613,23 +738,27 @@ export function MonthlyStackedSpend({ months: monthsCount = DEFAULT_MONTHS }: { 
           timeGranularity={timeGranularity}
           stackBy={stackBy}
           amountFilterActive={amountFilterActive}
+          fill={fill}
           onSegmentClick={openSegmentModal}
+          onIncomeLineClick={openIncomeModal}
         />
-        <AnalyticsCategoryLegend
-          categories={chartData.categories}
-          soloCategory={stackBy === "discretionary" ? null : soloCategory}
-          hiddenCategories={hiddenCategories}
-          subcategoryBreakdown={
-            stackBy !== "discretionary" &&
-            soloCategory &&
-            drilldown?.parentCategory === soloCategory
-              ? drilldown.categories
-              : undefined
-          }
-          onToggleCategory={stackBy === "discretionary" ? undefined : toggleCategory}
-          onToggleVisibility={toggleCategoryVisibility}
-          onShowAll={showAllCategories}
-        />
+        <div className={cn(fill && "shrink-0")}>
+          <AnalyticsCategoryLegend
+            categories={chartData.categories}
+            soloCategory={stackBy === "discretionary" ? null : soloCategory}
+            hiddenCategories={hiddenCategories}
+            subcategoryBreakdown={
+              stackBy !== "discretionary" &&
+              soloCategory &&
+              drilldown?.parentCategory === soloCategory
+                ? drilldown.categories
+                : undefined
+            }
+            onToggleCategory={stackBy === "discretionary" ? undefined : toggleCategory}
+            onToggleVisibility={toggleCategoryVisibility}
+            onShowAll={showAllCategories}
+          />
+        </div>
       </CardContent>
       {segmentModal &&
         typeof document !== "undefined" &&
@@ -642,7 +771,27 @@ export function MonthlyStackedSpend({ months: monthsCount = DEFAULT_MONTHS }: { 
               ...periodKeyToDateRange(segmentModal.monthKey),
             }}
             currency={data.primaryCurrency}
+            minAmount={sizeApplied.min > 0 ? sizeApplied.min : undefined}
+            maxAmount={sizeApplied.max < TXN_SIZE_OPEN ? sizeApplied.max : undefined}
             onClose={() => setSegmentModal(null)}
+          />,
+          document.body,
+        )}
+      {incomeModalRange &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <CategoryTransactionsModal
+            filter={{
+              mode: "flow",
+              flow: "inflow",
+              label: "Income",
+              dateFrom: incomeModalRange.dateFrom,
+              dateTo: incomeModalRange.dateTo,
+            }}
+            currency={data.primaryCurrency}
+            minAmount={sizeApplied.min > 0 ? sizeApplied.min : undefined}
+            maxAmount={sizeApplied.max < TXN_SIZE_OPEN ? sizeApplied.max : undefined}
+            onClose={() => setIncomeModalRange(null)}
           />,
           document.body,
         )}
@@ -665,11 +814,14 @@ export function MonthlyStackedSpend({ months: monthsCount = DEFAULT_MONTHS }: { 
             sizeCurrency={data.primaryCurrency}
             onSizeRangeChange={(next) => setSizeDraft(next)}
             sizeReady={sizeReady}
+            onResetFilters={resetAllChartFilters}
+            filtersDirty={chartFiltersDirty}
             onToggleCategory={stackBy === "discretionary" ? undefined : toggleCategory}
             onToggleVisibility={toggleCategoryVisibility}
             onShowAllCategories={showAllCategories}
             onClose={() => setExpanded(false)}
             onSegmentClick={openSegmentModal}
+            onIncomeLineClick={openIncomeModal}
           />,
           document.body,
         )}
@@ -681,10 +833,12 @@ function ChartRefLineLegend({
   avgMonthlySpendLast12,
   avgMonthlyIncomeLast12,
   timeGranularity = "month",
+  onIncomeClick,
 }: {
   avgMonthlySpendLast12: number | null | undefined;
   avgMonthlyIncomeLast12: number | null | undefined;
   timeGranularity?: ChartTimeGranularity;
+  onIncomeClick?: () => void;
 }) {
   if (timeGranularity === "year" || timeGranularity === "day") return null;
 
@@ -696,9 +850,9 @@ function ChartRefLineLegend({
   const incomeLabel = "Avg income · last 12 mo";
 
   return (
-    <div className="flex items-center gap-3" aria-hidden>
+    <div className="flex items-center gap-3">
       {showSpend ? (
-        <div className="flex items-center gap-1.5 text-[10px] font-semibold leading-none text-[#FFB4B4]">
+        <div className="flex items-center gap-1.5 text-[10px] font-semibold leading-none text-[#C43A3A] dark:text-[#FFB4B4]">
           <span
             className="inline-block h-[2px] w-4 shrink-0 rounded-full bg-[#FF4444]"
             style={{ boxShadow: "0 0 6px rgba(255,68,68,0.7)" }}
@@ -707,15 +861,60 @@ function ChartRefLineLegend({
         </div>
       ) : null}
       {showIncome ? (
-        <div className="flex items-center gap-1.5 text-[10px] font-semibold leading-none text-[#9DFFB0]">
-          <span
-            className="inline-block h-[2px] w-4 shrink-0 rounded-full bg-[#39FF14]"
-            style={{ boxShadow: "0 0 6px rgba(57,255,20,0.55)" }}
-          />
-          <span>{incomeLabel}</span>
-        </div>
+        onIncomeClick ? (
+          <button
+            type="button"
+            onClick={onIncomeClick}
+            title="Show income transactions for this period"
+            aria-label="Show income transactions for the last 12 months"
+            className="flex items-center gap-1.5 rounded-md text-[10px] font-semibold leading-none text-[#0A9A6E] transition-colors hover:bg-[#39FF14]/10 dark:text-[#9DFFB0]"
+          >
+            <span
+              className="inline-block h-[2px] w-4 shrink-0 rounded-full bg-[#39FF14]"
+              style={{ boxShadow: "0 0 6px rgba(57,255,20,0.55)" }}
+            />
+            <span className="underline decoration-[#39FF14]/35 underline-offset-2">
+              {incomeLabel}
+            </span>
+          </button>
+        ) : (
+          <div className="flex items-center gap-1.5 text-[10px] font-semibold leading-none text-[#0A9A6E] dark:text-[#9DFFB0]">
+            <span
+              className="inline-block h-[2px] w-4 shrink-0 rounded-full bg-[#39FF14]"
+              style={{ boxShadow: "0 0 6px rgba(57,255,20,0.55)" }}
+            />
+            <span>{incomeLabel}</span>
+          </div>
+        )
       ) : null}
     </div>
+  );
+}
+
+function ChartResetFiltersButton({
+  onClick,
+  dirty,
+}: {
+  onClick: () => void;
+  dirty: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!dirty}
+      className={cn(
+        "pointer-events-auto grid w-7 shrink-0 place-items-center transition-colors",
+        chartControlClass,
+        dirty
+          ? "hover:border-[#0BC18D]/40 hover:bg-chart-hover hover:text-[#0BC18D]"
+          : "cursor-default opacity-35",
+      )}
+      aria-label="Reset all chart filters"
+      title="Reset all"
+    >
+      <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+    </button>
   );
 }
 
@@ -733,7 +932,8 @@ function ChartTimeGranularityToggle({
       role="group"
       aria-label="Chart time period"
       className={cn(
-        "pointer-events-auto inline-flex items-center gap-0.5 rounded-lg border border-chart-border bg-chart-surface/92 p-0.5 shadow-[0_4px_24px_-8px_rgba(0,0,0,0.55)] backdrop-blur-md ring-1 ring-white/[0.04]",
+        "pointer-events-auto inline-flex shrink-0 items-center gap-0.5 p-0.5",
+        chartControlClass,
         className,
       )}
     >
@@ -741,8 +941,8 @@ function ChartTimeGranularityToggle({
         [
           {
             id: "day" as const,
-            label: "Daily Walk",
-            Icon: Footprints,
+            label: "Daily",
+            Icon: CalendarDays,
             title: "Last 60 days — one bar per day. Stack by Type opens automatically.",
           },
           {
@@ -768,9 +968,9 @@ function ChartTimeGranularityToggle({
             title={title}
             onClick={() => onChange(id)}
             className={cn(
-              "relative inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold transition-all duration-200",
+              "relative inline-flex h-6 items-center gap-1 rounded-md px-2 text-[10px] font-semibold leading-none transition-all duration-200",
               active
-                ? "bg-[#0BC18D]/18 text-[#0BC18D] shadow-[0_0_16px_-6px_rgba(11,193,141,0.55)]"
+                ? "bg-[#0BC18D]/15 text-[#0BC18D] shadow-[0_0_12px_-4px_rgba(11,193,141,0.35)] dark:bg-[#0BC18D]/18 dark:shadow-[0_0_16px_-6px_rgba(11,193,141,0.55)]"
                 : "text-muted-foreground hover:bg-chart-hover hover:text-foreground",
             )}
           >
@@ -794,7 +994,10 @@ function ChartStackByToggle({
     <div
       role="group"
       aria-label="Stack segments by"
-      className="pointer-events-auto inline-flex rounded-lg border border-chart-border bg-chart-surface/92 p-0.5 shadow-[0_4px_24px_-8px_rgba(0,0,0,0.55)] backdrop-blur-md ring-1 ring-white/[0.04]"
+      className={cn(
+        "pointer-events-auto inline-flex shrink-0 items-center gap-0.5 p-0.5",
+        chartControlClass,
+      )}
     >
       {(
         [
@@ -815,9 +1018,9 @@ function ChartStackByToggle({
             }
             onClick={() => onChange(id)}
             className={cn(
-              "relative inline-flex items-center rounded-md px-2 py-1 text-[10px] font-semibold transition-all duration-200",
+              "relative inline-flex h-6 items-center rounded-md px-2 text-[10px] font-semibold leading-none transition-all duration-200",
               active
-                ? "bg-[#0BC18D]/18 text-[#0BC18D] shadow-[0_0_16px_-6px_rgba(11,193,141,0.55)]"
+                ? "bg-[#0BC18D]/15 text-[#0BC18D] shadow-[0_0_12px_-4px_rgba(11,193,141,0.35)] dark:bg-[#0BC18D]/18 dark:shadow-[0_0_16px_-6px_rgba(11,193,141,0.55)]"
                 : "text-muted-foreground hover:bg-chart-hover hover:text-foreground",
             )}
           >
@@ -834,7 +1037,10 @@ function ExpandChartButton({ onClick }: { onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      className="grid h-7 w-7 place-items-center rounded-lg border border-chart-border bg-chart-surface text-muted-foreground backdrop-blur-sm transition-colors hover:border-chart-border hover:bg-chart-hover hover:text-foreground"
+      className={cn(
+        "grid w-7 shrink-0 place-items-center transition-colors hover:border-chart-border hover:bg-chart-hover hover:text-foreground",
+        chartControlClass,
+      )}
       aria-label="Expand chart to full screen"
       title="Expand"
     >
@@ -856,6 +1062,9 @@ function ChartCardHeader({
   sizeCurrency,
   onSizeRangeChange,
   sizeReady = false,
+  onResetFilters,
+  filtersDirty = false,
+  onIncomeClick,
 }: {
   onExpand?: () => void;
   avgMonthlySpendLast12?: number | null;
@@ -869,10 +1078,13 @@ function ChartCardHeader({
   sizeCurrency?: string;
   onSizeRangeChange?: (next: { min: number; max: number }) => void;
   sizeReady?: boolean;
+  onResetFilters?: () => void;
+  filtersDirty?: boolean;
+  onIncomeClick?: () => void;
 }) {
   return (
-    <CardHeader className="relative flex min-h-[2.75rem] items-center justify-center pb-3 pt-0">
-      <div className="absolute left-0 top-1/2 z-10 flex -translate-y-1/2 items-center gap-2">
+    <CardHeader className="flex min-h-7 shrink-0 items-center justify-between gap-x-3 px-3 pb-2 pt-2">
+      <div className="flex h-7 min-w-0 items-center justify-start gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {onTimeGranularityChange ? (
           <ChartTimeGranularityToggle
             value={timeGranularity}
@@ -891,28 +1103,20 @@ function ChartCardHeader({
           />
         ) : null}
       </div>
-      <CardTitle className="pointer-events-none text-center text-sm font-semibold text-foreground">
-        <span className="inline-flex items-center justify-center gap-2 whitespace-nowrap">
-          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-[#0BC18D]/30 to-[#5DD3F3]/20 ring-1 ring-chart-border">
-            {timeGranularity === "day" ? (
-              <Footprints className="h-4 w-4 text-[#0BC18D]" />
-            ) : (
-              <CalendarRange className="h-4 w-4 text-[#0BC18D]" />
-            )}
-          </span>
-          {timeGranularity === "day" ? "Daily Walk — 60 days" : "Spend by Category"}
-        </span>
-      </CardTitle>
-      {onExpand ? (
-        <div className="absolute right-0 top-1/2 z-10 flex -translate-y-1/2 items-center gap-2.5">
+      <div className="flex h-7 min-w-0 shrink-0 items-center justify-end gap-1.5">
+        {onExpand ? (
           <ChartRefLineLegend
             avgMonthlySpendLast12={avgMonthlySpendLast12}
             avgMonthlyIncomeLast12={avgMonthlyIncomeLast12}
             timeGranularity={timeGranularity}
+            onIncomeClick={onIncomeClick}
           />
-          <ExpandChartButton onClick={onExpand} />
-        </div>
-      ) : null}
+        ) : null}
+        {onExpand ? <ExpandChartButton onClick={onExpand} /> : null}
+        {onResetFilters ? (
+          <ChartResetFiltersButton onClick={onResetFilters} dirty={filtersDirty} />
+        ) : null}
+      </div>
     </CardHeader>
   );
 }
@@ -933,11 +1137,14 @@ function FullscreenChartModal({
   sizeCurrency,
   onSizeRangeChange,
   sizeReady = false,
+  onResetFilters,
+  filtersDirty = false,
   onToggleCategory,
   onToggleVisibility,
   onShowAllCategories,
   onClose,
   onSegmentClick,
+  onIncomeLineClick,
 }: {
   data: MonthlyStacksResponse;
   soloCategory: string | null;
@@ -954,6 +1161,8 @@ function FullscreenChartModal({
   sizeCurrency?: string;
   onSizeRangeChange?: (next: { min: number; max: number }) => void;
   sizeReady?: boolean;
+  onResetFilters?: () => void;
+  filtersDirty?: boolean;
   onToggleCategory?: (name: string) => void;
   onToggleVisibility: (name: string) => void;
   onShowAllCategories: () => void;
@@ -963,6 +1172,7 @@ function FullscreenChartModal({
     level: "category" | "subcategory" | "discretionary";
     monthKey: string;
   }) => void;
+  onIncomeLineClick?: () => void;
 }) {
   useEffect(() => {
     const prev = document.body.style.overflow;
@@ -984,8 +1194,8 @@ function FullscreenChartModal({
       aria-modal="true"
       aria-label="Monthly Spend by Category — expanded"
     >
-      <div className="relative flex min-h-[3.25rem] shrink-0 items-center justify-center border-b border-chart-border px-5 py-3.5 sm:px-8">
-        <div className="absolute left-5 top-1/2 z-10 flex -translate-y-1/2 items-center gap-2 sm:left-8">
+      <div className="flex min-h-7 shrink-0 items-center justify-between gap-x-3 border-b border-chart-border px-5 py-3 sm:px-8">
+        <div className="flex h-7 min-w-0 items-center justify-start gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <ChartTimeGranularityToggle
             value={timeGranularity}
             onChange={onTimeGranularityChange}
@@ -1000,24 +1210,23 @@ function FullscreenChartModal({
             />
           ) : null}
         </div>
-        <div className="flex items-center justify-center gap-2 text-sm font-semibold text-foreground">
-          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-[#0BC18D]/30 to-[#5DD3F3]/20 ring-1 ring-chart-border">
-            {timeGranularity === "day" ? (
-              <Footprints className="h-3.5 w-3.5 text-[#0BC18D]" />
-            ) : (
-              <Maximize2 className="h-3.5 w-3.5 text-[#0BC18D]" />
+        <div className="flex h-7 items-center justify-end gap-1.5">
+          {onResetFilters ? (
+            <ChartResetFiltersButton onClick={onResetFilters} dirty={filtersDirty} />
+          ) : null}
+          <button
+            type="button"
+            onClick={onClose}
+            className={cn(
+              "grid shrink-0 place-items-center transition-colors hover:bg-chart-hover hover:text-foreground",
+              chartControlClass,
+              "h-8 w-8",
             )}
-          </span>
-          {timeGranularity === "day" ? "Daily Walk — 60 days" : "Spend by Category"}
+            aria-label="Close expanded chart"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute right-5 top-1/2 z-10 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-lg border border-chart-border bg-chart-muted text-muted-foreground transition-colors hover:bg-chart-hover hover:text-white sm:right-8"
-          aria-label="Close expanded chart"
-        >
-          <X className="h-4 w-4" />
-        </button>
       </div>
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4 sm:px-8 sm:py-6">
         <ChartView
@@ -1031,6 +1240,7 @@ function FullscreenChartModal({
           amountFilterActive={amountFilterActive}
           fullscreen
           onSegmentClick={onSegmentClick}
+          onIncomeLineClick={onIncomeLineClick}
         />
         <AnalyticsCategoryLegend
           categories={data.categories}
@@ -1060,7 +1270,9 @@ function ChartView({
   stackBy = "category",
   amountFilterActive = false,
   fullscreen = false,
+  fill = false,
   onSegmentClick,
+  onIncomeLineClick,
 }: {
   data: MonthlyStacksResponse;
   soloCategory?: string | null;
@@ -1071,31 +1283,31 @@ function ChartView({
   stackBy?: ChartStackBy;
   amountFilterActive?: boolean;
   fullscreen?: boolean;
+  /** Size SVG to parent box (analytics fill layout). */
+  fill?: boolean;
   onSegmentClick?: (segment: {
     name: string;
     level: "category" | "subcategory" | "discretionary";
     monthKey: string;
   }) => void;
+  onIncomeLineClick?: () => void;
 }) {
-  type SegmentDetailState = {
-    entity: "category" | "discretionary";
-    value: string;
-    label: string;
-    accent: string;
+  const sizeToParent = fill || fullscreen;
+  const [barTip, setBarTip] = useState<{
+    clientX: number;
+    clientY: number;
+    name: string;
+    periodLabel: string;
+    amount: number;
+    pct: number;
+    color: string;
     currency: string;
-    month?: string;
-    year?: string;
-    monthKey: string;
-    level: "category" | "subcategory" | "discretionary";
-    parentCategory?: string;
-  };
-
-  const [segmentDetail, setSegmentDetail] = useState<SegmentDetailState | null>(null);
+  } | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const shineId = useId().replace(/:/g, "");
   const [size, setSize] = useState<{ w: number; h: number }>({
     w: 1100,
-    h: fullscreen ? CHART_HEIGHT_FULL_INIT : CHART_HEIGHT,
+    h: sizeToParent ? CHART_HEIGHT_FULL_INIT : CHART_HEIGHT,
   });
   const [showRefLineLabels, setShowRefLineLabels] = useState(false);
 
@@ -1105,15 +1317,14 @@ function ChartView({
     const ro = new ResizeObserver((entries) => {
       const r = entries[0]?.contentRect;
       if (!r) return;
-      const legendReserve = 0;
-      const h = fullscreen
-        ? Math.max(CHART_HEIGHT_FULL_MIN, r.height - legendReserve)
+      const h = sizeToParent
+        ? Math.max(fill ? 220 : CHART_HEIGHT_FULL_MIN, Math.floor(r.height))
         : CHART_HEIGHT;
-      setSize({ w: Math.max(640, r.width), h });
+      setSize({ w: Math.max(fill ? 280 : 640, Math.floor(r.width)), h });
     });
     ro.observe(el);
     return () => ro.disconnect();
-  }, [fullscreen]);
+  }, [sizeToParent, fill]);
 
   const { months: rawMonths, primaryCurrency, avgMonthlyIncomeLast12, avgMonthlySpendLast12, categories } = data;
   const hidden = hiddenCategories ?? new Set<string>();
@@ -1173,12 +1384,12 @@ function ChartView({
       ? fullscreen
         ? 48
         : 44
-      : denseBars
+      : timeGranularity === "year"
         ? fullscreen
           ? 40
           : 36
         : fullscreen
-          ? 64
+          ? 58
           : 52;
   const innerW = size.w - padL - padR;
   const innerH = size.h - padT - padB;
@@ -1199,8 +1410,15 @@ function ChartView({
           ? 2
           : 1;
   const axisFont = fullscreen ? 12 : 10;
-  const monthFont = denseBars ? (fullscreen ? 9 : 8) : fullscreen ? 12 : 10;
+  const monthFont = denseBars ? (fullscreen ? 9 : 8) : fullscreen ? 11 : 10;
   const monthYearFont = fullscreen ? 11 : 10;
+  const yearBands = useMemo(
+    () =>
+      timeGranularity === "month"
+        ? computeYearBands(months, barGeometries)
+        : [],
+    [timeGranularity, months, barGeometries],
+  );
 
   /** Scale to filtered bar totals only when a category slicer is active. */
   const refSpendRaw = avgMonthlySpendLast12 ?? 0;
@@ -1259,7 +1477,10 @@ function ChartView({
   return (
     <div
       ref={wrapRef}
-      className={`relative w-full ${fullscreen ? "flex min-h-0 flex-1 flex-col" : ""}`}
+      className={cn(
+        "relative w-full",
+        sizeToParent && "flex min-h-0 flex-1 flex-col",
+      )}
     >
       {categoryFilterActive && drilldownLoading && !usingSubcategoryStacks ? (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-chart-overlay backdrop-blur-[1px]">
@@ -1268,7 +1489,7 @@ function ChartView({
           </span>
         </div>
       ) : null}
-      <div className={`relative w-full ${fullscreen ? "min-h-0 flex-1" : ""}`}>
+      <div className={cn("relative w-full", sizeToParent && "min-h-0 flex-1")}>
         <svg
           width={size.w}
           height={size.h}
@@ -1281,7 +1502,7 @@ function ChartView({
                 ? "Yearly stacked spend by category"
                 : "Monthly stacked spend by category"
           }
-          className="block"
+          className={cn("block", fill && "h-full w-full max-h-full")}
         >
             <defs>
               <linearGradient id={`msb-shine-${shineId}`} x1="0" y1="0" x2="0" y2="1">
@@ -1432,7 +1653,16 @@ function ChartView({
                   segmentLevel={segmentLevel}
                   timeGranularity={timeGranularity}
                   parentCategory={usingSubcategoryStacks ? (soloCategory ?? undefined) : undefined}
-                  onSegmentOpen={setSegmentDetail}
+                  onSegmentOpen={(detail) => {
+                    setBarTip(null);
+                    onSegmentClick?.({
+                      name: detail.value,
+                      level: detail.level,
+                      monthKey: detail.monthKey,
+                    });
+                  }}
+                  onSegmentHover={(tip) => setBarTip(tip)}
+                  onSegmentLeave={() => setBarTip(null)}
                   hideLabels={denseBars}
                   hideEmptyMarker={denseBars && timeGranularity !== "day"}
                   showWalkFootprint={timeGranularity === "day"}
@@ -1481,9 +1711,14 @@ function ChartView({
                   y2={incomeY}
                   stroke="transparent"
                   strokeWidth={14}
-                  style={{ cursor: "default" }}
+                  style={{ cursor: onIncomeLineClick ? "pointer" : "default" }}
                   onMouseEnter={() => setShowRefLineLabels(true)}
                   onMouseLeave={() => setShowRefLineLabels(false)}
+                  onClick={(e) => {
+                    if (!onIncomeLineClick) return;
+                    e.stopPropagation();
+                    onIncomeLineClick();
+                  }}
                 />
                 {showRefLineLabels && (
                   <text
@@ -1547,46 +1782,52 @@ function ChartView({
                   </g>
                 );
               }
-              if (denseBars) {
-                if (i % denseLabelStride !== 0) return null;
-                const short = monthLabelShort(m.month);
-                const showYear = denseMonthShowsYear(m.month, i, months);
-                const label = showYear
-                  ? `${short} '${m.month.slice(2, 4)}`
-                  : short;
-                return (
-                  <text
-                    key={`lbl-${m.month}`}
-                    x={cx}
-                    y={size.h - padB + 14}
-                    textAnchor="middle"
-                    className="fill-chart-label-muted"
-                    style={{ fontSize: monthFont, fontWeight: 600 }}
-                  >
-                    {label}
-                  </text>
-                );
-              }
-              const lbl = monthLabel(m.month);
+              /* Monthly: month abbreviation on top; years rendered as bands below */
+              if (denseBars && i % denseLabelStride !== 0) return null;
+              const short = denseBars
+                ? monthLabelShort(m.month)
+                : monthLabel(m.month).line1.slice(0, 3);
               return (
-                <g key={`lbl-${m.month}`}>
+                <text
+                  key={`lbl-${m.month}`}
+                  x={cx}
+                  y={size.h - padB + 14}
+                  textAnchor="middle"
+                  className="fill-chart-label"
+                  style={{ fontSize: monthFont, fontWeight: 600 }}
+                >
+                  {short}
+                </text>
+              );
+            })}
+
+            {/* Year row + year delimiters (monthly) */}
+            {yearBands.map((band, bi) => {
+              const yearY = size.h - padB + 30;
+              const tickTop = size.h - padB + 4;
+              const tickBot = size.h - padB + 36;
+              return (
+                <g key={`year-band-${band.year}`}>
+                  {bi > 0 ? (
+                    <line
+                      x1={band.startX - DENSE_BAR_GAP_PX / 2}
+                      x2={band.startX - DENSE_BAR_GAP_PX / 2}
+                      y1={tickTop}
+                      y2={tickBot}
+                      className="stroke-chart-border"
+                      strokeWidth={1}
+                      strokeOpacity={0.85}
+                      pointerEvents="none"
+                    />
+                  ) : null}
                   <text
-                    x={cx}
-                    y={size.h - padB + 16}
+                    x={band.midX}
+                    y={yearY}
                     textAnchor="middle"
-                    className="fill-chart-label"
-                    style={{ fontSize: monthFont, fontWeight: 600 }}
+                    className="fill-[#5DD3F3]"
+                    style={{ fontSize: monthYearFont, fontWeight: 700, letterSpacing: "0.04em" }}
                   >
-                    {lbl.line1}
-                  </text>
-                  <text
-                    x={cx}
-                    y={size.h - padB + 30}
-                    textAnchor="middle"
-                    className="fill-chart-label-muted"
-                    style={{ fontSize: monthYearFont }}
-                  >
-                    {lbl.line2}
+                    {band.year}
                   </text>
                 </g>
               );
@@ -1595,32 +1836,42 @@ function ChartView({
       </div>
 
       {typeof document !== "undefined" &&
-        segmentDetail &&
+        barTip &&
         createPortal(
-          <AnalyticsDetailDialog
-            entity={segmentDetail.entity}
-            value={segmentDetail.value}
-            label={segmentDetail.label}
-            accentColor={segmentDetail.accent}
-            currency={segmentDetail.currency}
-            month={segmentDetail.month}
-            year={segmentDetail.year}
-            level={segmentDetail.level}
-            parentCategory={segmentDetail.parentCategory}
-            onViewTransactions={
-              onSegmentClick
-                ? () => {
-                    onSegmentClick({
-                      name: segmentDetail.value,
-                      level: segmentDetail.level,
-                      monthKey: segmentDetail.monthKey,
-                    });
-                    setSegmentDetail(null);
-                  }
-                : undefined
-            }
-            onClose={() => setSegmentDetail(null)}
-          />,
+          <div
+            role="tooltip"
+            className={cn(
+              chartTooltipShellClass,
+              "pointer-events-none fixed z-[90] min-w-[10.5rem] max-w-[16rem] rounded-xl border px-3 py-2",
+            )}
+            style={{
+              left: Math.min(barTip.clientX + 14, window.innerWidth - 200),
+              top: Math.max(8, barTip.clientY - 12),
+              transform: "translateY(-100%)",
+            }}
+          >
+            <div className="min-w-0">
+                <p
+                  className="truncate text-[12px] font-semibold capitalize leading-tight"
+                  style={{ color: barTip.color }}
+                >
+                  {barTip.name}
+                </p>
+                <div className="mt-1.5 flex items-baseline gap-2">
+                  <span className="text-[13px] font-extrabold tabular-nums text-foreground">
+                    {formatCurrency(barTip.amount, barTip.currency)}
+                  </span>
+                  <span className="text-[11px] font-bold tabular-nums text-[#34E6B0]">
+                    {barTip.pct < 0.1 && barTip.pct > 0
+                      ? "<0.1%"
+                      : `${barTip.pct < 10 ? barTip.pct.toFixed(1) : Math.round(barTip.pct)}%`}
+                    <span className="ml-0.5 font-medium text-white">
+                      of {barTip.periodLabel}
+                    </span>
+                  </span>
+                </div>
+              </div>
+          </div>,
           document.body,
         )}
     </div>
@@ -1628,7 +1879,7 @@ function ChartView({
 }
 
 /**
- * Renders one stacked month column. Segment click opens the detail popup scoped to (category × period).
+ * Renders one stacked month column. Segment click opens transactions for that category × period.
  */
 function MonthBar({
   month,
@@ -1644,6 +1895,8 @@ function MonthBar({
   timeGranularity = "month",
   parentCategory,
   onSegmentOpen,
+  onSegmentHover,
+  onSegmentLeave,
   hideLabels = false,
   barRadius = 4,
   hideEmptyMarker = false,
@@ -1672,6 +1925,17 @@ function MonthBar({
     level: "category" | "subcategory" | "discretionary";
     parentCategory?: string;
   }) => void;
+  onSegmentHover?: (tip: {
+    clientX: number;
+    clientY: number;
+    name: string;
+    periodLabel: string;
+    amount: number;
+    pct: number;
+    color: string;
+    currency: string;
+  }) => void;
+  onSegmentLeave?: () => void;
   shineId: string;
   segmentLevel?: "category" | "subcategory" | "discretionary";
   timeGranularity?: ChartTimeGranularity;
@@ -1733,6 +1997,25 @@ function MonthBar({
 
   /** Total label sits above the top segment. */
   const topY = yToPx(month.total);
+  const periodLabel = formatPeriodKeyLabel(month.month);
+
+  const emitHover = (
+    e: ReactMouseEvent,
+    seg: MonthlyStackSegment,
+  ) => {
+    if (!onSegmentHover) return;
+    const pct = month.total > 0 ? (seg.amount / month.total) * 100 : 0;
+    onSegmentHover({
+      clientX: e.clientX,
+      clientY: e.clientY,
+      name: seg.name,
+      periodLabel,
+      amount: seg.amount,
+      pct,
+      color: seg.color,
+      currency,
+    });
+  };
 
   return (
     <g>
@@ -1748,7 +2031,6 @@ function MonthBar({
             key={`${month.month}-${seg.name}`}
             onClick={(e) => {
               e.stopPropagation();
-              const periodLabel = formatPeriodKeyLabel(month.month);
               onSegmentOpen({
                 entity: segmentLevel === "discretionary" ? "discretionary" : "category",
                 value: seg.name,
@@ -1762,6 +2044,9 @@ function MonthBar({
                 parentCategory,
               });
             }}
+            onMouseEnter={(e) => emitHover(e, seg)}
+            onMouseMove={(e) => emitHover(e, seg)}
+            onMouseLeave={() => onSegmentLeave?.()}
             style={{ cursor: "pointer" }}
           >
             <rect
@@ -1842,8 +2127,6 @@ function MonthBar({
             </text>
           );
         })()}
-      {/* Hidden formatter usage to keep tree-shaking happy */}
-      <title>{`${monthLabel(month.month).line1} ${monthLabel(month.month).line2} • ${formatCurrency(month.total, currency)}`}</title>
     </g>
   );
 }

@@ -15,9 +15,18 @@ import {
   serial,
   pgEnum,
   unique,
+  customType,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import type { UserJSON } from "@clerk/backend";
+
+/** Postgres bytea. Blob I/O goes through raw encode/decode(?, 'base64') SQL, so
+ *  this type exists for schema/migration parity and is not selected directly. */
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType() {
+    return "bytea";
+  },
+});
 
 // ─── Enums ───────────────────────────────────────────────────────────────────
 
@@ -115,7 +124,12 @@ export const statements = pgTable(
     fileSize: integer("file_size").notNull(),
     fileMimeType: varchar("file_mime_type", { length: 128 }).notNull(),
     fileHash: varchar("file_hash", { length: 128 }),
+    /** Transient AI-processing payload (base64 JSON), nulled once processed. */
     fileData: text("file_data"),
+    /** Durable original file: gzip + AES-256-GCM packed bytes (see packBlob). */
+    fileBlob: bytea("file_blob"),
+    /** Byte length of file_blob, for storage telemetry. */
+    storedSize: integer("stored_size"),
     status: statementStatusEnum("status").default("uploaded").notNull(),
     aiModel: varchar("ai_model", { length: 128 }),
     aiProcessedAt: timestamp("ai_processed_at", { withTimezone: true }),
@@ -782,9 +796,17 @@ export const feedbackSubmissions = pgTable(
       .primaryKey()
       .$defaultFn(() => crypto.randomUUID()),
     clerkUserId: text("clerk_user_id"),
+    name: text("name"),
     email: text("email").notNull(),
+    appName: text("app_name"),
     sentiment: text("sentiment").notNull(),
     message: text("message"),
+    ideaRedesignScreen: text("idea_redesign_screen"),
+    ideaOtherTools: text("idea_other_tools"),
+    ideaSpreadsheetTracking: text("idea_spreadsheet_tracking"),
+    ideaFirstFeature: text("idea_first_feature"),
+    ideaFriendDescription: text("idea_friend_description"),
+    ideaMissMost: text("idea_miss_most"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [

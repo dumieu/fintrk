@@ -5,12 +5,14 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   CalendarDays,
   CheckCircle2,
+  Eye,
   FileText,
   Loader2,
   RefreshCw,
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { openStatementViewer } from "@/lib/open-statement-viewer";
 import {
   Dialog,
   DialogContent,
@@ -27,6 +29,10 @@ import {
 type UploadedStatement = {
   id: number;
   name: string;
+  mimeType: string | null;
+  sizeBytes: number | null;
+  storedSize: number | null;
+  hasFile: boolean;
   account: {
     name: string;
     institutionName: string | null;
@@ -152,7 +158,7 @@ export function UploadedStatementsList() {
               Uploaded statements
             </h2>
             <p className="mt-0.5 text-[11px] text-muted-foreground">
-              Permanent history of successfully processed statements for this account.
+              Every original file is kept, compressed and AES-256 encrypted at rest. View or download any statement anytime.
             </p>
           </div>
           <Button
@@ -161,7 +167,7 @@ export function UploadedStatementsList() {
             size="sm"
             onClick={() => void load("refresh")}
             disabled={refreshing || loading}
-            className="text-muted-foreground hover:text-white"
+            className="text-muted-foreground hover:text-foreground"
           >
             {refreshing ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -217,7 +223,24 @@ export function UploadedStatementsList() {
                   <p className="rounded-full border border-chart-border bg-chart-muted px-2.5 py-1 text-right text-[11px] font-medium tabular-nums text-foreground">
                     {formatRangeDate(statement.transactionStart)} : {formatRangeDate(statement.transactionEnd)}
                   </p>
-                  <div className="flex justify-end sm:justify-center">
+                  <div className="flex justify-end gap-1 sm:justify-center">
+                    {statement.hasFile && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          openStatementViewer({
+                            statementId: statement.id,
+                            fileName: statement.name,
+                            mimeType: statement.mimeType,
+                          })
+                        }
+                        className="grid h-7 w-7 place-items-center rounded-md text-[#0BC18D] transition-colors hover:bg-[#0BC18D]/10"
+                        aria-label={`View ${statement.name}`}
+                        title="View statement"
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => {
@@ -244,7 +267,7 @@ export function UploadedStatementsList() {
       </motion.section>
 
       <Dialog open={pendingDelete !== null} onOpenChange={(open) => !open && closeDeleteDialog()}>
-        <DialogContent className="border-chart-border bg-card text-white sm:max-w-md">
+        <DialogContent className="border-chart-border bg-card text-foreground sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-white">Delete uploaded statement?</DialogTitle>
             <DialogDescription className="text-muted-foreground">
@@ -268,7 +291,7 @@ export function UploadedStatementsList() {
               variant="ghost"
               onClick={closeDeleteDialog}
               disabled={deletingId !== null}
-              className="text-muted-foreground hover:text-white"
+              className="text-muted-foreground hover:text-foreground"
             >
               Cancel
             </Button>

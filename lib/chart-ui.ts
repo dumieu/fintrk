@@ -13,6 +13,14 @@ export const chartPanelClass =
 export const chartChipClass =
   "rounded-lg border border-chart-border bg-chart-muted text-muted-foreground transition-colors hover:bg-chart-hover hover:text-foreground";
 
+/**
+ * Floating chart chrome (toggles, reset, size slider).
+ * Fixed h-7 so every control shares one baseline in the chart header.
+ * Light: soft white card + emerald-tinted ring. Dark: glass elevation.
+ */
+export const chartControlClass =
+  "box-border h-7 rounded-lg border border-chart-border bg-chart-surface/95 text-muted-foreground shadow-[var(--control-shadow)] backdrop-blur-md ring-1 ring-[color:var(--control-ring)]";
+
 /** Chart section title */
 export const chartTitleClass = "text-sm font-semibold text-foreground";
 

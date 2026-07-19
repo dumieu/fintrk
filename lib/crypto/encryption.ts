@@ -1,5 +1,6 @@
 import "server-only";
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "crypto";
+import { gzipSync, gunzipSync } from "zlib";
 
 /**
  * FinTRK field-level encryption (AES-256-GCM), modeled on BioTRK's PHI stack.
@@ -183,4 +184,33 @@ export function decryptBuffer(data: Buffer): Buffer {
     return Buffer.concat([decipher.update(encrypted), decipher.final()]);
   }
   return data;
+}
+
+/* ── Blob-at-rest packing: gzip THEN AES-256-GCM (raw bytes, no base64) ──
+ *
+ * Order matters: compress first (bank PDFs/CSVs are compressible), then
+ * encrypt (ciphertext is high-entropy and would not compress). This is the
+ * smallest possible on-disk form for a retained statement file. Stored as a
+ * Postgres `bytea` (via `decode(?, 'base64')`), so no base64 storage bloat.
+ */
+
+const GZIP_MAGIC_0 = 0x1f;
+const GZIP_MAGIC_1 = 0x8b;
+
+/** Compress + encrypt raw file bytes for durable, minimal-footprint storage. */
+export function packBlob(raw: Buffer): Buffer {
+  return encryptBuffer(gzipSync(raw));
+}
+
+/** Reverse `packBlob`. Tolerates legacy un-gzipped and/or un-encrypted payloads. */
+export function unpackBlob(stored: Buffer): Buffer {
+  const decrypted = decryptBuffer(stored);
+  if (
+    decrypted.length >= 2 &&
+    decrypted[0] === GZIP_MAGIC_0 &&
+    decrypted[1] === GZIP_MAGIC_1
+  ) {
+    return gunzipSync(decrypted);
+  }
+  return decrypted;
 }

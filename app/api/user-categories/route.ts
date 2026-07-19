@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
+import { requireAppAuth } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
 import {
   userCategories,
@@ -68,8 +68,9 @@ async function userCategoryLockedById(userId: string, id: number): Promise<boole
  */
 export async function GET() {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
 
     await ensureUserCategories(userId);
 
@@ -91,7 +92,10 @@ export async function GET() {
           parentColor: parent.color,
         })
         .from(userCategories)
-        .leftJoin(parent, eq(userCategories.parentId, parent.id))
+        .leftJoin(
+          parent,
+          and(eq(userCategories.parentId, parent.id), eq(parent.userId, userId)),
+        )
         .where(eq(userCategories.userId, userId))
         .orderBy(userCategories.sortOrder),
     );
@@ -139,8 +143,9 @@ const addSchema = z.object({
 /** POST — add a new category or subcategory. */
 export async function POST(request: NextRequest) {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
 
     const body = await request.json();
     const parsed = addSchema.safeParse(body);
@@ -235,8 +240,9 @@ const updateSchema = z.object({
 /** PUT — update a category or subcategory (rename and/or change subcategoryType). */
 export async function PUT(request: NextRequest) {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
 
     const body = await request.json();
     const parsed = updateSchema.safeParse(body);
@@ -328,8 +334,9 @@ async function detachUserCategoryReferences(userId: string, categoryIds: number[
 /** DELETE — remove a category (and its children if it's a parent). */
 export async function DELETE(request: NextRequest) {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
 
     // Prefer `?id=` — DELETE request bodies are often stripped by browsers/CDNs/proxies.
     const q = request.nextUrl.searchParams.get("id");

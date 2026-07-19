@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { and, sql, eq } from "drizzle-orm";
-import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
+import { requireAppAuth } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
 import { transactions, userCategories } from "@/lib/db/schema";
 import { excludeCardPaymentsSql, excludeIgnoredSql } from "@/lib/db/excluded-transactions";
@@ -17,8 +17,9 @@ const NO_STORE = { "Cache-Control": "no-store" } as const;
  */
 export async function GET() {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
 
     const rows = await resilientQuery(() =>
       db
@@ -27,7 +28,13 @@ export async function GET() {
           merchantName: transactions.merchantName,
         })
         .from(transactions)
-        .innerJoin(userCategories, eq(transactions.categoryId, userCategories.id))
+        .innerJoin(
+          userCategories,
+          and(
+            eq(transactions.categoryId, userCategories.id),
+            eq(userCategories.userId, userId),
+          ),
+        )
         .where(
           and(
             eq(transactions.userId, userId),

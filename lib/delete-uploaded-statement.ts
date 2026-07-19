@@ -1,6 +1,4 @@
-import { db, resilientQuery } from "@/lib/db";
-import { fileUploadLog, statements, transactions } from "@/lib/db/schema";
-import { and, eq, or } from "drizzle-orm";
+import { rawSql } from "@/lib/db";
 
 export interface DeleteUploadedStatementResult {
   statementId: number;
@@ -10,54 +8,90 @@ export interface DeleteUploadedStatementResult {
 }
 
 /**
- * Permanently remove one completed statement, its transactions, and upload-log
- * rows so the same file can be ingested again from scratch.
+ * Permanently remove one completed statement, its transactions, item-scoped
+ * ignore rules for those txns, and upload-log rows so the same file can be
+ * ingested again from scratch.
+ * All deletes run in one Neon transaction so a mid-flight failure cannot leave
+ * a statement without txns or a deleted statement with a stuck upload-log.
  */
 export async function deleteUploadedStatement(
   userId: string,
   statementId: number,
 ): Promise<DeleteUploadedStatementResult | null> {
-  const [stmt] = await resilientQuery(() =>
-    db
-      .select({
-        id: statements.id,
-        fileName: statements.fileName,
-        fileSize: statements.fileSize,
-        fileHash: statements.fileHash,
-        status: statements.status,
-      })
-      .from(statements)
-      .where(and(eq(statements.id, statementId), eq(statements.userId, userId)))
-      .limit(1),
-  );
+  const owned = (await rawSql.query(
+    `SELECT id, file_name AS "fileName", file_size AS "fileSize", file_hash AS "fileHash", status
+     FROM statements
+     WHERE id = $1 AND user_id = $2
+     LIMIT 1`,
+    [statementId, userId],
+  )) as {
+    id: number;
+    fileName: string;
+    fileSize: number;
+    fileHash: string | null;
+    status: string;
+  }[];
 
+  const stmt = owned[0];
   if (!stmt || stmt.status !== "completed") return null;
 
-  const txnRows = await resilientQuery(() =>
-    db
-      .delete(transactions)
-      .where(and(eq(transactions.userId, userId), eq(transactions.statementId, statementId)))
-      .returning({ id: transactions.id }),
-  );
+  const results = (await rawSql.transaction((txn) => {
+    const steps = [
+      // Item-scoped ignores reference txn ids with no FK; clear before txn delete.
+      txn.query(
+        `DELETE FROM transaction_ignores
+         WHERE user_id = $1
+           AND transaction_id IN (
+             SELECT id FROM transactions WHERE user_id = $1 AND statement_id = $2
+           )
+         RETURNING id`,
+        [userId, statementId],
+      ),
+      txn.query(
+        `DELETE FROM transactions
+         WHERE user_id = $1 AND statement_id = $2
+         RETURNING id`,
+        [userId, statementId],
+      ),
+      txn.query(
+        `DELETE FROM statements
+         WHERE id = $1 AND user_id = $2
+         RETURNING id`,
+        [statementId, userId],
+      ),
+    ];
 
-  await resilientQuery(() =>
-    db
-      .delete(statements)
-      .where(and(eq(statements.id, statementId), eq(statements.userId, userId))),
-  );
+    // Hash-only when present. OR name+size previously wiped logs for other
+    // uploads that shared a filename/size but had a different content hash.
+    if (stmt.fileHash) {
+      steps.push(
+        txn.query(
+          `DELETE FROM file_upload_log
+           WHERE user_id = $1 AND file_hash = $2
+           RETURNING id`,
+          [userId, stmt.fileHash],
+        ),
+      );
+    } else {
+      steps.push(
+        txn.query(
+          `DELETE FROM file_upload_log
+           WHERE user_id = $1 AND file_name = $2 AND file_size = $3
+             AND file_hash IS NULL
+           RETURNING id`,
+          [userId, stmt.fileName, stmt.fileSize],
+        ),
+      );
+    }
 
-  const nameSize = and(
-    eq(fileUploadLog.fileName, stmt.fileName),
-    eq(fileUploadLog.fileSize, stmt.fileSize),
-  );
-  const logMatch = and(
-    eq(fileUploadLog.userId, userId),
-    stmt.fileHash ? or(eq(fileUploadLog.fileHash, stmt.fileHash), nameSize) : nameSize,
-  );
+    return steps;
+  })) as unknown[][];
 
-  const logRows = await resilientQuery(() =>
-    db.delete(fileUploadLog).where(logMatch).returning({ id: fileUploadLog.id }),
-  );
+  const txnRows = Array.isArray(results[1]) ? results[1] : [];
+  const stmtRows = Array.isArray(results[2]) ? results[2] : [];
+  const logRows = Array.isArray(results[3]) ? results[3] : [];
+
+  if (stmtRows.length === 0) return null;
 
   return {
     statementId: stmt.id,

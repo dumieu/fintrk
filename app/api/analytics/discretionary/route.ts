@@ -1,22 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
-import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
+import { requireAppAuth } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
-import { transactions, accounts, userCategories } from "@/lib/db/schema";
-import {
-  excludeCardPaymentsSql,
-  excludeIgnoredSql,
-  primaryCurrencyOnlySql,
-  spendingIntelligenceOutflowSql,
-} from "@/lib/db/excluded-transactions";
+import { transactions, userCategories } from "@/lib/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { logServerError } from "@/lib/safe-error";
+import {
+  categoryRollupLabelSql,
+  insightsAmountSql,
+  insightsBaseOutflowSql,
+  insightsDateWindowSql,
+  insightsLegendFilterSql,
+  leafCategory,
+  parentCategory,
+  parseInsightsFilterQuery,
+  resolveInsightsSpendWindow,
+} from "@/lib/analytics/insights-filter";
 
 export const dynamic = "force-dynamic";
 
 const NO_STORE = { "Cache-Control": "no-store" } as const;
-
-const MAX_MONTHS = 60;
-const DEFAULT_MONTHS = 12;
 
 type DiscretionaryType = "non-discretionary" | "semi-discretionary" | "discretionary";
 
@@ -65,68 +67,24 @@ export interface DiscretionaryBucket {
 export interface DiscretionaryResponse {
   primaryCurrency: string;
   monthsRequested: number;
-  /** Number of distinct calendar months in the window that actually had outflows */
   monthsCovered: number;
   total: number;
   buckets: DiscretionaryBucket[];
+  dateRangeLabel?: string;
 }
 
 export async function GET(request: NextRequest) {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
 
-    const rawMonths = parseInt(
-      request.nextUrl.searchParams.get("months") ?? String(DEFAULT_MONTHS),
-      10,
-    );
-    const months = Math.min(
-      MAX_MONTHS,
-      Math.max(1, Number.isFinite(rawMonths) ? Math.floor(rawMonths) : DEFAULT_MONTHS),
-    );
+    const filter = parseInsightsFilterQuery(request.nextUrl.searchParams);
+    const window = await resolveInsightsSpendWindow(userId, filter);
+    const base = insightsBaseOutflowSql(userId, window.primaryCurrency);
+    const legendParts = insightsLegendFilterSql(userId, filter);
+    const amountParts = insightsAmountSql(filter);
 
-    /** Primary currency scopes every base_amount sum (see primaryCurrencyOnlySql). */
-    const primaryCurrencyRows = await resilientQuery(() =>
-      db
-        .select({ primaryCurrency: accounts.primaryCurrency })
-        .from(accounts)
-        .where(eq(accounts.userId, userId))
-        .limit(1),
-    );
-    const primaryCurrency = primaryCurrencyRows[0]?.primaryCurrency ?? "USD";
-
-    /** Anchor at the user's most-recent outflow month so old datasets still render. */
-    const anchorRows = await resilientQuery(() =>
-      db
-        .select({
-          year: sql<number>`EXTRACT(YEAR FROM MAX(${transactions.postedDate}::date))::int`,
-          month: sql<number>`EXTRACT(MONTH FROM MAX(${transactions.postedDate}::date))::int`,
-        })
-        .from(transactions)
-        .where(
-          and(
-            eq(transactions.userId, userId),
-            excludeCardPaymentsSql(), excludeIgnoredSql(),
-            primaryCurrencyOnlySql(primaryCurrency),
-            spendingIntelligenceOutflowSql(),
-          ),
-        ),
-    );
-    const anchorRow = anchorRows[0];
-    const anchorYear = anchorRow?.year ?? new Date().getUTCFullYear();
-    const anchorMonth = anchorRow?.month ?? new Date().getUTCMonth() + 1;
-
-    /** Window: [anchor - (months-1) months, anchor + 1 month) */
-    const startOffset = months - 1;
-    const anchorStart = `${anchorYear}-${String(anchorMonth).padStart(2, "0")}-01`;
-    const windowStart = sql`(${anchorStart}::date - (${startOffset} * INTERVAL '1 month'))::date`;
-    const windowEnd = sql`(${anchorStart}::date + INTERVAL '1 month')::date`;
-
-    /**
-     * Per-leaf-category aggregates (joining transactions on `category_id` directly to
-     * `user_categories` to read `subcategoryType`). We deliberately avoid the rollup
-     * here because the discretionary classification lives on the leaf row.
-     */
     const [leafRows, monthsRow] = await Promise.all([
       resilientQuery(() =>
         db
@@ -144,34 +102,45 @@ export async function GET(request: NextRequest) {
               eq(userCategories.userId, userId),
             ),
           )
+          .leftJoin(
+            leafCategory,
+            and(eq(transactions.categoryId, leafCategory.id), eq(leafCategory.userId, userId)),
+          )
+          .leftJoin(
+            parentCategory,
+            and(eq(leafCategory.parentId, parentCategory.id), eq(parentCategory.userId, userId)),
+          )
           .where(
             and(
-              eq(transactions.userId, userId),
-              excludeCardPaymentsSql(), excludeIgnoredSql(),
-              primaryCurrencyOnlySql(primaryCurrency),
-              spendingIntelligenceOutflowSql(),
+              base,
+              insightsDateWindowSql(window),
               sql`${userCategories.subcategoryType} IS NOT NULL`,
-              sql`${transactions.postedDate}::date >= ${windowStart}`,
-              sql`${transactions.postedDate}::date < ${windowEnd}`,
+              ...amountParts,
+              ...legendParts,
             ),
           )
           .groupBy(userCategories.name, userCategories.subcategoryType),
       ),
-      /** Distinct months touched in the window — used for averaging. */
       resilientQuery(() =>
         db
           .select({
             count: sql<number>`COUNT(DISTINCT date_trunc('month', ${transactions.postedDate}::date))::int`,
           })
           .from(transactions)
+          .leftJoin(
+            leafCategory,
+            and(eq(transactions.categoryId, leafCategory.id), eq(leafCategory.userId, userId)),
+          )
+          .leftJoin(
+            parentCategory,
+            and(eq(leafCategory.parentId, parentCategory.id), eq(parentCategory.userId, userId)),
+          )
           .where(
             and(
-              eq(transactions.userId, userId),
-              excludeCardPaymentsSql(), excludeIgnoredSql(),
-              primaryCurrencyOnlySql(primaryCurrency),
-              spendingIntelligenceOutflowSql(),
-              sql`${transactions.postedDate}::date >= ${windowStart}`,
-              sql`${transactions.postedDate}::date < ${windowEnd}`,
+              base,
+              insightsDateWindowSql(window),
+              ...amountParts,
+              ...legendParts,
             ),
           ),
       ),
@@ -179,7 +148,6 @@ export async function GET(request: NextRequest) {
 
     const monthsCovered = Math.max(1, monthsRow[0]?.count ?? 1);
 
-    /** Group leaves by their discretionary type. */
     const byType = new Map<DiscretionaryType, DiscretionaryLeaf[]>();
     let grand = 0;
     for (const r of leafRows) {
@@ -197,8 +165,14 @@ export async function GET(request: NextRequest) {
       byType.get(t)!.push(leaf);
     }
 
-    /** Build buckets in the canonical order and sort leaves by total desc. */
-    const buckets: DiscretionaryBucket[] = TYPE_ORDER.map((t) => {
+    /** When stackBy is discretionary + legend hide, drop hidden buckets entirely. */
+    const hiddenTypeLabels = new Set(
+      filter.stackBy === "discretionary" ? filter.excludeNames : [],
+    );
+
+    const buckets: DiscretionaryBucket[] = TYPE_ORDER.filter(
+      (t) => !hiddenTypeLabels.has(TYPE_LABEL[t]),
+    ).map((t) => {
       const leaves = (byType.get(t) ?? []).sort((a, b) => b.total - a.total);
       const total = leaves.reduce((a, b) => a + b.total, 0);
       const share = grand > 0 ? Math.round((total / grand) * 1000) / 10 : 0;
@@ -215,12 +189,24 @@ export async function GET(request: NextRequest) {
       };
     });
 
+    /** Recompute shares against visible grand when types were hidden client-side only. */
+    const visibleGrand = buckets.reduce((s, b) => s + b.total, 0);
+    const normalized =
+      filter.stackBy === "discretionary" && hiddenTypeLabels.size > 0
+        ? buckets.map((b) => ({
+            ...b,
+            share:
+              visibleGrand > 0 ? Math.round((b.total / visibleGrand) * 1000) / 10 : 0,
+          }))
+        : buckets;
+
     const payload: DiscretionaryResponse = {
-      primaryCurrency,
-      monthsRequested: months,
+      primaryCurrency: window.primaryCurrency,
+      monthsRequested: filter.granularity === "day" ? filter.days : filter.months,
       monthsCovered,
-      total: Math.round(grand * 100) / 100,
-      buckets,
+      total: Math.round((visibleGrand || grand) * 100) / 100,
+      buckets: normalized,
+      dateRangeLabel: window.dateRangeLabel,
     };
 
     return NextResponse.json(payload, { headers: NO_STORE });

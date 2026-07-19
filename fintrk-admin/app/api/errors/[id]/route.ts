@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth-admin";
+import { extractRequestMeta, logAdminAudit } from "@/lib/admin-audit";
 import { ensureErrorLogsTable } from "@/lib/ensure-error-logs";
 
 export const dynamic = "force-dynamic";
@@ -35,5 +36,30 @@ export async function POST(
     RETURNING id, resolved_at, resolved_comment
   `;
   if (res.length === 0) return NextResponse.json({ error: "not_found" }, { status: 404 });
+
+  const meta = extractRequestMeta(request);
+  const audited = await logAdminAudit({
+    adminIdentifier: gate.email || gate.userId,
+    action: "error_log_resolve",
+    resource: "error_logs",
+    detail: {
+      errorLogId: raw,
+      comment,
+      ip: meta.ipAddress,
+      ua: meta.userAgent,
+    },
+  });
+  if (!audited) {
+    return NextResponse.json(
+      {
+        error: "Error marked resolved but audit log failed to persist",
+        ok: true,
+        row: res[0],
+        auditFailed: true,
+      },
+      { status: 500 },
+    );
+  }
+
   return NextResponse.json({ ok: true, row: res[0] });
 }

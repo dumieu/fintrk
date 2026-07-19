@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
+import { requireAppAuth } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
-import { transactions, accounts, statements, userCategories, merchantWarningRules, merchantLabelRules, doubleChargeWatchlistExclusions } from "@/lib/db/schema";
+import { transactions, accounts, statements, userCategories, merchantWarningRules, merchantLabelRules, doubleChargeWatchlistExclusions, transactionIgnores } from "@/lib/db/schema";
 import { eq, and, gte, lte, ilike, or, desc, asc, sql, count, isNull, isNotNull, ne, inArray } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { transactionFiltersSchema, updateCategorySchema, deleteTransactionsSchema, patchTransactionSchema } from "@/lib/validations/transaction";
@@ -25,10 +25,26 @@ export const dynamic = "force-dynamic";
 
 const NO_STORE = { "Cache-Control": "no-store" } as const;
 
+/** Reject category ids that do not belong to the session user. */
+async function ownedCategoryId(
+  userId: string,
+  categoryId: number,
+): Promise<boolean> {
+  const [row] = await resilientQuery(() =>
+    db
+      .select({ id: userCategories.id })
+      .from(userCategories)
+      .where(and(eq(userCategories.id, categoryId), eq(userCategories.userId, userId)))
+      .limit(1),
+  );
+  return Boolean(row);
+}
+
 export async function GET(request: NextRequest) {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
     await ensureTransactionWarningFlagColumn();
     await ensureTransactionIgnoresTable();
 
@@ -210,7 +226,7 @@ export async function GET(request: NextRequest) {
             debitSum: sql<string>`coalesce(sum(case when cast(${transactions.baseAmount} as numeric) > 0 then cast(${transactions.baseAmount} as numeric) else 0 end), 0)::text`,
           })
           .from(transactions)
-          .leftJoin(accounts, eq(transactions.accountId, accounts.id))
+          .leftJoin(accounts, and(eq(transactions.accountId, accounts.id), eq(accounts.userId, userId)))
           .where(totalsWhere)
           .groupBy(transactions.baseCurrency)
         : db
@@ -230,7 +246,7 @@ export async function GET(request: NextRequest) {
               statementCount: sql<number>`coalesce(count(distinct ${transactions.statementId}), 0)::int`,
             })
             .from(transactions)
-            .leftJoin(accounts, eq(transactions.accountId, accounts.id))
+            .leftJoin(accounts, and(eq(transactions.accountId, accounts.id), eq(accounts.userId, userId)))
             .where(where)
         : db
             .select({
@@ -284,10 +300,16 @@ export async function GET(request: NextRequest) {
             statementPeriodEnd: statements.periodEnd,
           })
           .from(transactions)
-          .leftJoin(accounts, eq(transactions.accountId, accounts.id))
+          .leftJoin(accounts, and(eq(transactions.accountId, accounts.id), eq(accounts.userId, userId)))
           .leftJoin(statements, eq(transactions.statementId, statements.id))
-          .leftJoin(txnCategory, eq(transactions.categoryId, txnCategory.id))
-          .leftJoin(parentCategory, eq(txnCategory.parentId, parentCategory.id))
+          .leftJoin(
+            txnCategory,
+            and(eq(transactions.categoryId, txnCategory.id), eq(txnCategory.userId, userId)),
+          )
+          .leftJoin(
+            parentCategory,
+            and(eq(txnCategory.parentId, parentCategory.id), eq(parentCategory.userId, userId)),
+          )
           .where(where)
           .orderBy(orderFn(sortCol), orderFn(transactions.id))
           .limit(f.limit)
@@ -298,7 +320,7 @@ export async function GET(request: NextRequest) {
           ? db
             .select({ total: count() })
             .from(transactions)
-            .leftJoin(accounts, eq(transactions.accountId, accounts.id))
+            .leftJoin(accounts, and(eq(transactions.accountId, accounts.id), eq(accounts.userId, userId)))
             .where(where)
           : db.select({ total: count() }).from(transactions).where(where),
       ),
@@ -357,8 +379,9 @@ export async function GET(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
     await ensureTransactionWarningFlagColumn();
 
     const body = await request.json();
@@ -469,6 +492,10 @@ export async function PATCH(request: NextRequest) {
     let bulkCategoryCount = 0;
 
     if (parsed.data.categoryId !== undefined) {
+      const ok = await ownedCategoryId(userId, parsed.data.categoryId);
+      if (!ok) {
+        return NextResponse.json({ error: "Category not found" }, { status: 404, headers: NO_STORE });
+      }
       (setPayload as Record<string, unknown>).categoryId = parsed.data.categoryId;
       const scope = parsed.data.categoryApplyScope ?? "this";
 
@@ -597,8 +624,9 @@ export async function PATCH(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
 
     const body = await request.json();
     const parsed = updateCategorySchema.safeParse(body);
@@ -606,14 +634,20 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Invalid input" }, { status: 400, headers: NO_STORE });
     }
 
+    const ok = await ownedCategoryId(userId, parsed.data.categoryId);
+    if (!ok) {
+      return NextResponse.json({ error: "Category not found" }, { status: 404, headers: NO_STORE });
+    }
+
     let updated = 0;
     for (const txnId of parsed.data.transactionIds) {
       const result = await resilientQuery(() =>
         db.update(transactions)
           .set({ categoryId: parsed.data.categoryId, updatedAt: new Date() })
-          .where(and(eq(transactions.id, txnId), eq(transactions.userId, userId))),
+          .where(and(eq(transactions.id, txnId), eq(transactions.userId, userId)))
+          .returning({ id: transactions.id }),
       );
-      updated++;
+      if (result.length > 0) updated++;
     }
 
     return NextResponse.json({ updated }, { headers: NO_STORE });
@@ -625,14 +659,29 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
 
     const body = await request.json();
     const parsed = deleteTransactionsSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json({ error: "Invalid input" }, { status: 400, headers: NO_STORE });
     }
+
+    await ensureTransactionIgnoresTable();
+
+    // Item-scoped ignores have no FK; clear them before deleting txns.
+    await resilientQuery(() =>
+      db
+        .delete(transactionIgnores)
+        .where(
+          and(
+            eq(transactionIgnores.userId, userId),
+            inArray(transactionIgnores.transactionId, parsed.data.transactionIds),
+          ),
+        ),
+    );
 
     const removed = await resilientQuery(() =>
       db.delete(transactions)

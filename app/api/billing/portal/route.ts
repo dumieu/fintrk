@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth, currentUser } from "@clerk/nextjs/server";
+import type Stripe from "stripe";
 
 import { appOrigin, getStripe, hasStripeKey } from "@/lib/stripe";
 import { logServerError } from "@/lib/safe-error";
@@ -28,6 +29,23 @@ export async function POST() {
     }
 
     const stripe = getStripe();
+    const customer = await stripe.customers.retrieve(customerId);
+    if (customer.deleted) {
+      return NextResponse.json({ error: "No subscription found." }, { status: 404 });
+    }
+    // Fail closed: require Stripe customer.metadata.clerkUserId === session.
+    // Untagged customers must not open for whoever holds the id in Clerk metadata.
+    const owner = (customer as Stripe.Customer).metadata?.clerkUserId?.trim();
+    if (!owner || owner !== userId) {
+      logServerError(
+        "billing_portal_owner_mismatch",
+        new Error(
+          `customer ${customerId} owner ${owner || "(none)"} != session ${userId}`,
+        ),
+      );
+      return NextResponse.json({ error: "No subscription found." }, { status: 404 });
+    }
+
     const session = await stripe.billingPortal.sessions.create({
       customer: customerId,
       return_url: `${appOrigin()}/dashboard/upgrade`,

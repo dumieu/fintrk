@@ -10,12 +10,15 @@ import {
 
 export const dynamic = "force-dynamic";
 
-/** GET: current decryption-session status. */
+/** GET: current decryption-session status for this admin. */
 export async function GET() {
   const gate = await requireAdmin();
   if (!gate.ok) return NextResponse.json({ error: gate.reason }, { status: 401 });
 
-  const session = await getActiveDecryptionSession();
+  const session = await getActiveDecryptionSession({
+    email: gate.email,
+    userId: gate.userId,
+  });
   return NextResponse.json({
     active: Boolean(session),
     keyConfigured: hasEncryptionKey(),
@@ -58,23 +61,48 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const session = await createDecryptionSession(gate.email, gate.userId, reason);
-  return NextResponse.json({
-    active: true,
-    session: {
-      reason: session.reason,
-      admin: session.admin_email,
-      startedAt: session.started_at,
-      expiresAt: session.expires_at,
-    },
-  });
+  try {
+    const session = await createDecryptionSession(gate.email, gate.userId, reason);
+    return NextResponse.json({
+      active: true,
+      session: {
+        reason: session.reason,
+        admin: session.admin_email,
+        startedAt: session.started_at,
+        expiresAt: session.expires_at,
+      },
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg === "decrypt_session_audit_failed") {
+      return NextResponse.json(
+        { error: "Decryption session could not be audited; not started" },
+        { status: 500 },
+      );
+    }
+    console.error("POST decryption-session failed:", err);
+    return NextResponse.json({ error: "Failed to start decryption session" }, { status: 500 });
+  }
 }
 
-/** DELETE: end the active decryption session. */
+/** DELETE: end this admin's active decryption session. */
 export async function DELETE() {
   const gate = await requireAdmin();
   if (!gate.ok) return NextResponse.json({ error: gate.reason }, { status: 401 });
 
-  await revokeActiveDecryptionSession(gate.email);
+  const result = await revokeActiveDecryptionSession({
+    email: gate.email,
+    userId: gate.userId,
+  });
+  if (result.revoked && result.auditFailed) {
+    return NextResponse.json(
+      {
+        error: "Decryption session ended but audit log failed to persist",
+        active: false,
+        auditFailed: true,
+      },
+      { status: 500 },
+    );
+  }
   return NextResponse.json({ active: false });
 }

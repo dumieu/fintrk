@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { useAppHref } from "@/lib/app-base-path";
 import { TransactionTableRow } from "@/components/transaction-table-row";
 import {
   TRANSACTION_TABLE_ROW_GRID,
@@ -31,6 +32,7 @@ import {
   type CategorySlicerOption,
 } from "@/components/category-slicer";
 import { TimeSlicer } from "@/components/time-slicer";
+import { TransactionPeriodFilter } from "@/components/transaction-period-filter";
 import { detectTimePreset, rollingRange, type TimePresetId } from "@/lib/time-range-presets";
 import {
   dispatchTransactionsChanged,
@@ -295,6 +297,7 @@ function AmountRangeSlider({
 }
 
 export default function TransactionsPage() {
+  const uploadHref = useAppHref("/upload");
   const [txns, setTxns] = useState<Transaction[]>([]);
   const [total, setTotal] = useState(0);
   const [statementCount, setStatementCount] = useState(0);
@@ -344,6 +347,7 @@ export default function TransactionsPage() {
   /** Bumps when filters/sort change so in-flight load-more responses are ignored. */
   const listVersionRef = useRef(0);
   const [categoryOptions, setCategoryOptions] = useState<CategorySlicerOption[]>([]);
+  const [periodMonths, setPeriodMonths] = useState<string[]>([]);
   const [userCats, setUserCats] = useState<TransactionTableUserCategory[]>([]);
   const [distinctLabels, setDistinctLabels] = useState<string[]>([]);
 
@@ -393,6 +397,7 @@ export default function TransactionsPage() {
       .then((r) => r.json())
       .then((d) => {
         if (Array.isArray(d.categories)) setCategoryOptions(d.categories);
+        if (Array.isArray(d.months)) setPeriodMonths(d.months);
       })
       .catch(() => {});
     fetch("/api/user-categories")
@@ -409,6 +414,7 @@ export default function TransactionsPage() {
         .then((r) => r.json())
         .then((d) => {
           if (Array.isArray(d.categories)) setCategoryOptions(d.categories);
+          if (Array.isArray(d.months)) setPeriodMonths(d.months);
         })
         .catch(() => {});
     };
@@ -789,53 +795,6 @@ export default function TransactionsPage() {
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-app-canvas">
       <div className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col px-2.5 py-3 sm:px-4 sm:py-4">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-3 flex shrink-0 flex-col gap-3 sm:mb-4 sm:flex-row sm:items-end sm:justify-between sm:gap-4"
-        >
-          <div className="min-w-0">
-            <p className="flex flex-wrap items-center gap-x-1 text-xs leading-snug text-muted-foreground sm:text-sm">
-              <span>
-                {total > 0 ? (
-                  <>
-                    {total.toLocaleString()} transactions
-                    {statementCount > 0 && (
-                      <>
-                        <span className="text-muted-foreground/80 select-none" aria-hidden>
-                          {"\u00A0\u00A0·\u00A0\u00A0"}
-                        </span>
-                        {statementCount.toLocaleString()} {statementCount === 1 ? "statement" : "statements"}
-                      </>
-                    )}
-                  </>
-                ) : (
-                  "No transactions yet"
-                )}
-              </span>
-            </p>
-          </div>
-          <div className="flex shrink-0 gap-2 sm:ml-auto">
-            <Link href="/dashboard/profile">
-              <Button
-                variant="ghost"
-                className="w-full justify-center text-foreground hover:bg-white/10 sm:w-auto"
-              >
-                My Profile
-              </Button>
-            </Link>
-            <Link href="/dashboard/upload">
-              <Button
-                variant="ghost"
-                className="w-full justify-center text-[#0BC18D] hover:bg-[#0BC18D]/10 sm:w-auto"
-              >
-                <Upload className="mr-2 h-4 w-4" />
-                Import More
-              </Button>
-            </Link>
-          </div>
-        </motion.div>
-
         {selectedCount > 0 && (
           <motion.div
             initial={{ opacity: 0, y: -6 }}
@@ -1055,6 +1014,16 @@ export default function TransactionsPage() {
                 onChange={(lo, hi) => setFilters((f) => ({ ...f, amountMin: lo, amountMax: hi }))}
               />
             </div>
+            <div className="min-w-0 w-full sm:max-w-[11.5rem] sm:flex-none">
+              <TransactionPeriodFilter
+                months={periodMonths}
+                dateFrom={filters.dateFrom}
+                dateTo={filters.dateTo}
+                onChange={(dateFrom, dateTo) =>
+                  setFilters((f) => ({ ...f, dateFrom, dateTo }))
+                }
+              />
+            </div>
             <div className="flex w-full shrink-0 justify-stretch gap-2 sm:w-auto sm:justify-start">
               <button
                 type="button"
@@ -1145,6 +1114,24 @@ export default function TransactionsPage() {
                 />
               </button>
             </div>
+            <p className="shrink-0 text-xs leading-snug text-muted-foreground sm:ml-auto sm:text-right sm:text-sm">
+              {total > 0 ? (
+                <>
+                  {total.toLocaleString()} transactions
+                  {statementCount > 0 ? (
+                    <>
+                      <span className="text-muted-foreground/80 select-none" aria-hidden>
+                        {"\u00A0\u00A0·\u00A0\u00A0"}
+                      </span>
+                      {statementCount.toLocaleString()}{" "}
+                      {statementCount === 1 ? "statement" : "statements"}
+                    </>
+                  ) : null}
+                </>
+              ) : (
+                "No transactions yet"
+              )}
+            </p>
           </motion.div>
 
           <div
@@ -1224,31 +1211,31 @@ export default function TransactionsPage() {
                 className="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-auto overscroll-y-contain [scrollbar-gutter:stable]"
               >
                 {/* Desktop header — sticky within scroll area */}
-                <div className={cn("sticky top-0 z-10 hidden sm:grid sm:items-center sm:justify-items-stretch gap-2 border-b border-chart-border bg-chart-surface/98 px-3 py-2.5 backdrop-blur-md sm:px-4 sm:py-3", TRANSACTION_TABLE_ROW_GRID)}>
+                <div className={cn("sticky top-0 z-10 hidden sm:grid sm:items-center sm:justify-items-stretch gap-1 border-b border-chart-border bg-chart-surface/98 px-3 py-0.5 backdrop-blur-md sm:px-4", TRANSACTION_TABLE_ROW_GRID)}>
                   <div className="flex min-w-0 items-center justify-center gap-1">
-                    <span className="inline-flex h-7 w-7 shrink-0" aria-hidden />
+                    <span className="inline-flex w-7 shrink-0" aria-hidden />
                     <button
                       type="button"
                       onClick={() => toggleSort("posted_date")}
-                      className="flex min-w-0 flex-1 items-center justify-center gap-1 whitespace-nowrap text-center text-[10px] font-medium tracking-wide text-muted-foreground hover:text-muted-foreground"
+                      className="flex min-w-0 flex-1 items-center justify-center gap-1 whitespace-nowrap text-center text-[10px] font-medium leading-none tracking-wide text-muted-foreground hover:text-muted-foreground"
                     >
                       Date <ArrowUpDown className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
                     </button>
                   </div>
-                  <span className="block w-full min-w-0 text-center text-[10px] font-medium tracking-wide text-muted-foreground">Description</span>
-                  <span className="block w-full min-w-0 truncate text-center text-[10px] font-medium tracking-wide text-muted-foreground">Label</span>
+                  <span className="block w-full min-w-0 text-center text-[10px] font-medium leading-none tracking-wide text-muted-foreground">Description</span>
+                  <span className="block w-full min-w-0 truncate text-center text-[10px] font-medium leading-none tracking-wide text-muted-foreground">Label</span>
                   <div className="flex min-w-0 w-full justify-center px-0.5 text-center">
-                    <span className="line-clamp-2 max-w-full text-[10px] font-medium leading-tight tracking-wide text-muted-foreground">Category / Subcategory</span>
+                    <span className="truncate max-w-full text-[10px] font-medium leading-none tracking-wide text-muted-foreground">Category / Subcategory</span>
                   </div>
                   <button
                     type="button"
                     onClick={() => toggleSort("base_amount")}
-                    className="flex w-full min-w-0 items-center justify-center gap-1 text-center text-[10px] font-medium tracking-wide text-muted-foreground hover:text-muted-foreground"
+                    className="flex w-full min-w-0 items-center justify-center gap-1 text-center text-[10px] font-medium leading-none tracking-wide text-muted-foreground hover:text-muted-foreground"
                   >
                     Amount <ArrowUpDown className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
                   </button>
-                  <span className="block w-full text-center text-[10px] font-medium tracking-wide text-muted-foreground">Flags</span>
-                  <span className="block w-full min-w-0 text-center text-[10px] font-medium tracking-wide text-muted-foreground">Note</span>
+                  <span className="block w-full text-center text-[10px] font-medium leading-none tracking-wide text-muted-foreground">Flags</span>
+                  <span className="block w-full min-w-0 text-center text-[10px] font-medium leading-none tracking-wide text-muted-foreground">Note</span>
                   <span className="sr-only">Select and warning</span>
                 </div>
 
@@ -1301,7 +1288,7 @@ export default function TransactionsPage() {
               <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-2 py-8 text-center sm:py-12">
                 <ArrowLeftRight className="mb-3 h-7 w-7 text-muted-foreground/50 sm:mb-4 sm:h-8 sm:w-8" />
                 <p className="mb-3 text-xs text-muted-foreground sm:mb-4 sm:text-sm">No transactions found</p>
-                <Link href="/dashboard/upload">
+                <Link href={uploadHref}>
                   <Button className="bg-[#0BC18D] text-white hover:bg-[#0BC18D]/90">
                     <Upload className="w-4 h-4 mr-2" /> Upload Statement
                   </Button>

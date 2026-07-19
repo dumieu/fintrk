@@ -211,7 +211,7 @@ export function AdvantageValueLine({
           lineHeight: 1.35,
           color: muted,
           letterSpacing: "0.01em",
-          maxWidth: compact ? 220 : 280,
+          maxWidth: compact ? 320 : 420,
           textAlign: align === "center" ? "center" : align === "start" ? "left" : "right",
         }}
       >
@@ -247,7 +247,8 @@ export function AdvantageValueLine({
           }}
         >
           more advanced
-        </button>
+        </button>{" "}
+        than alternatives
       </p>
       {dialog}
     </>

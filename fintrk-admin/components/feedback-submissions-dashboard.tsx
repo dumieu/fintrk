@@ -69,11 +69,28 @@ interface StatsPayload {
 interface FeedbackItem {
   idFeedback: string | number;
   clerkUserId: string | null;
+  name: string | null;
   email: string;
+  appName: string | null;
   sentiment: string;
   message: string | null;
+  ideaRedesignScreen: string | null;
+  ideaOtherTools: string | null;
+  ideaSpreadsheetTracking: string | null;
+  ideaFirstFeature: string | null;
+  ideaFriendDescription: string | null;
+  ideaMissMost: string | null;
   createdAt: string;
 }
+
+const IDEA_LABELS: { key: keyof FeedbackItem; label: string }[] = [
+  { key: "ideaRedesignScreen", label: "Redesign screen" },
+  { key: "ideaOtherTools", label: "Other tools" },
+  { key: "ideaSpreadsheetTracking", label: "Spreadsheet tracking" },
+  { key: "ideaFirstFeature", label: "First feature" },
+  { key: "ideaFriendDescription", label: "Friend description" },
+  { key: "ideaMissMost", label: "Miss most" },
+];
 
 interface ApiResponse {
   stats: StatsPayload;
@@ -161,10 +178,23 @@ export function FeedbackSubmissionsDashboard() {
     const q = query.trim().toLowerCase();
     if (!q) return data.items;
     return data.items.filter((row) => {
-      const email = row.email.toLowerCase();
-      const msg = (row.message ?? "").toLowerCase();
-      const uid = (row.clerkUserId ?? "").toLowerCase();
-      return email.includes(q) || msg.includes(q) || uid.includes(q);
+      const haystack = [
+        row.email,
+        row.name,
+        row.message,
+        row.clerkUserId,
+        row.appName,
+        row.ideaRedesignScreen,
+        row.ideaOtherTools,
+        row.ideaSpreadsheetTracking,
+        row.ideaFirstFeature,
+        row.ideaFriendDescription,
+        row.ideaMissMost,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(q);
     });
   }, [data?.items, query]);
 
@@ -584,9 +614,21 @@ export function FeedbackSubmissionsDashboard() {
                         )}
                         {positive ? "Loving it" : "Tough time"}
                       </Badge>
-                      <span className="text-xs font-medium text-slate-800 dark:text-foreground truncate max-w-[min(100%,280px)]">
-                        {row.email}
-                      </span>
+                      <div className="min-w-0">
+                        {row.name ? (
+                          <span className="block text-xs font-medium text-slate-800 dark:text-foreground truncate max-w-[min(100%,280px)]">
+                            {row.name}
+                          </span>
+                        ) : null}
+                        <span className="block text-xs text-slate-600 dark:text-muted-foreground truncate max-w-[min(100%,280px)]">
+                          {row.email}
+                        </span>
+                      </div>
+                      {row.appName ? (
+                        <Badge variant="outline" className="shrink-0 text-[10px] font-normal">
+                          {row.appName}
+                        </Badge>
+                      ) : null}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <span className="text-[10px] text-muted-foreground whitespace-nowrap">
@@ -624,6 +666,27 @@ export function FeedbackSubmissionsDashboard() {
                   ) : (
                     <p className="mt-2 text-[11px] text-muted-foreground italic">No message text</p>
                   )}
+                  {IDEA_LABELS.some((idea) => {
+                    const v = row[idea.key];
+                    return typeof v === "string" && v.trim().length > 0;
+                  }) ? (
+                    <div className="mt-3 space-y-2 border-t border-border/60 pt-3">
+                      {IDEA_LABELS.map((idea) => {
+                        const v = row[idea.key];
+                        if (typeof v !== "string" || !v.trim()) return null;
+                        return (
+                          <div key={idea.key}>
+                            <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                              {idea.label}
+                            </p>
+                            <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-300 whitespace-pre-wrap break-words">
+                              {v}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : null}
                 </div>
               );
             })

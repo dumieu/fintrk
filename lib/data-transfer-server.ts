@@ -15,7 +15,7 @@ import {
 } from "@/lib/db/schema";
 import { df, ef } from "@/lib/crypto/encryption";
 import { ensureUserCategories } from "@/lib/ensure-user-categories";
-import { wipeUserData } from "@/lib/wipe-user-data";
+import { wipeLedgerForReplace } from "@/lib/wipe-user-data";
 import { buildDedupeSignature } from "@/lib/txn-dedupe";
 import {
   FINTRK_DATA_EXPORT_FORMAT,
@@ -233,12 +233,19 @@ export type ImportResult = {
   labelRulesImported: number;
 };
 
-function accountMatchKey(a: {
+/**
+ * Reuse key for import account matching. Only masked accounts can safely merge:
+ * Postgres UNIQUE treats NULL masks as distinct, so collapsing empty masks onto
+ * one live account would merge unrelated banks/cards.
+ */
+function accountReuseKey(a: {
   accountType: string;
   maskedNumber: string | null;
   primaryCurrency: string;
-}): string {
-  return `${a.accountType}|${a.maskedNumber ?? ""}|${a.primaryCurrency}`;
+}): string | null {
+  const masked = a.maskedNumber?.trim();
+  if (!masked) return null;
+  return `${a.accountType}|${masked}|${a.primaryCurrency}`;
 }
 
 export async function importUserDataExport(
@@ -256,7 +263,9 @@ export async function importUserDataExport(
   }
 
   if (mode === "replace") {
-    await wipeUserData(userId);
+    // Only clear tables the export rebuilds. Full wipeUserData would destroy
+    // net worth, budgets, goals, quick notes, and MCP tokens that are not exported.
+    await wipeLedgerForReplace(userId);
   }
 
   await ensureUserCategories(userId);
@@ -279,13 +288,15 @@ export async function importUserDataExport(
     db.select().from(accounts).where(eq(accounts.userId, userId)),
   );
   const accountIdMap = new Map<string, string>(); // export id → live id
-  const existingByKey = new Map(
-    existingAccounts.map((a) => [accountMatchKey(a), a.id] as const),
-  );
+  const existingByKey = new Map<string, string>();
+  for (const a of existingAccounts) {
+    const key = accountReuseKey(a);
+    if (key && !existingByKey.has(key)) existingByKey.set(key, a.id);
+  }
 
   for (const a of payload.accounts) {
-    const key = accountMatchKey(a);
-    const reused = existingByKey.get(key);
+    const key = accountReuseKey(a);
+    const reused = key ? existingByKey.get(key) : undefined;
     if (reused) {
       accountIdMap.set(a.id, reused);
       result.accountsReused++;
@@ -305,7 +316,11 @@ export async function importUserDataExport(
             | "investment"
             | "unknown",
           cardNetwork: a.cardNetwork ?? undefined,
-          maskedNumber: a.maskedNumber ?? undefined,
+          maskedNumber: (() => {
+            const m = a.maskedNumber?.trim();
+            // Empty string collides on UNIQUE(user, type, mask, currency); NULL does not.
+            return m ? m : undefined;
+          })(),
           primaryCurrency: a.primaryCurrency,
           countryIso: a.countryIso ?? undefined,
           isActive: a.isActive ?? true,
@@ -313,7 +328,7 @@ export async function importUserDataExport(
         .returning({ id: accounts.id }),
     );
     accountIdMap.set(a.id, created.id);
-    existingByKey.set(key, created.id);
+    if (key) existingByKey.set(key, created.id);
     result.accountsCreated++;
   }
 

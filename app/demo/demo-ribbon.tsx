@@ -31,10 +31,10 @@ export function DemoRibbon() {
             <RefreshCw className="h-3 w-3" /> Reset
           </button>
           <Link
-            href="/auth"
+            href="/auth/sign-up"
             className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-[#0BC18D] to-[#2CA2FF] px-3 py-1.5 text-[11px] font-bold text-white transition hover:opacity-90"
           >
-            Start free <ArrowRight className="h-3 w-3" />
+            Start free trial <ArrowRight className="h-3 w-3" />
           </Link>
         </div>
       </div>

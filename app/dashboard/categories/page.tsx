@@ -1,7 +1,14 @@
 "use client";
 
-import { CategoryTableManager } from "@/components/category-table-manager";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useAppHref } from "@/lib/app-base-path";
 
 export default function CategoriesPage() {
-  return <CategoryTableManager />;
+  const router = useRouter();
+  const href = useAppHref("/profile?tab=categories");
+  useEffect(() => {
+    router.replace(href);
+  }, [router, href]);
+  return null;
 }

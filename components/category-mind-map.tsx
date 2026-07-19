@@ -1273,7 +1273,7 @@ export function CategoryMindMap() {
               e.stopPropagation();
               b.fn();
             }}
-            className="w-9 h-9 rounded-xl bg-chart-muted backdrop-blur-md border border-chart-border flex items-center justify-center text-muted-foreground hover:text-white hover:bg-chart-hover transition-all cursor-pointer"
+            className="w-9 h-9 rounded-xl bg-chart-muted backdrop-blur-md border border-chart-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-chart-hover transition-all cursor-pointer"
           >
             {b.icon}
           </button>

@@ -6,6 +6,7 @@ import { ProcessingBanner } from "@/components/processing-banner";
 import { AppQuickNote } from "@/components/quick-note/app-quick-note";
 import { UpgradeRedirectGuard } from "@/components/upgrade-redirect-guard";
 import { XrefCapture } from "@/components/xref-capture";
+import { StatementViewerHost } from "@/components/statement-viewer-host";
 import { resilientAuth } from "@/lib/auth-resilient";
 
 const CLERK_CONFIGURED = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
@@ -31,6 +32,7 @@ export default async function DashboardLayout({
       <AppQuickNote />
       <DashboardLayoutChrome sessionActive>{children}</DashboardLayoutChrome>
       <ProcessingBanner />
+      <StatementViewerHost />
     </DashboardShell>
   );
 }

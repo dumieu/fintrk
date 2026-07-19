@@ -29,6 +29,7 @@ export async function GET() {
       budgets,
       insights,
       statements,
+      netWorthItems,
     ] = await Promise.all([
       sql`
         SELECT id, account_name, institution_name, account_type, card_network,
@@ -94,6 +95,12 @@ export async function GET() {
         ORDER BY period_end DESC
         LIMIT 24
       `,
+      sql`
+        SELECT id, kind, category, label, amount, currency, is_active
+        FROM net_worth_items
+        WHERE user_id = ${DEMO}
+        ORDER BY kind, display_order, id
+      `,
     ]);
 
     // Decrypt the encrypted-at-rest columns. Demo rows are plaintext today so
@@ -130,6 +137,7 @@ export async function GET() {
         budgets,
         insights: decInsights,
         statements,
+        netWorthItems,
         generatedAt: new Date().toISOString(),
       },
       {

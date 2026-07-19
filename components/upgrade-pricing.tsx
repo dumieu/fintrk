@@ -3,6 +3,12 @@
 import { useState } from "react";
 import { Check, Loader2 } from "lucide-react";
 
+import {
+  FintrkPriceInlineWas,
+  FintrkPriceWithWas,
+} from "@/components/fintrk-price-display";
+import { fintrkPlanAnnualSavingsPercentRounded } from "@/lib/plan-pricing";
+
 const ACCENT_HEX = "#0BC18D";
 
 const FEATURES = [
@@ -14,15 +20,11 @@ const FEATURES = [
 
 type Interval = "month" | "year";
 
-const PRICES: Record<Interval, { amount: string; sub: string; note?: string }> = {
-  month: { amount: "$8.98", sub: "per month" },
-  year: { amount: "$6.98", sub: "per month", note: "billed $83.76/yr" },
-};
-
 export function UpgradePricing({ canTrial }: { canTrial: boolean }) {
   const [interval, setInterval] = useState<Interval>("year");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const savings = fintrkPlanAnnualSavingsPercentRounded();
 
   async function startCheckout() {
     setLoading(true);
@@ -44,8 +46,6 @@ export function UpgradePricing({ canTrial }: { canTrial: boolean }) {
     }
   }
 
-  const price = PRICES[interval];
-
   return (
     <div className="mx-auto w-full max-w-md">
       <div className="mb-5 flex justify-center">
@@ -62,7 +62,9 @@ export function UpgradePricing({ canTrial }: { canTrial: boolean }) {
               }`}
             >
               {opt === "month" ? "Monthly" : "Annual"}
-              {opt === "year" ? <span style={{ color: ACCENT_HEX }}> -22%</span> : null}
+              {opt === "year" ? (
+                <span style={{ color: ACCENT_HEX }}> -{savings}%</span>
+              ) : null}
             </button>
           ))}
         </div>
@@ -70,11 +72,16 @@ export function UpgradePricing({ canTrial }: { canTrial: boolean }) {
 
       <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-          <span className="text-4xl font-bold tracking-tight text-foreground">{price.amount}</span>
-          <span className="text-sm text-muted-foreground">{price.sub}</span>
-          {price.note ? (
-            <span className="text-sm text-muted-foreground">({price.note})</span>
-          ) : null}
+          {interval === "month" ? (
+            <FintrkPriceWithWas mode="monthly" period="per month" size="lg" />
+          ) : (
+            <>
+              <FintrkPriceWithWas mode="annually" period="per month" size="lg" />
+              <span className="text-sm text-muted-foreground">
+                (billed <FintrkPriceInlineWas mode="annualTotal" suffix="/yr" />)
+              </span>
+            </>
+          )}
         </div>
         <p className="mt-1 text-sm font-medium" style={{ color: ACCENT_HEX }}>
           FinTRK Pro

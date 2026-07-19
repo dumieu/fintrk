@@ -17,7 +17,7 @@ export default function UploadPage() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.4 }}
-          className="mt-12 grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-3xl mx-auto"
+          className="mt-12 grid grid-cols-1 gap-4 max-w-3xl mx-auto sm:grid-cols-2 lg:grid-cols-4"
         >
           {[
             {
@@ -34,6 +34,11 @@ export default function UploadPage() {
               title: "FX Spread Detection",
               desc: "Uncover hidden foreign exchange fees your bank doesn't show you",
               color: "#AD74FF",
+            },
+            {
+              title: "Encrypted & Kept",
+              desc: "Originals are compressed and AES-256 encrypted at rest, viewable and downloadable anytime",
+              color: "#ECAA0B",
             },
           ].map((feature) => (
             <div

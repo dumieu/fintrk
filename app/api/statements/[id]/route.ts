@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
+import { requireAppAuth } from "@/lib/auth-resilient";
 import { deleteUploadedStatement } from "@/lib/delete-uploaded-statement";
+import { ensureTransactionIgnoresTable } from "@/lib/ensure-transaction-ignores";
 import { logServerError } from "@/lib/safe-error";
 
 export const dynamic = "force-dynamic";
@@ -12,8 +13,9 @@ export async function DELETE(
   context: { params: Promise<{ id: string }> },
 ) {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
 
     const { id: idRaw } = await context.params;
     const statementId = parseInt(idRaw, 10);
@@ -21,6 +23,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Invalid statement id" }, { status: 400, headers: NO_STORE });
     }
 
+    await ensureTransactionIgnoresTable();
     const result = await deleteUploadedStatement(userId, statementId);
     if (!result) {
       return NextResponse.json(

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, Suspense } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,16 +21,43 @@ import {
   Info,
   Download,
   Upload,
+  Landmark,
+  Network,
+  Settings2,
+  EyeOff,
 } from "lucide-react";
 import { IgnoredTransactionsPanel } from "@/components/ignored-transactions-panel";
+import { AccountsPanel } from "@/components/accounts-panel";
+import { CategoryTableManager } from "@/components/category-table-manager";
 import {
   formatExportFilename,
   isFintrkDataExport,
   type FintrkImportMode,
 } from "@/lib/data-transfer";
+import { chartControlClass } from "@/lib/chart-ui";
 import { cn } from "@/lib/utils";
+import { useAppHref, useAppBasePath } from "@/lib/app-base-path";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
-type ProfileTab = "settings" | "ignored";
+type ProfileTab = "settings" | "accounts" | "categories" | "ignored";
+
+const PROFILE_TABS: Array<{
+  id: ProfileTab;
+  label: string;
+  icon: typeof Settings2;
+}> = [
+  { id: "settings", label: "Settings", icon: Settings2 },
+  { id: "accounts", label: "Accounts", icon: Landmark },
+  { id: "categories", label: "Category Mapping", icon: Network },
+  { id: "ignored", label: "Ignored", icon: EyeOff },
+];
+
+function parseProfileTab(value: string | null): ProfileTab {
+  if (value === "accounts" || value === "categories" || value === "ignored" || value === "settings") {
+    return value;
+  }
+  return "settings";
+}
 
 const DETECT_TRAVEL_CURRENCY_HELP =
   "When this is on, spending in another currency is sorted into Travel so you can spot trip-related purchases at a glance.";
@@ -52,6 +79,39 @@ type ImportResult = {
 };
 
 export default function ProfilePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="mx-auto flex max-w-7xl items-center justify-center px-4 py-16 text-sm text-muted-foreground">
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          Loading…
+        </div>
+      }
+    >
+      <ProfilePageInner />
+    </Suspense>
+  );
+}
+
+function ProfilePageInner() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const cashflowHref = useAppHref("/cashflow");
+  const isDemo = useAppBasePath() === "/demo";
+  const activeTab = parseProfileTab(searchParams.get("tab"));
+
+  const setActiveTab = useCallback(
+    (tab: ProfileTab) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (tab === "settings") params.delete("tab");
+      else params.set("tab", tab);
+      const q = params.toString();
+      router.replace(q ? `${pathname}?${q}` : pathname, { scroll: false });
+    },
+    [pathname, router, searchParams],
+  );
+
   const [state, setState] = useState<ResetState>("idle");
   const [deletedCounts, setDeletedCounts] = useState<Record<string, number> | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
@@ -63,7 +123,6 @@ export default function ProfilePage() {
   const [savingDetectTravel, setSavingDetectTravel] = useState(false);
   const [detectTravelError, setDetectTravelError] = useState<string | null>(null);
   const [detectTravelSaved, setDetectTravelSaved] = useState(false);
-  const [activeTab, setActiveTab] = useState<ProfileTab>("settings");
 
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -72,6 +131,7 @@ export default function ProfilePage() {
   const [dataError, setDataError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const handleReset = useCallback(async () => {
+    if (isDemo) return;
     setState("loading");
     try {
       const res = await fetch("/api/user/reset-data", { method: "DELETE" });
@@ -87,18 +147,18 @@ export default function ProfilePage() {
       setErrorMsg("Network error. Please try again.");
       setState("error");
     }
-  }, []);
+  }, [isDemo]);
 
   const handleOpenChange = useCallback((open: boolean) => {
     setDialogOpen(open);
     if (!open) {
-      if (state === "done") window.location.href = "/dashboard/cashflow";
+      if (state === "done") window.location.href = cashflowHref;
       setState("idle");
       setConfirmText("");
       setErrorMsg("");
       setDeletedCounts(null);
     }
-  }, [state]);
+  }, [state, cashflowHref]);
 
   const canConfirm = confirmText.toLowerCase() === "delete all";
   const hasDetectTravelChanges = detectTravel !== initialDetectTravel;
@@ -151,6 +211,7 @@ export default function ProfilePage() {
   }, [detectTravel]);
 
   const exportData = useCallback(async () => {
+    if (isDemo) return;
     setExporting(true);
     setDataError(null);
     setDataMessage(null);
@@ -183,10 +244,11 @@ export default function ProfilePage() {
     } finally {
       setExporting(false);
     }
-  }, []);
+  }, [isDemo]);
 
   const importFile = useCallback(
     async (file: File) => {
+      if (isDemo) return;
       setImporting(true);
       setDataError(null);
       setDataMessage(null);
@@ -243,34 +305,52 @@ export default function ProfilePage() {
         if (fileInputRef.current) fileInputRef.current.value = "";
       }
     },
-    [importMode],
+    [importMode, isDemo],
   );
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">
-      <div className="mb-6 inline-flex rounded-lg border border-border bg-muted/30 p-1">
-        {([
-          { id: "settings", label: "Settings" },
-          { id: "ignored", label: "Ignored" },
-        ] as const).map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => setActiveTab(tab.id)}
-            className={cn(
-              "rounded-md px-4 py-1.5 text-sm font-medium transition-colors",
-              activeTab === tab.id
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {tab.label}
-          </button>
-        ))}
+      <div className="mb-6 flex justify-center">
+        <div
+          role="tablist"
+          aria-label="My Profile sections"
+          className={cn(
+            "inline-flex max-w-full items-center gap-0.5 overflow-x-auto p-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+            chartControlClass,
+            "h-auto min-h-7",
+          )}
+        >
+          {PROFILE_TABS.map((tab) => {
+            const Icon = tab.icon;
+            const active = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setActiveTab(tab.id)}
+                className={cn(
+                  "inline-flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-all duration-200 sm:text-sm",
+                  active
+                    ? "bg-[#0BC18D]/15 text-[#0BC18D] shadow-[0_0_12px_-4px_rgba(11,193,141,0.35)] dark:bg-[#0BC18D]/18"
+                    : "text-muted-foreground hover:bg-chart-hover hover:text-foreground",
+                )}
+              >
+                <Icon className="h-3.5 w-3.5 shrink-0 opacity-90" aria-hidden />
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {activeTab === "ignored" ? (
         <IgnoredTransactionsPanel />
+      ) : activeTab === "accounts" ? (
+        <AccountsPanel />
+      ) : activeTab === "categories" ? (
+        <CategoryTableManager embedded />
       ) : (
       <>
       <Card>
@@ -339,6 +419,14 @@ export default function ProfilePage() {
           <CardTitle className="text-base">Data backup</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          {isDemo ? (
+            <p className="text-sm text-muted-foreground">
+              Export, import, and wipe are disabled in the public demo so the Sterling Family
+              dataset stays intact for every visitor. Create a free account to back up your own
+              data.
+            </p>
+          ) : (
+            <>
           <p className="text-sm text-muted-foreground">
             Download every transaction (plus accounts and categories needed to restore them) as a
             JSON file, or upload a previous export to merge into this account or rebuild it from
@@ -428,6 +516,8 @@ export default function ProfilePage() {
             <p className="text-sm text-green-600 dark:text-green-400">{dataMessage}</p>
           ) : null}
           {dataError ? <p className="text-sm text-destructive">{dataError}</p> : null}
+            </>
+          )}
         </CardContent>
       </Card>
 
@@ -439,6 +529,13 @@ export default function ProfilePage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
+          {isDemo ? (
+            <p className="text-sm text-muted-foreground">
+              Reset is disabled in the public demo. Refresh the page anytime to restore the
+              original Sterling Family dataset.
+            </p>
+          ) : (
+            <>
           <p className="text-sm text-muted-foreground mb-4">
             Delete all your transactions, statements, accounts, upload history, and analytics.
             This lets you re-upload the same files without them being flagged as duplicates.
@@ -549,6 +646,8 @@ export default function ProfilePage() {
               )}
             </DialogContent>
           </Dialog>
+            </>
+          )}
         </CardContent>
       </Card>
       </>

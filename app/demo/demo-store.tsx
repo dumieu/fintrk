@@ -131,6 +131,16 @@ export interface DemoStatement {
   created_at: string;
 }
 
+export interface DemoNetWorthItem {
+  id: number;
+  kind: "asset" | "liability" | string;
+  category: string;
+  label: string;
+  amount: string;
+  currency: string;
+  is_active: boolean;
+}
+
 export interface DemoFamily {
   name: string;
   city: string;
@@ -150,6 +160,8 @@ export interface DemoSnapshot {
   budgets: DemoBudget[];
   insights: DemoInsight[];
   statements: DemoStatement[];
+  /** Atlas balance-sheet lines (preferred for marketing NW KPI). */
+  netWorthItems?: DemoNetWorthItem[];
   generatedAt: string;
 }
 

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { and, sql, eq } from "drizzle-orm";
-import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
+import { and, eq, sql } from "drizzle-orm";
+import { requireAppAuth } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
 import { transactions, userCategories, accounts } from "@/lib/db/schema";
 import { excludeCardPaymentsSql, excludeIgnoredSql, primaryCurrencyOnlySql } from "@/lib/db/excluded-transactions";
@@ -22,8 +22,9 @@ const NO_STORE = { "Cache-Control": "no-store" } as const;
  */
 export async function GET() {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
 
     const labelExpr =
       sql<string>`${userCategories.name}`;
@@ -42,7 +43,10 @@ export async function GET() {
           incomeVol: sql<string>`COALESCE(SUM(CASE WHEN CAST(${transactions.baseAmount} AS numeric) > 0 THEN CAST(${transactions.baseAmount} AS numeric) ELSE 0 END), 0)::text`,
         })
         .from(transactions)
-        .leftJoin(userCategories, eq(transactions.categoryId, userCategories.id))
+        .leftJoin(
+          userCategories,
+          and(eq(transactions.categoryId, userCategories.id), eq(userCategories.userId, userId)),
+        )
         .where(and(eq(transactions.userId, userId), excludeCardPaymentsSql(), excludeIgnoredSql(), primaryCurrencyOnlySql(primaryCurrency)))
         .groupBy(labelExpr),
     );

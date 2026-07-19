@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
+import { requireAppAuth } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
 import { transactions, userCategories } from "@/lib/db/schema";
 import { excludeIgnoredSql } from "@/lib/db/excluded-transactions";
@@ -20,8 +20,9 @@ const inputSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
 
     const body = await request.json();
     const parsed = inputSchema.safeParse(body);
@@ -80,20 +81,28 @@ Return a JSON array of objects: [{"id": "uuid", "category": "Category Name", "co
     try { assignments = JSON.parse(aiText); } catch { assignments = []; }
 
     const categoryMap = new Map(allCategories.map((c) => [c.name.toLowerCase(), c.id]));
+    const allowedIds = new Set(txns.map((t) => t.id));
     let updated = 0;
 
     for (const assignment of assignments) {
-      const catId = categoryMap.get(assignment.category.toLowerCase());
+      if (!assignment?.id || !allowedIds.has(assignment.id)) continue;
+      const catName = typeof assignment.category === "string" ? assignment.category.toLowerCase() : "";
+      const catId = catName ? categoryMap.get(catName) : undefined;
       if (!catId) continue;
+      const confidence =
+        typeof assignment.confidence === "number" && Number.isFinite(assignment.confidence)
+          ? Math.min(1, Math.max(0, assignment.confidence))
+          : 0;
 
-      await resilientQuery(() =>
+      const rows = await resilientQuery(() =>
         db.update(transactions).set({
           categoryId: catId,
-          categoryConfidence: assignment.confidence.toString(),
+          categoryConfidence: confidence.toString(),
           updatedAt: new Date(),
-        }).where(and(eq(transactions.id, assignment.id), eq(transactions.userId, userId))),
+        }).where(and(eq(transactions.id, assignment.id), eq(transactions.userId, userId)))
+          .returning({ id: transactions.id }),
       );
-      updated++;
+      if (rows.length > 0) updated++;
     }
 
     return NextResponse.json({ updated, total: assignments.length }, { headers: NO_STORE });

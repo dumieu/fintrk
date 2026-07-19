@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
+import { requireAppAuth } from "@/lib/auth-resilient";
 import { db, resilientQuery, resilientRawSql, rawSql } from "@/lib/db";
 import { transactions, accounts } from "@/lib/db/schema";
 import {
@@ -27,8 +27,9 @@ const DEFAULT_LIMIT = 20;
  */
 export async function GET(request: NextRequest) {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
 
     const rawOffset = parseInt(request.nextUrl.searchParams.get("offset") ?? "0", 10);
     const rawLimit = parseInt(

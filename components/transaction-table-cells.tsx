@@ -3,7 +3,8 @@
 import type { ReactNode } from "react";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { AlertTriangle, ChevronDown, Copy, Globe, Repeat, Search } from "lucide-react";
+import { AlertTriangle, ChevronDown, Copy, FileText, Globe, Repeat, Search } from "lucide-react";
+import { openStatementViewer } from "@/lib/open-statement-viewer";
 import { CardNetworkLogo } from "@/components/card-network-logo";
 import { TransactionCategoryIcon } from "@/components/transaction-category-icon";
 import {
@@ -726,6 +727,23 @@ export function MerchantNameEditor({
                 {transactionReferenceDisplay(txn)}
               </span>
             </p>
+          )}
+          {txn.statementId != null && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                openStatementViewer({
+                  statementId: txn.statementId!,
+                  fileName: txn.statementFileName,
+                });
+              }}
+              className="mt-1 inline-flex items-center gap-1 rounded-md px-1 py-0.5 -ml-1 text-[9px] font-medium text-muted-foreground/80 transition-colors hover:bg-[#0BC18D]/10 hover:text-[#0BC18D]"
+              title={txn.statementFileName ? `View source statement: ${txn.statementFileName}` : "View source statement"}
+            >
+              <FileText className="h-2.5 w-2.5 shrink-0" aria-hidden />
+              View statement
+            </button>
           )}
         </div>
       </div>

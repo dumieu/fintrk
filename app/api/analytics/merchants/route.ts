@@ -1,19 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
+import { requireAppAuth } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
 import { transactions } from "@/lib/db/schema";
-import {
-  leafCategory,
-  parentCategory,
-} from "@/lib/db/category-rollup";
-import {
-  excludeCardPaymentsSql,
-  excludeIgnoredSql,
-  spendingIntelligenceOutflowSql,
-} from "@/lib/db/excluded-transactions";
-import { eq, and, or, sql } from "drizzle-orm";
+import { and, eq, or, sql } from "drizzle-orm";
 import { logServerError } from "@/lib/safe-error";
 import { analyticsSubcategoryColor } from "@/lib/analytics-category-colors";
+import {
+  insightsAmountSql,
+  insightsBaseOutflowSql,
+  insightsDateWindowSql,
+  insightsLegendFilterSql,
+  leafCategory,
+  parentCategory,
+  parseInsightsFilterQuery,
+  resolveInsightsSpendWindow,
+} from "@/lib/analytics/insights-filter";
 
 export const dynamic = "force-dynamic";
 
@@ -22,23 +23,6 @@ const NO_STORE = { "Cache-Control": "no-store" } as const;
 const MAX_LIMIT = 100;
 const DEFAULT_LIMIT = 50;
 
-function formatMonthYearLabel(ymd: string): string {
-  const [y, m] = ymd.slice(0, 10).split("-").map((s) => parseInt(s, 10));
-  const d = new Date(Date.UTC(y, m - 1, 1));
-  const mon = d.toLocaleString("en-US", { month: "short", timeZone: "UTC" });
-  const yy = String(y).slice(-2);
-  return `${mon}-${yy}`;
-}
-
-const merchantOutflowWhere = (userId: string) =>
-  and(
-    eq(transactions.userId, userId),
-    excludeCardPaymentsSql(), excludeIgnoredSql(),
-    spendingIntelligenceOutflowSql(),
-    sql`${transactions.merchantName} IS NOT NULL`,
-  );
-
-/** Leaf subcategory when present; otherwise the top-level category name. */
 const merchantCategoryLabelSql = sql<string>`COALESCE(${leafCategory.name}, 'Uncategorized')`;
 
 function merchantPairKey(name: string, currency: string) {
@@ -48,8 +32,14 @@ function merchantPairKey(name: string, currency: string) {
 async function dominantCategoriesForMerchants(
   userId: string,
   pairs: { name: string; currency: string }[],
+  windowSql: ReturnType<typeof insightsDateWindowSql>,
+  amountParts: ReturnType<typeof insightsAmountSql>,
+  legendParts: ReturnType<typeof insightsLegendFilterSql>,
+  base: ReturnType<typeof insightsBaseOutflowSql>,
 ) {
-  if (pairs.length === 0) return new Map<string, { category: string | null; subcategory: string; color: string | null }>();
+  if (pairs.length === 0) {
+    return new Map<string, { category: string | null; subcategory: string; color: string | null }>();
+  }
 
   const pairFilter = or(
     ...pairs.map((p) =>
@@ -77,9 +67,10 @@ async function dominantCategoriesForMerchants(
       )
       .where(
         and(
-          eq(transactions.userId, userId),
-          excludeCardPaymentsSql(), excludeIgnoredSql(),
-          spendingIntelligenceOutflowSql(),
+          base,
+          windowSql,
+          ...amountParts,
+          ...legendParts,
           sql`${transactions.merchantName} IS NOT NULL`,
           sql`${leafCategory.name} IS NOT NULL`,
           pairFilter,
@@ -93,7 +84,10 @@ async function dominantCategoriesForMerchants(
       ),
   );
 
-  const best = new Map<string, { category: string | null; subcategory: string; color: string | null; total: number }>();
+  const best = new Map<
+    string,
+    { category: string | null; subcategory: string; color: string | null; total: number }
+  >();
   for (const row of rows) {
     const name = row.name ?? "";
     const currency = row.currency ?? "";
@@ -118,59 +112,75 @@ async function dominantCategoriesForMerchants(
 }
 
 /**
- * Merchants ranked by total spend (absolute outflow), paginated for infinite scroll.
- * Grouped by merchant name + base currency (same as legacy analytics aggregate).
+ * Merchants ranked by spend, scoped to the same filters as the Spend Analytics chart.
  */
 export async function GET(request: NextRequest) {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
 
     const rawOffset = parseInt(request.nextUrl.searchParams.get("offset") ?? "0", 10);
-    const rawLimit = parseInt(request.nextUrl.searchParams.get("limit") ?? String(DEFAULT_LIMIT), 10);
+    const rawLimit = parseInt(
+      request.nextUrl.searchParams.get("limit") ?? String(DEFAULT_LIMIT),
+      10,
+    );
     const offset = Number.isFinite(rawOffset) && rawOffset >= 0 ? Math.floor(rawOffset) : 0;
     const limit = Math.min(
       MAX_LIMIT,
       Math.max(1, Number.isFinite(rawLimit) ? Math.floor(rawLimit) : DEFAULT_LIMIT),
     );
-
     const fetchLimit = limit + 1;
 
-    const [rows, rangeRows] = await Promise.all([
-      resilientQuery(() =>
-        db
-          .select({
-            name: transactions.merchantName,
-            total: sql<string>`SUM(ABS(CAST(${transactions.baseAmount} AS numeric)))`,
-            count: sql<number>`COUNT(*)::int`,
-            currency: transactions.baseCurrency,
-          })
-          .from(transactions)
-          .where(merchantOutflowWhere(userId))
-          .groupBy(transactions.merchantName, transactions.baseCurrency)
-          .orderBy(sql`SUM(ABS(CAST(${transactions.baseAmount} AS numeric))) DESC`)
-          .limit(fetchLimit)
-          .offset(offset),
-      ),
-      resilientQuery(() =>
-        db
-          .select({
-            minDate: sql<string | null>`MIN(${transactions.postedDate})::text`,
-            maxDate: sql<string | null>`MAX(${transactions.postedDate})::text`,
-          })
-          .from(transactions)
-          .where(merchantOutflowWhere(userId)),
-      ),
-    ]);
+    const filter = parseInsightsFilterQuery(request.nextUrl.searchParams);
+    const window = await resolveInsightsSpendWindow(userId, filter);
+    const base = insightsBaseOutflowSql(userId, window.primaryCurrency);
+    const windowSql = insightsDateWindowSql(window);
+    const amountParts = insightsAmountSql(filter);
+    const legendParts = insightsLegendFilterSql(userId, filter);
+
+    const rows = await resilientQuery(() =>
+      db
+        .select({
+          name: transactions.merchantName,
+          total: sql<string>`SUM(ABS(CAST(${transactions.baseAmount} AS numeric)))`,
+          count: sql<number>`COUNT(*)::int`,
+          currency: transactions.baseCurrency,
+        })
+        .from(transactions)
+        .leftJoin(
+          leafCategory,
+          and(eq(transactions.categoryId, leafCategory.id), eq(leafCategory.userId, userId)),
+        )
+        .leftJoin(
+          parentCategory,
+          and(eq(leafCategory.parentId, parentCategory.id), eq(parentCategory.userId, userId)),
+        )
+        .where(
+          and(
+            base,
+            windowSql,
+            ...amountParts,
+            ...legendParts,
+            sql`${transactions.merchantName} IS NOT NULL`,
+          ),
+        )
+        .groupBy(transactions.merchantName, transactions.baseCurrency)
+        .orderBy(sql`SUM(ABS(CAST(${transactions.baseAmount} AS numeric))) DESC`)
+        .limit(fetchLimit)
+        .offset(offset),
+    );
 
     const hasMore = rows.length > limit;
     const slice = hasMore ? rows.slice(0, limit) : rows;
 
     const categoryByMerchant = await dominantCategoriesForMerchants(
       userId,
-      slice
-        .filter((m) => m.name)
-        .map((m) => ({ name: m.name!, currency: m.currency })),
+      slice.filter((m) => m.name).map((m) => ({ name: m.name!, currency: m.currency })),
+      windowSql,
+      amountParts,
+      legendParts,
+      base,
     );
 
     const merchants = slice.map((m) => {
@@ -187,19 +197,13 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    const range = rangeRows[0];
-    const dateRangeLabel =
-      range?.minDate && range?.maxDate
-        ? `${formatMonthYearLabel(range.minDate)} : ${formatMonthYearLabel(range.maxDate)}`
-        : null;
-
     return NextResponse.json(
       {
         merchants,
         offset,
         nextOffset: offset + merchants.length,
         hasMore,
-        dateRangeLabel,
+        dateRangeLabel: window.dateRangeLabel,
       },
       { headers: NO_STORE },
     );

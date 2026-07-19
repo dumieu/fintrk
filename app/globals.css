@@ -60,36 +60,38 @@
 :root {
   --radius: 0.625rem;
   --background: #FAFAF8;
-  --foreground: oklch(0.18 0.01 85);
+  /** BioTRK-aligned crisp near-black for sharper light-mode contrast */
+  --foreground: oklch(0.145 0 0);
   --card: #FFFFFF;
-  --card-foreground: oklch(0.18 0.01 85);
+  --card-foreground: oklch(0.145 0 0);
   --popover: #FFFFFF;
-  --popover-foreground: oklch(0.18 0.01 85);
-  --primary: oklch(0.28 0.02 85);
-  --primary-foreground: oklch(0.99 0 0);
-  --secondary: oklch(0.96 0.005 85);
-  --secondary-foreground: oklch(0.28 0.02 85);
-  --muted: oklch(0.955 0.006 85);
-  --muted-foreground: oklch(0.42 0.018 85);
-  --accent: oklch(0.955 0.008 85);
-  --accent-foreground: oklch(0.28 0.02 85);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.965 0.004 85);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.962 0.005 85);
+  --muted-foreground: oklch(0.48 0.014 85);
+  --accent: oklch(0.962 0.006 85);
+  --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.90 0.008 85);
-  --input: oklch(0.92 0.008 85);
-  --ring: oklch(0.62 0.03 165);
+  --border: oklch(0.88 0.010 85);
+  --input: oklch(0.90 0.010 85);
+  /** FinTRK brand emerald (#0BC18D) */
+  --ring: oklch(0.70 0.14 165);
   --chart-1: oklch(0.55 0.16 165);
   --chart-2: oklch(0.52 0.14 240);
   --chart-3: oklch(0.48 0.12 300);
   --chart-4: oklch(0.58 0.14 55);
   --chart-5: oklch(0.50 0.16 25);
   --sidebar: oklch(0.985 0.003 85);
-  --sidebar-foreground: oklch(0.18 0.01 85);
+  --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.55 0.16 165);
   --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: oklch(0.96 0.005 85);
-  --sidebar-accent-foreground: oklch(0.28 0.02 85);
-  --sidebar-border: oklch(0.90 0.008 85);
-  --sidebar-ring: oklch(0.62 0.03 165);
+  --sidebar-accent: oklch(0.965 0.004 85);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.88 0.010 85);
+  --sidebar-ring: oklch(0.70 0.14 165);
   /** Layout — keep Sankey breakout in sync with max-w-7xl (+25%). */
   --app-page-max: 100rem;
   --app-sankey-breakout-at: 1850px;
@@ -104,24 +106,24 @@
   --app-popover: #FFFFFF;
   /** Chart / analytics panel tokens (light) — high contrast for readability */
   --chart-surface: #FFFFFF;
-  --chart-border: oklch(0.84 0.012 85);
-  --chart-muted: oklch(0.955 0.008 85);
-  --chart-hover: oklch(0.945 0.012 85);
+  --chart-border: oklch(0.86 0.012 85);
+  --chart-muted: oklch(0.958 0.006 85);
+  --chart-hover: oklch(0.940 0.010 85);
   --chart-overlay: rgba(250, 250, 248, 0.82);
   --chart-icon-badge: oklch(0.96 0.014 165);
-  --chart-axis: oklch(0.46 0.020 85);
-  --chart-grid: oklch(0.86 0.010 85);
-  --chart-label: oklch(0.24 0.020 85);
-  --chart-label-muted: oklch(0.44 0.018 85);
+  --chart-axis: oklch(0.40 0.018 85);
+  --chart-grid: oklch(0.88 0.010 85);
+  --chart-label: oklch(0.20 0.016 85);
+  --chart-label-muted: oklch(0.42 0.016 85);
   --chart-bar-track: oklch(0.91 0.008 85);
   --chart-tooltip-bg: #FFFFFF;
-  --chart-tooltip-border: oklch(0.84 0.012 85);
-  --chart-tooltip-shadow: 0 8px 32px rgba(15, 23, 42, 0.12), 0 2px 8px rgba(15, 23, 42, 0.08);
-  --chart-tooltip-label: oklch(0.32 0.018 85);
-  --chart-tooltip-secondary: oklch(0.40 0.018 85);
-  --chart-tooltip-hint: oklch(0.48 0.016 85);
-  --chart-tooltip-panel: oklch(0.955 0.008 85);
-  --chart-panel-shadow: 0 1px 2px rgba(15, 23, 42, 0.08), 0 4px 20px rgba(15, 23, 42, 0.06);
+  --chart-tooltip-border: oklch(0.86 0.012 85);
+  --chart-tooltip-shadow: 0 8px 32px rgba(15, 23, 42, 0.10), 0 2px 8px rgba(15, 23, 42, 0.06);
+  --chart-tooltip-label: oklch(0.30 0.016 85);
+  --chart-tooltip-secondary: oklch(0.38 0.016 85);
+  --chart-tooltip-hint: oklch(0.46 0.014 85);
+  --chart-tooltip-panel: oklch(0.958 0.006 85);
+  --chart-panel-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 4px 20px rgba(15, 23, 42, 0.05);
   --chart-sankey-bg: #F3F2EE;
   --chart-sankey-guide: oklch(0.82 0.012 85);
   --chart-sankey-node-stroke: oklch(0.78 0.014 85);
@@ -130,8 +132,8 @@
   --chart-sankey-link-rest: 0.68;
   --chart-sankey-link-dim: 0.16;
   --chart-sankey-link-hi: 0.94;
-  --chart-sankey-label: oklch(0.22 0.022 85);
-  --chart-sankey-label-muted: oklch(0.40 0.018 85);
+  --chart-sankey-label: oklch(0.20 0.018 85);
+  --chart-sankey-label-muted: oklch(0.40 0.016 85);
   --chart-sankey-label-stroke: rgba(255, 255, 255, 0.92);
   --chart-sankey-node-highlight: rgba(255, 255, 255, 0.22);
   --scrollbar-thumb: oklch(0.78 0.010 85);
@@ -139,6 +141,9 @@
   --slider-thumb-from: #FFFFFF;
   --slider-thumb-to: oklch(0.96 0.006 85);
   --slider-thumb-border: rgba(11, 193, 141, 0.55);
+  /** Chart control chrome — soft white elevation (light) vs dark glass (dark) */
+  --control-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 14px rgba(15, 23, 42, 0.06);
+  --control-ring: rgba(11, 193, 141, 0.10);
 }
 
 .dark {
@@ -215,7 +220,9 @@
   --scrollbar-thumb-hover: #4a4a4a;
   --slider-thumb-from: #1a1a1a;
   --slider-thumb-to: #121212;
-  --slider-thumb-border: rgba(126, 87, 194, 0.7);
+  --slider-thumb-border: rgba(11, 193, 141, 0.55);
+  --control-shadow: 0 4px 24px -8px rgba(0, 0, 0, 0.55);
+  --control-ring: rgba(255, 255, 255, 0.04);
 }
 
 @layer utilities {
@@ -236,6 +243,14 @@
   /** Chart panel elevation (light mode shadow, dark mode flat glass). */
   .shadow-chart {
     box-shadow: var(--chart-panel-shadow);
+  }
+
+  /** Chart control chrome — soft elevation in light, glass in dark. */
+  .shadow-control {
+    box-shadow: var(--control-shadow);
+  }
+  .ring-control {
+    --tw-ring-color: var(--control-ring);
   }
 
   /** Theme-aware slim scrollbar for analytics / cashflow panels */
@@ -347,6 +362,65 @@
   .animate-float-delayed {
     animation: float-delayed 10s ease-in-out infinite;
   }
+
+  /* Demo button animations (See Demo Account) */
+  @keyframes demo-ping {
+    0% {
+      transform: scale(1);
+      opacity: 0.5;
+    }
+    75%,
+    100% {
+      transform: scale(1.5);
+      opacity: 0;
+    }
+  }
+  @keyframes demo-glow {
+    0%,
+    100% {
+      opacity: 0.35;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.55;
+      transform: scale(1.04);
+    }
+  }
+  @keyframes demo-shimmer {
+    0% {
+      transform: translateX(-150%);
+    }
+    100% {
+      transform: translateX(150%);
+    }
+  }
+  @keyframes demo-sparkle {
+    0%,
+    100% {
+      opacity: 0;
+      transform: scale(0);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  .animate-demo-ping {
+    animation: demo-ping 2.5s cubic-bezier(0, 0, 0.2, 1) infinite;
+  }
+  .animate-demo-glow {
+    animation: demo-glow 3s ease-in-out infinite;
+  }
+  .animate-demo-shimmer {
+    animation: demo-shimmer 3s ease-in-out infinite;
+  }
+  .animate-demo-sparkle {
+    animation: demo-sparkle 2s ease-in-out infinite;
+  }
+  .animate-demo-sparkle-delayed {
+    animation: demo-sparkle 2s ease-in-out 1s infinite;
+  }
+
   .scrollbar-thin {
     scrollbar-width: thin;
     scrollbar-color: oklch(0.7 0 0 / 0.2) transparent;
@@ -613,3 +687,187 @@
     will-change: auto;
   }
 }
+
+/* ── FinTRK workspace panels (BullTRK-inspired left / right / bottom) ── */
+
+.fintrk-panel-kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.0625rem;
+  border-radius: 0.3125rem;
+  border: 1px solid color-mix(in srgb, var(--chart-border) 72%, #0bc18d 28%);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--chart-muted) 55%, var(--background)),
+    color-mix(in srgb, var(--background) 88%, black)
+  );
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 7%, transparent),
+    0 1px 2px rgba(0, 0, 0, 0.28);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+  color: color-mix(in srgb, #34e6b0 90%, white);
+  letter-spacing: 0.01em;
+}
+
+.fintrk-panel-kbd--compact {
+  padding: 0.1875rem 0.4375rem;
+  font-size: 0.625rem;
+}
+
+.fintrk-panel-kbd--rail {
+  padding: 0.1875rem 0.4375rem;
+  font-size: 0.625rem;
+}
+
+.fintrk-panel-kbd--stack {
+  flex-direction: column;
+  gap: 0.0625rem;
+  min-width: 1.125rem;
+  padding: 0.25rem 0.1875rem;
+  font-size: 0.625rem;
+}
+
+.fintrk-panel-kbd--stack:not(:has(.fintrk-panel-kbd-mod--mac)) {
+  min-width: 1.75rem;
+  padding-inline: 0.125rem;
+  font-size: 0.5625rem;
+}
+
+.fintrk-panel-kbd--pending {
+  opacity: 0.45;
+}
+
+.fintrk-panel-kbd-mod {
+  font-weight: 650;
+}
+
+.fintrk-panel-kbd-mod--mac {
+  font-size: 0.6875rem;
+  line-height: 0.9;
+}
+
+.fintrk-panel-kbd-sep {
+  width: 0;
+  overflow: hidden;
+  font-size: 0.5rem;
+  font-weight: 600;
+  opacity: 0.55;
+}
+
+.fintrk-panel-kbd:not(:has(.fintrk-panel-kbd-mod--mac)) .fintrk-panel-kbd-sep {
+  width: auto;
+  margin-inline: 0.03125rem;
+}
+
+.fintrk-panel-kbd-arrow {
+  font-weight: 550;
+  opacity: 0.95;
+}
+
+.group:hover .fintrk-panel-kbd {
+  border-color: color-mix(in srgb, #0bc18d 42%, var(--chart-border));
+  color: #34e6b0;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 10%, transparent),
+    0 0 12px -4px rgba(11, 193, 141, 0.45);
+}
+
+.fintrk-side-panel {
+  transition: width 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.fintrk-side-panel.fintrk-side-panel-resizing {
+  transition: none;
+}
+
+.fintrk-side-panel-stage {
+  transition: box-shadow 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.fintrk-side-panel-stage[data-peg="left"] {
+  box-shadow: inset 10px 0 28px -16px rgba(11, 193, 141, 0.45);
+}
+
+.fintrk-side-panel-stage[data-peg="right"] {
+  box-shadow: inset -10px 0 28px -16px rgba(11, 193, 141, 0.45);
+}
+
+.fintrk-side-panel[data-knock="charge"] {
+  animation: fintrk-side-panel-charge 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.fintrk-side-panel[data-knock="retreat-left"] {
+  animation: fintrk-side-panel-knock-left 0.38s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.fintrk-side-panel[data-knock="retreat-right"] {
+  animation: fintrk-side-panel-knock-right 0.38s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes fintrk-side-panel-charge {
+  0% {
+    filter: brightness(1);
+  }
+  35% {
+    filter: brightness(1.18);
+  }
+  100% {
+    filter: brightness(1);
+  }
+}
+
+@keyframes fintrk-side-panel-knock-left {
+  0% {
+    transform: translateX(0);
+    filter: brightness(1);
+  }
+  40% {
+    transform: translateX(-12px);
+    filter: brightness(0.92);
+  }
+  100% {
+    transform: translateX(0);
+    filter: brightness(1);
+  }
+}
+
+@keyframes fintrk-side-panel-knock-right {
+  0% {
+    transform: translateX(0);
+    filter: brightness(1);
+  }
+  40% {
+    transform: translateX(12px);
+    filter: brightness(0.92);
+  }
+  100% {
+    transform: translateX(0);
+    filter: brightness(1);
+  }
+}
+
+body.fintrk-side-panel-resizing {
+  cursor: ew-resize !important;
+  user-select: none !important;
+}
+
+body.fintrk-bottom-panel-resizing {
+  cursor: ns-resize !important;
+  user-select: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fintrk-side-panel,
+  .fintrk-side-panel-stage {
+    transition-duration: 0.01ms !important;
+  }
+
+  .fintrk-side-panel[data-knock] {
+    animation: none !important;
+  }
+}
+

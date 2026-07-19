@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
 const isPublicRoute = createRouteMatcher(["/login(.*)"]);
@@ -13,7 +13,20 @@ const authorizedParties =
       ]
     : ["https://admin.fintrk.io"];
 
-const CLERK_KEYS_PRESENT = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+const CLERK_KEYS_PRESENT = Boolean(
+  process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim() &&
+    process.env.CLERK_SECRET_KEY?.trim(),
+);
+
+function denyMisconfiguredAuth(req: NextRequest) {
+  if (isApiRoute(req)) {
+    return new NextResponse(JSON.stringify({ error: "auth_not_configured" }), {
+      status: 503,
+      headers: { "content-type": "application/json" },
+    });
+  }
+  return new NextResponse("Admin auth is not configured", { status: 503 });
+}
 
 export default CLERK_KEYS_PRESENT
   ? clerkMiddleware(
@@ -30,9 +43,15 @@ export default CLERK_KEYS_PRESENT
         const url = new URL("/login", req.url);
         return NextResponse.redirect(url);
       },
-      { authorizedParties }
+      { authorizedParties },
     )
-  : () => undefined;
+  : process.env.NODE_ENV === "production"
+    ? function denyAll(req: NextRequest) {
+        return denyMisconfiguredAuth(req);
+      }
+    : function passthrough() {
+        return NextResponse.next();
+      };
 
 export const config = {
   matcher: [

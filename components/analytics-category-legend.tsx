@@ -176,7 +176,9 @@ function CategoryLegendScrollRow({
         onPointerCancel={endDrag}
         onClickCapture={onClickCapture}
       >
-        <div className="flex w-max flex-nowrap items-stretch gap-2 pr-0.5">{children}</div>
+        <div className="mx-auto flex w-max min-w-full flex-nowrap items-stretch justify-center gap-2 px-0.5">
+          {children}
+        </div>
       </div>
       <LegendScrollArrow
         direction="right"
@@ -263,7 +265,7 @@ function CategorySlicerButton({
   const shareLabel = formatShare(category.share);
   const tone = analyticsCategoryLabelTone(category.color);
   const textMain = tone === "light" ? "text-white" : "text-[#0a0a0a]";
-  const textSub = tone === "light" ? "text-foreground" : "text-[#0a0a0a]/75";
+  const textSub = tone === "light" ? "text-white/75" : "text-[#0a0a0a]/75";
   const title = readOnly
     ? category.name
     : soloFilter
@@ -368,21 +370,19 @@ export function AnalyticsCategoryLegend({
   const filterActive = soloCategory != null;
   const hidden = hiddenCategories ?? new Set<string>();
   const slicerEnabled = Boolean(onToggleCategory);
-  const visibilityEnabled = Boolean(onToggleVisibility);
   const hasSubcategories =
     filterActive && subcategoryBreakdown != null && subcategoryBreakdown.length > 0;
 
   if (categories.length === 0 && !hasSubcategories) return null;
 
   const soloLabel = soloCategory?.toLowerCase() ?? "";
-  const hiddenCount = categories.filter((c) => hidden.has(c.name)).length;
 
   return (
     <div
       className={
         compact
           ? "space-y-2.5"
-          : "mt-1 border-t border-chart-border pt-4"
+          : "mt-1 shrink-0 border-t border-chart-border pt-3"
       }
     >
       {categories.length > 0 ? (
@@ -391,21 +391,6 @@ export function AnalyticsCategoryLegend({
             <div className="flex items-center justify-between gap-3">
               <p className="text-[10px] font-medium text-muted-foreground">
                 Showing <span className="font-semibold capitalize text-foreground">{soloLabel}</span> only
-              </p>
-              {onShowAll ? (
-                <button
-                  type="button"
-                  onClick={onShowAll}
-                  className={cn(chartChipClass, "shrink-0 px-2.5 py-1 text-[10px] font-semibold")}
-                >
-                  Show all
-                </button>
-              ) : null}
-            </div>
-          ) : visibilityEnabled && hiddenCount > 0 ? (
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-[10px] font-medium text-muted-foreground">
-                {hiddenCount} {hiddenCount === 1 ? "category hidden" : "categories hidden"} from chart
               </p>
               {onShowAll ? (
                 <button

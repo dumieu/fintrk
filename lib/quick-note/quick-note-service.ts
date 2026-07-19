@@ -9,6 +9,7 @@ import {
   QUICK_NOTE_TITLE_MAX,
   type UserQuickNote,
 } from "@/lib/quick-note/constants";
+import { sanitizeQuickNoteHtmlWithoutDom } from "@/lib/quick-note/sanitize-html";
 
 export class QuickNoteError extends Error {
   readonly status: number;
@@ -25,14 +26,15 @@ function normalizeTitle(raw: string): string {
 }
 
 function normalizeBody(raw: string): string {
-  const body = raw.replace(/\r\n/g, "\n");
-  if (body.length > QUICK_NOTE_BODY_MAX) {
+  // Always sanitize on write so a forged API body cannot persist XSS HTML.
+  const sanitized = sanitizeQuickNoteHtmlWithoutDom(raw.replace(/\r\n/g, "\n"));
+  if (sanitized.length > QUICK_NOTE_BODY_MAX) {
     throw new QuickNoteError(
       `Notes are limited to ${QUICK_NOTE_BODY_MAX.toLocaleString()} characters.`,
       400,
     );
   }
-  return body;
+  return sanitized;
 }
 
 let schemaReady: Promise<void> | null = null;
@@ -103,32 +105,22 @@ export async function upsertUserQuickNote(
   await ensureQuickNoteSchema();
   const now = new Date();
 
-  const [existing] = await resilientQuery(() =>
+  // Atomic upsert: concurrent first saves previously raced on user_id unique.
+  await resilientQuery(() =>
     db
-      .select({ id: userQuickNotesTable.id })
-      .from(userQuickNotesTable)
-      .where(eq(userQuickNotesTable.userId, userId))
-      .limit(1),
-  );
-
-  if (existing) {
-    await resilientQuery(() =>
-      db
-        .update(userQuickNotesTable)
-        .set({ title, body, updatedAt: now })
-        .where(eq(userQuickNotesTable.id, existing.id)),
-    );
-  } else {
-    await resilientQuery(() =>
-      db.insert(userQuickNotesTable).values({
+      .insert(userQuickNotesTable)
+      .values({
         userId,
         title,
         body,
         createdAt: now,
         updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: userQuickNotesTable.userId,
+        set: { title, body, updatedAt: now },
       }),
-    );
-  }
+  );
 
   return { title, body, updatedAt: now.toISOString() };
 }

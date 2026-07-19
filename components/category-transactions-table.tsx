@@ -31,6 +31,7 @@ export function CategoryTransactionsTable({
   title,
   subtitle,
   rows,
+  amountSum,
   loading,
   userCategories,
   allLabels,
@@ -41,6 +42,8 @@ export function CategoryTransactionsTable({
   title: string;
   subtitle: string;
   rows: CategoryTransaction[];
+  /** Server ABS sum for the open filter (matches chart bar). Falls back to row sum. */
+  amountSum?: number | null;
   loading: boolean;
   userCategories: UserCategory[];
   allLabels: string[];
@@ -115,6 +118,17 @@ export function CategoryTransactionsTable({
       return result === 0 ? collator.compare(a.id, b.id) : result * dir;
     });
   }, [categoryText, flagsText, rows, sort]);
+
+  const amountSumLabel = useMemo(() => {
+    const sum =
+      amountSum != null && Number.isFinite(amountSum)
+        ? amountSum
+        : rows.reduce(
+            (acc, txn) => acc + Math.abs(Number.parseFloat(txn.baseAmount) || 0),
+            0,
+          );
+    return Math.round(sum).toLocaleString("en-US");
+  }, [amountSum, rows]);
 
   const toggleSort = useCallback((key: CategoryTransactionSortKey) => {
     setSort((current) => ({
@@ -371,7 +385,12 @@ export function CategoryTransactionsTable({
                 Category / Subcategory
               </span>
             </div>
-            <SortableCategoryHeader label="Amount" sortKey="amount" activeSort={sort} onSort={toggleSort} />
+            <SortableCategoryHeader
+              label={`Amount (${amountSumLabel})`}
+              sortKey="amount"
+              activeSort={sort}
+              onSort={toggleSort}
+            />
             <span className="block w-full text-center">Flags</span>
             <SortableCategoryHeader label="Note" sortKey="note" activeSort={sort} onSort={toggleSort} />
             <span className="sr-only">Select and warning</span>

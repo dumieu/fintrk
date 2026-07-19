@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { eq, isNotNull, and, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
+import { requireAppAuth } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
 import { userCategories, transactions } from "@/lib/db/schema";
 import { excludeIgnoredSql } from "@/lib/db/excluded-transactions";
@@ -30,8 +30,9 @@ export interface CategoryFilterOption {
 
 export async function GET() {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
 
     const parent = alias(userCategories, "cat_parent");
 
@@ -45,7 +46,10 @@ export async function GET() {
             flowType: userCategories.flowType,
           })
           .from(userCategories)
-          .leftJoin(parent, eq(userCategories.parentId, parent.id))
+          .leftJoin(
+            parent,
+            and(eq(userCategories.parentId, parent.id), eq(parent.userId, userId)),
+          )
           .where(eq(userCategories.userId, userId)),
       ),
       resilientQuery(() =>
@@ -90,12 +94,23 @@ export async function GET() {
       return a.label.localeCompare(b.label, undefined, { sensitivity: "base" });
     });
 
-    const countryRows = await resilientQuery(() =>
-      db
-        .selectDistinct({ iso: transactions.countryIso })
-        .from(transactions)
-        .where(and(eq(transactions.userId, userId), excludeIgnoredSql(), isNotNull(transactions.countryIso))),
-    );
+    const [countryRows, monthRows] = await Promise.all([
+      resilientQuery(() =>
+        db
+          .selectDistinct({ iso: transactions.countryIso })
+          .from(transactions)
+          .where(and(eq(transactions.userId, userId), excludeIgnoredSql(), isNotNull(transactions.countryIso))),
+      ),
+      resilientQuery(() =>
+        db
+          .selectDistinct({
+            month: sql<string>`to_char(${transactions.postedDate}, 'YYYY-MM')`,
+          })
+          .from(transactions)
+          .where(and(eq(transactions.userId, userId), excludeIgnoredSql()))
+          .orderBy(sql`to_char(${transactions.postedDate}, 'YYYY-MM') desc`),
+      ),
+    ]);
 
     const countries = countryRows
       .map((r) => r.iso)
@@ -103,14 +118,18 @@ export async function GET() {
       .sort()
       .map((iso) => ({ value: iso, label: iso.toUpperCase() }));
 
+    const months = monthRows
+      .map((r) => r.month)
+      .filter((m): m is string => typeof m === "string" && /^\d{4}-\d{2}$/.test(m));
+
     return NextResponse.json(
-      { categories: categoryList, countries },
+      { categories: categoryList, countries, months },
       { headers: NO_STORE },
     );
   } catch (err) {
     logServerError("api/transactions/filter-options/GET", err);
     return NextResponse.json(
-      { error: "Failed to load filter options", categories: [], countries: [] },
+      { error: "Failed to load filter options", categories: [], countries: [], months: [] },
       { status: 500, headers: NO_STORE },
     );
   }

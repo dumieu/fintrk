@@ -18,6 +18,9 @@ function buildCronTargetUrl(baseUrl: string, cronPath: string): string | null {
   try {
     const base = new URL(baseUrl);
     if (base.protocol !== "http:" && base.protocol !== "https:") return null;
+    if (process.env.NODE_ENV === "production" && base.protocol !== "https:") return null;
+    // Reject credentials embedded in USER_APP_URL.
+    if (base.username || base.password) return null;
     const target = new URL(cronPath, base.origin);
     if (target.origin !== base.origin) return null;
     if (!target.pathname.startsWith("/api/cron/")) return null;
@@ -150,9 +153,11 @@ export async function POST(request: NextRequest) {
       })
       .catch(() => {});
   } else {
+    // redirect: "manual" so a 3xx cannot forward the Bearer CRON_SECRET off-origin.
     fetch(targetUrl, {
       method: "GET",
       headers: { Authorization: `Bearer ${cronSecret}` },
+      redirect: "manual",
     }).catch(() => {});
   }
 

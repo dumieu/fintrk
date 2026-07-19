@@ -3,14 +3,12 @@
  *
  *   PUT /api/net-worth/items   body: { items: NetWorthItemInput[] }
  *
- * Replaces (soft-deletes prior, inserts new) so the client can edit freely
- * without juggling individual ids — saves are atomic, idempotent, and fast.
+ * Replaces prior rows in one Neon transaction so a failed insert cannot leave
+ * the balance sheet empty after delete.
  */
 import { NextResponse } from "next/server";
-import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
-import { db, resilientQuery } from "@/lib/db";
-import { netWorthItems } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { requireAppAuth } from "@/lib/auth-resilient";
+import { rawSql } from "@/lib/db";
 import { z } from "zod";
 import { logServerError } from "@/lib/safe-error";
 import { ef } from "@/lib/crypto/encryption";
@@ -35,34 +33,43 @@ const bodySchema = z.object({ items: z.array(itemSchema).max(200) });
 
 export async function PUT(req: Request) {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
 
     const json = await req.json();
     const { items } = bodySchema.parse(json);
 
-    await resilientQuery(() =>
-      db.delete(netWorthItems).where(eq(netWorthItems.userId, userId)),
-    );
+    const steps: { query: string; params: unknown[] }[] = [
+      {
+        query: `DELETE FROM net_worth_items WHERE user_id = $1`,
+        params: [userId],
+      },
+    ];
 
-    if (items.length > 0) {
-      await resilientQuery(() =>
-        db.insert(netWorthItems).values(
-          items.map((it, idx) => ({
-            userId,
-            kind: it.kind,
-            category: it.category,
-            label: ef(it.label) ?? it.label,
-            amount: it.amount.toFixed(2),
-            currency: it.currency,
-            growthRate: it.growthRate == null ? null : it.growthRate.toFixed(4),
-            notes: ef(it.notes ?? null),
-            displayOrder: it.displayOrder ?? idx,
-            isActive: true,
-          })),
-        ),
-      );
+    for (let idx = 0; idx < items.length; idx++) {
+      const it = items[idx]!;
+      const label = ef(it.label) ?? it.label;
+      const notes = ef(it.notes ?? null);
+      steps.push({
+        query: `INSERT INTO net_worth_items
+          (user_id, kind, category, label, amount, currency, growth_rate, notes, display_order, is_active)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true)`,
+        params: [
+          userId,
+          it.kind,
+          it.category,
+          label,
+          it.amount.toFixed(2),
+          it.currency,
+          it.growthRate == null ? null : it.growthRate.toFixed(4),
+          notes,
+          it.displayOrder ?? idx,
+        ],
+      });
     }
+
+    await rawSql.transaction((txn) => steps.map((s) => txn.query(s.query, s.params)));
 
     return NextResponse.json({ saved: items.length }, { headers: NO_STORE });
   } catch (err) {

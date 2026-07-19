@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth-admin";
-import { isEncryptedTable, decryptRow } from "@/lib/crypto/encrypted-fields";
+import { isEncryptedTable } from "@/lib/crypto/encrypted-fields";
+import { adminRowFields } from "@/lib/crypto/phi-response";
 import { getActiveDecryptionSession, trackSessionAccess } from "@/lib/decryption-session";
+import { isMutationProtectedTable } from "@/lib/protected-tables";
 import { CLERK_USER_ID_EMAIL_TABLES } from "@/lib/user-email-filter-tables";
 import { parseLimitParam, parsePageParam } from "@/lib/utils";
 
@@ -45,18 +47,40 @@ async function getTableMeta(tableName: string) {
       FROM information_schema.table_constraints tc
       JOIN information_schema.key_column_usage kcu
         ON tc.constraint_name = kcu.constraint_name
+       AND tc.table_schema = kcu.table_schema
       WHERE tc.table_schema = 'public'
         AND tc.table_name = ${tableName}
         AND tc.constraint_type = 'PRIMARY KEY'
+      ORDER BY kcu.ordinal_position
     `,
   ]);
+  const primaryKeys = (pk as { column_name: string }[]).map((r) => r.column_name);
   return {
     allColumns: cols as ColumnDef[],
     textColumns: (cols as ColumnDef[])
       .filter((c) => ["character varying", "text", "character"].includes(c.data_type))
       .map((c) => c.column_name),
-    primaryKey: (pk[0]?.column_name as string | undefined) ?? null,
+    primaryKeys,
+    /** Sole PK column, or null when none / composite (mutations require a single PK). */
+    primaryKey: primaryKeys.length === 1 ? primaryKeys[0] : null,
   };
+}
+
+/** Reject client primaryKey unless it matches the table's real single-column PK. */
+function assertClientPrimaryKey(
+  clientPk: string,
+  realPk: string | null,
+): NextResponse | null {
+  if (!realPk) {
+    return NextResponse.json(
+      { error: "table_has_no_single_primary_key" },
+      { status: 400 },
+    );
+  }
+  if (clientPk !== realPk) {
+    return NextResponse.json({ error: "invalid_primary_key" }, { status: 400 });
+  }
+  return null;
 }
 
 function hasColumn(cols: ColumnDef[], name: string): boolean {
@@ -101,10 +125,12 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const table = searchParams.get("table");
-    const page = parsePageParam(searchParams.get("page"), 1);
     const exportAll = searchParams.get("exportAll") === "true";
+    // exportAll must start at offset 0; ignoring client page avoids skipped rows.
+    const page = exportAll ? 1 : parsePageParam(searchParams.get("page"), 1);
+    // Cap export dumps to limit abuse / accidental full-table loads.
     const limit = exportAll
-      ? 1_000_000
+      ? 50_000
       : parseLimitParam(searchParams.get("limit"), 50, 200);
     const search = searchParams.get("search") || "";
     const sort = searchParams.get("sort") || "";
@@ -230,24 +256,27 @@ export async function GET(request: NextRequest) {
 
     let rows = await sql.query(dataQuery, params);
 
-    let decrypted = false;
-    if (isEncryptedTable(table)) {
-      const session = await getActiveDecryptionSession();
-      if (session) {
-        rows = rows.map((r) => decryptRow(table, r as Record<string, unknown>));
-        decrypted = true;
-        await trackSessionAccess(session.id, table);
-        console.log(
-          JSON.stringify({
-            _type: "fintrk_admin_audit",
-            action: "rows_read_decrypted",
-            admin: gate.email,
-            table,
-            sessionId: session.id,
-            at: new Date().toISOString(),
-          }),
-        );
-      }
+    const session = await getActiveDecryptionSession({
+      email: gate.email,
+      userId: gate.userId,
+    });
+    const canDecrypt = Boolean(session);
+    rows = rows.map((r) =>
+      adminRowFields(table, r as Record<string, unknown>, canDecrypt),
+    );
+    const decrypted = canDecrypt && isEncryptedTable(table);
+    if (session && isEncryptedTable(table)) {
+      await trackSessionAccess(session.id, table);
+      console.log(
+        JSON.stringify({
+          _type: "fintrk_admin_audit",
+          action: "rows_read_decrypted",
+          admin: gate.email,
+          table,
+          sessionId: session.id,
+          at: new Date().toISOString(),
+        }),
+      );
     }
 
     let tableStats: Record<string, number> | undefined;
@@ -297,6 +326,17 @@ export async function GET(request: NextRequest) {
   }
 }
 
+async function canDecryptForAdmin(gate: {
+  email: string;
+  userId: string;
+}): Promise<boolean> {
+  const session = await getActiveDecryptionSession({
+    email: gate.email,
+    userId: gate.userId,
+  });
+  return Boolean(session);
+}
+
 export async function POST(request: NextRequest) {
   const gate = await requireAdmin();
   if (!gate.ok) return NextResponse.json({ error: gate.reason }, { status: 401 });
@@ -310,6 +350,12 @@ export async function POST(request: NextRequest) {
 
     const valid = await getValidTables();
     if (!valid.includes(table)) return NextResponse.json({ error: "invalid_table" }, { status: 400 });
+    if (isMutationProtectedTable(table)) {
+      return NextResponse.json(
+        { error: "table_mutations_forbidden" },
+        { status: 403 },
+      );
+    }
 
     const { allColumns } = await getTableMeta(table);
     const validNames = new Set(allColumns.map((c) => c.column_name));
@@ -330,7 +376,13 @@ export async function POST(request: NextRequest) {
 
     const query = `INSERT INTO "${table}" (${cols}) VALUES (${placeholders}) RETURNING *`;
     const result = await sql.query(query, values);
-    return NextResponse.json({ row: result[0] }, { status: 201 });
+    const canDecrypt = await canDecryptForAdmin(gate);
+    const row = adminRowFields(
+      table,
+      (result[0] ?? {}) as Record<string, unknown>,
+      canDecrypt,
+    );
+    return NextResponse.json({ row }, { status: 201 });
   } catch (e) {
     console.error("POST rows error:", e);
     return NextResponse.json({ error: "insert_failed" }, { status: 500 });
@@ -355,12 +407,20 @@ export async function PUT(request: NextRequest) {
 
     const valid = await getValidTables();
     if (!valid.includes(table)) return NextResponse.json({ error: "invalid_table" }, { status: 400 });
+    if (isMutationProtectedTable(table)) {
+      return NextResponse.json(
+        { error: "table_mutations_forbidden" },
+        { status: 403 },
+      );
+    }
 
-    const { allColumns } = await getTableMeta(table);
+    const { allColumns, primaryKey: realPk } = await getTableMeta(table);
     const validNames = new Set(allColumns.map((c) => c.column_name));
-    if (typeof primaryKey !== "string" || !validNames.has(primaryKey)) {
+    if (typeof primaryKey !== "string") {
       return NextResponse.json({ error: "invalid_primary_key" }, { status: 400 });
     }
+    const pkErr = assertClientPrimaryKey(primaryKey, realPk);
+    if (pkErr) return pkErr;
 
     const entries = Object.entries(data).filter(([k]) => {
       if (!validNames.has(k)) return false;
@@ -379,7 +439,17 @@ export async function PUT(request: NextRequest) {
     const query = `UPDATE "${table}" SET ${setClauses} WHERE "${primaryKey}" = $${values.length} RETURNING *`;
     const result = await sql.query(query, values);
     if (result.length === 0) return NextResponse.json({ error: "not_found" }, { status: 404 });
-    return NextResponse.json({ row: result[0] });
+    if (result.length > 1) {
+      console.error("PUT rows matched multiple rows for PK", table, primaryKey);
+      return NextResponse.json({ error: "ambiguous_primary_key" }, { status: 409 });
+    }
+    const canDecrypt = await canDecryptForAdmin(gate);
+    const row = adminRowFields(
+      table,
+      result[0] as Record<string, unknown>,
+      canDecrypt,
+    );
+    return NextResponse.json({ row });
   } catch (e) {
     console.error("PUT rows error:", e);
     return NextResponse.json({ error: "update_failed" }, { status: 500 });
@@ -402,18 +472,32 @@ export async function DELETE(request: NextRequest) {
 
     const valid = await getValidTables();
     if (!valid.includes(table)) return NextResponse.json({ error: "invalid_table" }, { status: 400 });
-
-    const { allColumns } = await getTableMeta(table);
-    const validNames = new Set(allColumns.map((c) => c.column_name));
-    if (!validNames.has(primaryKey)) {
-      return NextResponse.json({ error: "invalid_primary_key" }, { status: 400 });
+    if (isMutationProtectedTable(table)) {
+      return NextResponse.json(
+        { error: "table_mutations_forbidden" },
+        { status: 403 },
+      );
     }
 
-    const parsed = /^\d+$/.test(primaryValue) ? Number(primaryValue) : primaryValue;
+    const { primaryKey: realPk } = await getTableMeta(table);
+    const pkErr = assertClientPrimaryKey(primaryKey, realPk);
+    if (pkErr) return pkErr;
+
+    // Pass PK as text - Number() loses precision on large numeric ids.
     const query = `DELETE FROM "${table}" WHERE "${primaryKey}" = $1 RETURNING *`;
-    const result = await sql.query(query, [parsed]);
+    const result = await sql.query(query, [primaryValue]);
     if (result.length === 0) return NextResponse.json({ error: "not_found" }, { status: 404 });
-    return NextResponse.json({ deleted: result[0] });
+    if (result.length > 1) {
+      console.error("DELETE rows matched multiple rows for PK", table, primaryKey);
+      return NextResponse.json({ error: "ambiguous_primary_key" }, { status: 409 });
+    }
+    const canDecrypt = await canDecryptForAdmin(gate);
+    const deleted = adminRowFields(
+      table,
+      result[0] as Record<string, unknown>,
+      canDecrypt,
+    );
+    return NextResponse.json({ deleted });
   } catch (e) {
     console.error("DELETE rows error:", e);
     const msg = e instanceof Error ? e.message : String(e);

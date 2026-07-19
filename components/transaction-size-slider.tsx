@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useId, useMemo, useRef } from "react";
+import { chartControlClass } from "@/lib/chart-ui";
 import { cn } from "@/lib/utils";
 
 /** Discrete amount bands. Last step means that floor and above (no upper cap). */
@@ -105,8 +106,9 @@ export function TransactionSizeSlider({
   return (
     <div
       className={cn(
-        "group/size relative pointer-events-auto inline-flex h-[26px] items-center gap-2 rounded-lg border border-chart-border bg-chart-surface/92 px-2 shadow-[0_4px_24px_-8px_rgba(0,0,0,0.55)] backdrop-blur-md ring-1 ring-white/[0.04]",
-        active && "border-[#0BC18D]/35 ring-[#0BC18D]/10",
+        "group/size relative pointer-events-auto inline-flex h-7 items-center gap-2 px-2",
+        chartControlClass,
+        active && "border-[#0BC18D]/40 ring-[#0BC18D]/15",
         className,
       )}
     >
@@ -114,7 +116,7 @@ export function TransactionSizeSlider({
         role="tooltip"
         className={cn(
           "pointer-events-none absolute bottom-[calc(100%+8px)] left-1/2 z-50 w-max max-w-[14rem] -translate-x-1/2",
-          "rounded-md border border-chart-border bg-[#0a1210]/95 px-2 py-1.5 text-center text-[10px] leading-snug text-muted-foreground shadow-lg",
+          "rounded-md border border-chart-border bg-chart-tooltip px-2 py-1.5 text-center text-[10px] leading-snug text-muted-foreground shadow-[var(--chart-tooltip-shadow)]",
           "opacity-0 transition-opacity duration-75 group-hover/size:opacity-100",
         )}
       >
@@ -152,7 +154,7 @@ export function TransactionSizeSlider({
           aria-valuenow={minIdx}
           className={cn(
             "absolute top-1/2 z-[2] h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full",
-            "border-2 border-[#0BC18D] bg-[#0a1210] shadow-[0_0_0_3px_rgba(11,193,141,0.18)]",
+            "border-2 border-[#0BC18D] bg-background dark:bg-[#0a1210] shadow-[0_0_0_3px_rgba(11,193,141,0.18)]",
             "cursor-ew-resize transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0BC18D]/50",
           )}
           style={{ left: `${leftPct}%` }}

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
+import { requireAppAuth } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
 import { transactions, recurringPatterns, accounts } from "@/lib/db/schema";
 import { excludeCardPaymentsSql, excludeIgnoredSql, excludeRecurringCardPaymentsSql, excludeRecurringIgnoredSql, primaryCurrencyOnlySql } from "@/lib/db/excluded-transactions";
@@ -16,8 +16,9 @@ function monthKey(d: Date) {
 
 export async function GET() {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
 
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);

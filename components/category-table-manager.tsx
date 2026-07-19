@@ -21,6 +21,7 @@ import {
   SubcategoryTypeInlinePicker,
   type CategorySlicerOption,
 } from "@/components/category-slicer";
+import { cn } from "@/lib/utils";
 
 /* ════════════════════════════════ TYPES ══════════════════════════════════ */
 
@@ -356,7 +357,7 @@ function NewCategoryFlowPicker({ onSelect }: { onSelect: (ft: FlowType) => void 
 
 /* ═══════════════════════════ MAIN COMPONENT ══════════════════════════════ */
 
-export function CategoryTableManager() {
+export function CategoryTableManager({ embedded = false }: { embedded?: boolean }) {
   const [categories, setCategories] = useState<CategoryItem[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -713,8 +714,8 @@ export function CategoryTableManager() {
   }
 
   return (
-    <div className="min-h-[80vh] bg-app-canvas">
-      <div className="mx-auto max-w-4xl px-4 py-8">
+    <div className={embedded ? undefined : "min-h-[80vh] bg-app-canvas"}>
+      <div className={embedded ? undefined : "mx-auto max-w-4xl px-4 py-8"}>
         {/* Flow + expense type slicers — side by side (single row) */}
         <div className="mb-4 flex w-full min-w-0 flex-row flex-wrap items-stretch gap-3">
           <div className="w-max min-w-0 shrink-0">
@@ -750,10 +751,12 @@ export function CategoryTableManager() {
         </div>
 
         {/* Toolbar */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="mb-6 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-foreground sm:text-3xl">Category Mapping</h1>
-            <p className="mt-1 flex flex-wrap items-baseline gap-x-0 text-sm text-muted-foreground">
+            {embedded ? null : (
+              <h1 className="text-2xl font-bold text-foreground sm:text-3xl">Category Mapping</h1>
+            )}
+            <p className={cn("flex flex-wrap items-baseline gap-x-0 text-sm text-muted-foreground", embedded ? undefined : "mt-1")}>
               {metaFlowFilter === null && flowFilterId === null && !subcategoryTypeFilter ? (
                 <>
                   {totalCats} categories · {totalSubs} subcategories

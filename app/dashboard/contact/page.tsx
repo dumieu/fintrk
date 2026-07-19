@@ -1,6 +1,9 @@
-import { redirect } from "next/navigation";
+import { FeedbackForm } from "@/components/feedback-form";
 
-/** In-app Contact menu item; public form lives at `/contact`. */
 export default function DashboardContactPage() {
-  redirect("/contact");
+  return (
+    <div className="min-h-[calc(100vh-4rem)] bg-background">
+      <FeedbackForm embedded backHref="/dashboard" />
+    </div>
+  );
 }

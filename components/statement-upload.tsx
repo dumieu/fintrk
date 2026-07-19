@@ -728,7 +728,7 @@ export function StatementUpload() {
           <Upload className="w-6 h-6 text-[#0BC18D]" />
         </motion.div>
 
-        <h3 className="text-lg font-semibold text-white mb-1">
+        <h3 className="text-lg font-semibold text-foreground mb-1">
           {queue.length > 0 ? "Drop more statements" : "Drop your bank statements here"}
         </h3>
         <p className="text-sm text-muted-foreground mb-4">
@@ -777,7 +777,7 @@ export function StatementUpload() {
                     </Button>
                   )}
                   {allDone && (
-                    <Button onClick={reset} variant="ghost" size="sm" className="text-muted-foreground hover:text-white h-7 text-xs">
+                    <Button onClick={reset} variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground h-7 text-xs">
                       Clear
                     </Button>
                   )}
@@ -786,7 +786,7 @@ export function StatementUpload() {
             </div>
 
             <div className="max-h-[min(52vh,28rem)] min-h-0 overflow-y-auto overscroll-y-contain [scrollbar-gutter:stable]">
-              <div className="divide-y divide-white/10">
+              <div className="divide-y divide-border">
               {queue.map((item) => (
                 <motion.div
                   key={item.id}

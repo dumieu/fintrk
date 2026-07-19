@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
+import { requireAppAuth } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
 import { transactions, accounts } from "@/lib/db/schema";
 import {
@@ -23,8 +23,9 @@ const NO_STORE = { "Cache-Control": "no-store" } as const;
 
 export async function GET() {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
 
     /** Scope every base_amount sum to the primary currency so totals are
      *  comparable and match the currency-filtered drill-downs/tooltips. */

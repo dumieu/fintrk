@@ -793,7 +793,7 @@ export function AnalyticsDetailDialog({
         <button
           type="button"
           onClick={onClose}
-          className="absolute right-3 top-3 z-10 grid h-8 w-8 place-items-center rounded-lg border border-chart-border bg-chart-surface text-muted-foreground backdrop-blur-sm transition-colors hover:bg-chart-hover hover:text-white"
+          className="absolute right-3 top-3 z-10 grid h-8 w-8 place-items-center rounded-lg border border-chart-border bg-chart-surface text-muted-foreground backdrop-blur-sm transition-colors hover:bg-chart-hover hover:text-foreground"
           aria-label="Close details"
         >
           <X className="h-4 w-4" />

@@ -2,6 +2,7 @@ import "server-only";
 
 import Stripe from "stripe";
 
+import { FINTRK_PLAN_PRICING } from "@/lib/plan-pricing";
 import { getStripe, PRICE_LOOKUP_ANNUAL, PRICE_LOOKUP_MONTHLY } from "@/lib/stripe";
 
 export interface StripeCatalogResult {
@@ -24,8 +25,12 @@ async function ensurePrice(
     active: true,
     limit: 1,
   });
-  if (existing.data[0]) return existing.data[0];
+  const current = existing.data[0];
+  if (current && current.unit_amount === unitAmount) return current;
 
+  // Amount changed (or no price yet): create a new Price and move the
+  // lookup key onto it so checkout picks up the live amount. Existing
+  // subscribers stay on their prior Price objects.
   const price = await stripe.prices.create({
     product: productId,
     currency: "usd",
@@ -63,8 +68,22 @@ export async function ensureStripeCatalog(): Promise<StripeCatalogResult> {
     created.push(`product:${product.id}`);
   }
 
-  const monthly = await ensurePrice(stripe, productId, PRICE_LOOKUP_MONTHLY, 898, "month", created);
-  const annual = await ensurePrice(stripe, productId, PRICE_LOOKUP_ANNUAL, 8376, "year", created);
+  const monthly = await ensurePrice(
+    stripe,
+    productId,
+    PRICE_LOOKUP_MONTHLY,
+    FINTRK_PLAN_PRICING.monthlyCents,
+    "month",
+    created,
+  );
+  const annual = await ensurePrice(
+    stripe,
+    productId,
+    PRICE_LOOKUP_ANNUAL,
+    FINTRK_PLAN_PRICING.annualCents,
+    "year",
+    created,
+  );
 
   return {
     productId,

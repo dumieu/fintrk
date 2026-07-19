@@ -51,8 +51,10 @@ export async function GET(request: NextRequest) {
         FROM information_schema.table_constraints tc
         JOIN information_schema.key_column_usage kcu
           ON tc.constraint_name = kcu.constraint_name
+          AND tc.table_schema = kcu.table_schema
         JOIN information_schema.constraint_column_usage ccu
           ON tc.constraint_name = ccu.constraint_name
+          AND tc.table_schema = ccu.table_schema
         WHERE tc.table_schema = 'public'
           AND tc.constraint_type = 'FOREIGN KEY'
           AND tc.table_name IN (
@@ -77,8 +79,12 @@ export async function GET(request: NextRequest) {
       arr.push(c);
       columnsByTable.set(c.table_name, arr);
     }
-    const pkByTable = new Map<string, string>();
-    for (const pk of allPKs) pkByTable.set(pk.table_name, pk.column_name);
+    const pkByTable = new Map<string, string[]>();
+    for (const pk of allPKs) {
+      const arr = pkByTable.get(pk.table_name) ?? [];
+      arr.push(pk.column_name);
+      pkByTable.set(pk.table_name, arr);
+    }
     const fksByTable = new Map<string, typeof allFKs>();
     for (const fk of allFKs) {
       const arr = fksByTable.get(fk.table_name) ?? [];
@@ -89,27 +95,32 @@ export async function GET(request: NextRequest) {
     for (const c of allCounts) countByTable.set(c.table_name, c.row_count);
 
     const tableNames = Array.from(columnsByTable.keys()).sort();
-    const result = tableNames.map((name) => ({
-      name,
-      columns: (columnsByTable.get(name) ?? []).map((c) => ({
-        name: c.column_name,
-        type: c.data_type,
-        udtName: c.udt_name,
-        nullable: c.is_nullable === "YES",
-        default: c.column_default,
-        maxLength: c.character_maximum_length,
-        precision: c.numeric_precision,
-        scale: c.numeric_scale,
-        position: c.ordinal_position,
-      })),
-      primaryKey: pkByTable.get(name) ?? null,
-      foreignKeys: (fksByTable.get(name) ?? []).map((f) => ({
-        column: f.column_name,
-        targetTable: f.foreign_table,
-        targetColumn: f.foreign_column,
-      })),
-      rowCount: countByTable.get(name) ?? 0,
-    }));
+    const result = tableNames.map((name) => {
+      const pkCols = pkByTable.get(name) ?? [];
+      return {
+        name,
+        columns: (columnsByTable.get(name) ?? []).map((c) => ({
+          name: c.column_name,
+          type: c.data_type,
+          udtName: c.udt_name,
+          nullable: c.is_nullable === "YES",
+          default: c.column_default,
+          maxLength: c.character_maximum_length,
+          precision: c.numeric_precision,
+          scale: c.numeric_scale,
+          position: c.ordinal_position,
+        })),
+        // null when missing or composite (matches /api/rows mutation gate)
+        primaryKey: pkCols.length === 1 ? pkCols[0] : null,
+        primaryKeys: pkCols,
+        foreignKeys: (fksByTable.get(name) ?? []).map((f) => ({
+          column: f.column_name,
+          targetTable: f.foreign_table,
+          targetColumn: f.foreign_column,
+        })),
+        rowCount: countByTable.get(name) ?? 0,
+      };
+    });
 
     return NextResponse.json({ tables: result });
   } catch (e) {

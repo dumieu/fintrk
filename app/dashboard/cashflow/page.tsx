@@ -30,6 +30,8 @@ import {
 import { FINTRK_TRANSACTIONS_CHANGED } from "@/lib/notify-transactions-changed";
 import { chartOverlayPillClass } from "@/lib/chart-ui";
 import { cn } from "@/lib/utils";
+import { useAppHref } from "@/lib/app-base-path";
+import { WorkspacePanelShell } from "@/components/workspace-panels/workspace-panel-shell";
 
 interface Filters {
   dateFrom: string;
@@ -38,6 +40,7 @@ interface Filters {
 
 export default function CashflowPage() {
   const { setRibbon } = useDashboardRibbon();
+  const uploadHref = useAppHref("/upload");
   const [data, setData] = useState<CashflowSankeyData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -234,73 +237,80 @@ export default function CashflowPage() {
   }, [selectedCategory]);
 
   return (
-    <div
-      ref={sankeySelectionRef}
-      className={`flex min-h-0 flex-1 flex-col bg-app-canvas ${selectedCategory ? "overflow-y-auto" : "overflow-hidden"}`}
+    <WorkspacePanelShell
+      leftLabel="Insights"
+      rightLabel="Details"
+      bottomLabel="Notes"
+      centerMode="fill"
     >
       <div
-        ref={sankeyAreaRef}
-        className="relative flex min-h-0 w-full flex-1 items-center justify-center"
+        ref={sankeySelectionRef}
+        className={`flex min-h-0 flex-1 flex-col bg-app-canvas ${selectedCategory ? "overflow-y-auto" : "overflow-hidden"}`}
       >
-        {refreshing && (
-          <div className={cn(chartOverlayPillClass, "absolute right-3 top-3 z-20 flex items-center gap-1.5 rounded-full uppercase tracking-wider sm:right-4 sm:top-4")}>
-            <RefreshCw className="h-3 w-3 animate-spin" />
-            Updating
-          </div>
-        )}
-
-        {loading ? (
-          <div className="flex h-full min-h-[280px] flex-col items-center justify-center gap-4">
-            <div className="relative">
-              <div className="absolute inset-0 animate-pulse rounded-full bg-[#0BC18D]/20 blur-xl" />
-              <Loader2 className="relative h-10 w-10 animate-spin text-[#34E6B0]" />
-            </div>
-            <p className="text-sm text-muted-foreground">Mapping your money flow…</p>
-          </div>
-        ) : !hasData ? (
-          <div className="flex h-full min-h-[280px] flex-col items-center justify-center px-4 text-center">
-            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-[#0BC18D]/20 to-[#AD74FF]/20 ring-1 ring-chart-border">
-              <Waves className="h-8 w-8 text-[#34E6B0]" />
-            </div>
-            <p className="text-lg font-semibold text-foreground">Your cashflow story is waiting</p>
-            <p className="mt-2 max-w-md text-sm text-muted-foreground">
-              Upload a statement to see income, spending, and savings flow as a
-              living, breathing diagram.
-            </p>
-            <Link href="/dashboard/upload" className="mt-5">
-              <Button className="bg-gradient-to-r from-[#0BC18D] to-[#2CA2FF] text-white hover:opacity-90">
-                <Upload className="mr-2 h-4 w-4" />
-                Upload Statement
-              </Button>
-            </Link>
-          </div>
-        ) : (
-          <CashflowSankey
-            data={data!}
-            height={sankeyHeight}
-            selectedCategory={selectedCategory}
-            onCategorySelect={toggleSelectedCategory}
-          />
-        )}
-      </div>
-
-      {selectedCategory ? (
         <div
-          ref={categoryTableRef}
-          className="scrollbar-slim max-h-[min(45vh,480px)] shrink-0 overflow-y-auto border-t border-chart-border px-3 py-3 sm:px-4"
+          ref={sankeyAreaRef}
+          className="relative flex min-h-0 w-full flex-1 items-center justify-center"
         >
-          <CategoryTransactionsTable
-            title={`${selectedCategory.name} transactions`}
-            subtitle={`Matching the current Sankey filters and selected ${selectedCategory.level} only`}
-            rows={categoryTxns}
-            loading={categoryTxnsLoading}
-            userCategories={userCategories}
-            allLabels={distinctLabels}
-            onRowsChange={setCategoryTxns}
-            emptyMessage="No transactions found for this Sankey category."
-          />
+          {refreshing && (
+            <div className={cn(chartOverlayPillClass, "absolute right-3 top-3 z-20 flex items-center gap-1.5 rounded-full uppercase tracking-wider sm:right-4 sm:top-4")}>
+              <RefreshCw className="h-3 w-3 animate-spin" />
+              Updating
+            </div>
+          )}
+
+          {loading ? (
+            <div className="flex h-full min-h-[280px] flex-col items-center justify-center gap-4">
+              <div className="relative">
+                <div className="absolute inset-0 animate-pulse rounded-full bg-[#0BC18D]/20 blur-xl" />
+                <Loader2 className="relative h-10 w-10 animate-spin text-[#34E6B0]" />
+              </div>
+              <p className="text-sm text-muted-foreground">Mapping your money flow…</p>
+            </div>
+          ) : !hasData ? (
+            <div className="flex h-full min-h-[280px] flex-col items-center justify-center px-4 text-center">
+              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-[#0BC18D]/20 to-[#AD74FF]/20 ring-1 ring-chart-border">
+                <Waves className="h-8 w-8 text-[#34E6B0]" />
+              </div>
+              <p className="text-lg font-semibold text-foreground">Your cashflow story is waiting</p>
+              <p className="mt-2 max-w-md text-sm text-muted-foreground">
+                Upload a statement to see income, spending, and savings flow as a
+                living, breathing diagram.
+              </p>
+              <Link href={uploadHref} className="mt-5">
+                <Button className="bg-gradient-to-r from-[#0BC18D] to-[#2CA2FF] text-white hover:opacity-90">
+                  <Upload className="mr-2 h-4 w-4" />
+                  Upload Statement
+                </Button>
+              </Link>
+            </div>
+          ) : (
+            <CashflowSankey
+              data={data!}
+              height={sankeyHeight}
+              selectedCategory={selectedCategory}
+              onCategorySelect={toggleSelectedCategory}
+            />
+          )}
         </div>
-      ) : null}
-    </div>
+
+        {selectedCategory ? (
+          <div
+            ref={categoryTableRef}
+            className="scrollbar-slim max-h-[min(45vh,480px)] shrink-0 overflow-y-auto border-t border-chart-border px-3 py-3 sm:px-4"
+          >
+            <CategoryTransactionsTable
+              title={`${selectedCategory.name} transactions`}
+              subtitle={`Matching the current Sankey filters and selected ${selectedCategory.level} only`}
+              rows={categoryTxns}
+              loading={categoryTxnsLoading}
+              userCategories={userCategories}
+              allLabels={distinctLabels}
+              onRowsChange={setCategoryTxns}
+              emptyMessage="No transactions found for this Sankey category."
+            />
+          </div>
+        ) : null}
+      </div>
+    </WorkspacePanelShell>
   );
 }

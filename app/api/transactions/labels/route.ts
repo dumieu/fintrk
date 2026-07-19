@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
-import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
+import { requireAppAuth } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
 import { transactions } from "@/lib/db/schema";
 import { excludeIgnoredSql } from "@/lib/db/excluded-transactions";
@@ -13,8 +13,9 @@ const NO_STORE = { "Cache-Control": "no-store" } as const;
 /** Distinct non-empty labels for the signed-in user (for transaction label autocomplete). */
 export async function GET() {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
 
     const rows = await resilientQuery(() =>
       db

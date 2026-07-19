@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { corsHeaders, isAllowedOAuthRedirect } from "@/lib/mcp/config";
 import { registerClient } from "@/lib/mcp/tokens";
 import { logServerError } from "@/lib/safe-error";
+import { checkRateLimit, clientIpFrom, getRateLimitHeaders } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,6 +17,17 @@ export async function OPTIONS() {
  * client_id with no human in the loop.
  */
 export async function POST(req: NextRequest) {
+  const rl = checkRateLimit(`${clientIpFrom(req)}:mcp-register`, "api-mcp-register");
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "temporarily_unavailable", error_description: "Rate limit exceeded" },
+      {
+        status: 429,
+        headers: corsHeaders(getRateLimitHeaders(rl.remaining, rl.resetAt)),
+      },
+    );
+  }
+
   let body: Record<string, unknown>;
   try {
     body = (await req.json()) as Record<string, unknown>;

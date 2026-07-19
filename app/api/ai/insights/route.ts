@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
+import { requireAppAuth } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
 import { transactions, aiInsights, recurringPatterns, userCategories } from "@/lib/db/schema";
 import { excludeCardPaymentsSql, excludeIgnoredSql, excludeRecurringCardPaymentsSql, excludeRecurringIgnoredSql } from "@/lib/db/excluded-transactions";
@@ -16,8 +16,9 @@ const NO_STORE = { "Cache-Control": "no-store" } as const;
 
 export async function POST() {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
 
     const threeMonthsAgo = new Date();
     threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
@@ -30,7 +31,13 @@ export async function POST() {
           total: sql<string>`SUM(ABS(CAST(${transactions.baseAmount} AS numeric)))`,
           count: sql<number>`COUNT(*)::int`,
         }).from(transactions)
-          .leftJoin(userCategories, eq(transactions.categoryId, userCategories.id))
+          .leftJoin(
+            userCategories,
+            and(
+              eq(transactions.categoryId, userCategories.id),
+              eq(userCategories.userId, userId),
+            ),
+          )
           .where(
             and(eq(transactions.userId, userId), excludeCardPaymentsSql(), excludeIgnoredSql(), gte(transactions.postedDate, dateFrom), sql`CAST(${transactions.baseAmount} AS numeric) < 0`),
           ).groupBy(userCategories.name).orderBy(sql`SUM(ABS(CAST(${transactions.baseAmount} AS numeric))) DESC`).limit(15),

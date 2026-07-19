@@ -21,15 +21,21 @@ const FIXED_SALT = Buffer.from("fintrk-field-encrypt-v2-salt");
 
 let _cachedFieldKey: Buffer | null = null;
 
+/** Trimmed FINTRK_ENCRYPTION_KEY; rejects whitespace-only / short values. */
+function encryptionSecret(): string | null {
+  const secret = process.env.FINTRK_ENCRYPTION_KEY?.trim() || null;
+  if (!secret || secret.length < 32) return null;
+  return secret;
+}
+
 export function hasEncryptionKey(): boolean {
-  const secret = process.env.FINTRK_ENCRYPTION_KEY;
-  return Boolean(secret && secret.length >= 32);
+  return encryptionSecret() != null;
 }
 
 function getFieldKey(): Buffer {
   if (_cachedFieldKey) return _cachedFieldKey;
-  const secret = process.env.FINTRK_ENCRYPTION_KEY;
-  if (!secret || secret.length < 32) {
+  const secret = encryptionSecret();
+  if (!secret) {
     throw new Error("FINTRK_ENCRYPTION_KEY must be a string of at least 32 characters");
   }
   _cachedFieldKey = scryptSync(secret, FIXED_SALT, KEY_LENGTH);

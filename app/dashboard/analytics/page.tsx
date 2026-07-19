@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { SpendingChart } from "@/components/spending-chart";
 import { MerchantsAnalyticsList } from "@/components/merchants-analytics-list";
 import { MonthlyStackedSpend } from "@/components/monthly-stacked-spend";
 import { DiscretionaryBreakdown } from "@/components/discretionary-breakdown";
+import { InsightsCategoryBreakdown } from "@/components/insights-category-breakdown";
 import {
   BarChart3,
   Store,
@@ -23,152 +23,154 @@ import {
   chartPanelClass,
   chartTitleClass,
 } from "@/lib/chart-ui";
+import {
+  analyticsChartFiltersEqual,
+  DEFAULT_ANALYTICS_CHART_FILTERS,
+  type AnalyticsChartFilters,
+} from "@/lib/analytics/workspace-filters";
+import { FINTRK_BOTTOM_PANEL_RAIL_H_PX } from "@/lib/workspace-panels/layout";
 import { cn } from "@/lib/utils";
-
-interface AnalyticsData {
-  categoryBreakdown: { label: string; amount: number; color: string }[];
-  primaryCurrency: string;
-}
+import { useAppHref } from "@/lib/app-base-path";
+import { WorkspacePanelShell } from "@/components/workspace-panels/workspace-panel-shell";
 
 export default function AnalyticsPage() {
-  const [data, setData] = useState<AnalyticsData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const uploadHref = useAppHref("/upload");
+  const [hasData, setHasData] = useState<boolean | null>(null);
   const [merchantFilter, setMerchantFilter] = useState("");
   const [merchantDateRange, setMerchantDateRange] = useState<string | null>(null);
+  const [chartFilters, setChartFilters] = useState<AnalyticsChartFilters>(
+    DEFAULT_ANALYTICS_CHART_FILTERS,
+  );
 
-  useEffect(() => {
-    fetch("/api/analytics")
-      .then((r) => r.json())
-      .then((d) => { if (!d.error) setData(d); })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+  const onChartFiltersChange = useCallback((next: AnalyticsChartFilters) => {
+    setChartFilters((prev) => (analyticsChartFiltersEqual(prev, next) ? prev : next));
   }, []);
 
-  if (!loading && !data) {
-    return (
-      <div className="min-h-[80vh] bg-app-canvas">
-        <div className="mx-auto max-w-7xl px-4 py-8">
-          <p className={cn(chartMutedClass, "mb-8")}>Import statements to unlock spending intelligence</p>
-          <div className="flex justify-center py-20">
-            <Link href="/dashboard/upload">
-              <Button className="bg-gradient-to-r from-[#0BC18D] to-[#2CA2FF] text-white">
-                <Upload className="w-4 h-4 mr-2" /> Upload Statement
-              </Button>
-            </Link>
-          </div>
-        </div>
+  useEffect(() => {
+    fetch("/api/analytics/category-breakdown")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.error) setHasData(false);
+        else setHasData(Array.isArray(d.categoryBreakdown) && d.categoryBreakdown.length > 0);
+      })
+      .catch(() => setHasData(false));
+  }, []);
+
+  const insightsStack = (
+      <div className="flex h-full min-h-0 flex-col gap-1.5 overflow-hidden p-1.5">
+        <Card className={cn(chartPanelClass, "flex min-h-0 flex-1 flex-col gap-0 py-0")}>
+          <CardHeader className="shrink-0 gap-0 space-y-0 px-2 py-1">
+            <CardTitle className={cn(chartTitleClass, "flex items-center justify-center gap-1.5 text-center text-[12px] leading-none")}>
+              <span className={cn(chartIconBadgeClass, "h-5 w-5 rounded-md bg-gradient-to-br from-[#FF6F69]/30 to-[#5DD3F3]/20")}>
+                <PieChart className="h-3 w-3 text-[#F2C94C]" />
+              </span>
+              Discretionary vs Non-discretionary
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex min-h-0 flex-1 flex-col px-2 pb-1.5 pt-0">
+            <DiscretionaryBreakdown filters={chartFilters} />
+          </CardContent>
+        </Card>
+
+        <Card className={cn(chartPanelClass, "flex min-h-0 flex-1 flex-col gap-0 py-0")}>
+          <CardHeader className="shrink-0 gap-0 space-y-0 px-2 py-1">
+            <CardTitle className={cn(chartTitleClass, "flex items-center justify-center gap-1.5 text-center text-[12px] leading-none")}>
+              <BarChart3 className="h-3.5 w-3.5 shrink-0 text-[#ECAA0B]" />
+              Category Breakdown
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex min-h-0 flex-1 flex-col px-2 pb-1.5 pt-0">
+            <InsightsCategoryBreakdown filters={chartFilters} />
+          </CardContent>
+        </Card>
+
+        <Card className={cn(chartPanelClass, "flex min-h-0 flex-1 flex-col gap-0 py-0")}>
+          <CardHeader className="shrink-0 gap-0 space-y-0 px-2 py-1">
+            <div className="relative flex min-w-0 items-center justify-center gap-2">
+              <div className="min-w-0 text-center leading-none">
+                <CardTitle className={cn(chartTitleClass, "flex items-center justify-center gap-1.5 text-[12px] leading-none")}>
+                  <Store className="h-3.5 w-3.5 shrink-0 text-[#0BC18D]" />
+                  Merchants
+                </CardTitle>
+                {merchantDateRange ? (
+                  <p className="mt-0.5 text-[9px] font-normal leading-none text-muted-foreground">
+                    {merchantDateRange}
+                  </p>
+                ) : null}
+              </div>
+              <label className="absolute right-0 top-1/2 min-w-0 max-w-[8.5rem] -translate-y-1/2 shrink-0">
+                <Search
+                  className="pointer-events-none absolute left-1.5 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground"
+                  aria-hidden
+                />
+                <input
+                  type="search"
+                  value={merchantFilter}
+                  onChange={(e) => setMerchantFilter(e.target.value)}
+                  placeholder="Filter…"
+                  className={cn(chartInputClass, "h-6 py-0 pl-6 pr-1.5 text-[10px]")}
+                  aria-label="Filter merchants by name"
+                  autoComplete="off"
+                />
+              </label>
+            </div>
+          </CardHeader>
+          <CardContent className="flex min-h-0 flex-1 flex-col px-2 pb-1.5 pt-0">
+            <MerchantsAnalyticsList
+              filterQuery={merchantFilter}
+              onDateRangeLabel={setMerchantDateRange}
+              chartFilters={chartFilters}
+            />
+          </CardContent>
+        </Card>
       </div>
+  );
+
+  if (hasData === false) {
+    return (
+      <WorkspacePanelShell
+        leftLabel="Insights"
+        rightLabel="Details"
+        bottomLabel="Notes"
+        centerMode="fill"
+      >
+        <div className="flex h-full min-h-0 flex-col items-center justify-center bg-app-canvas px-4">
+          <p className={cn(chartMutedClass, "mb-8")}>Import statements to unlock spending intelligence</p>
+          <Link href={uploadHref}>
+            <Button className="bg-gradient-to-r from-[#0BC18D] to-[#2CA2FF] text-white">
+              <Upload className="w-4 h-4 mr-2" /> Upload Statement
+            </Button>
+          </Link>
+        </div>
+      </WorkspacePanelShell>
     );
   }
 
   return (
-    <div className="min-h-[80vh] bg-app-canvas">
-      <div className="@container/analytics mx-auto max-w-7xl px-4 py-8">
-        {data && (
-          <div className="space-y-6">
-            {/* Monthly Stacked Spend — full width hero chart */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.05 }}
-            >
-              <MonthlyStackedSpend months={72} />
-            </motion.div>
-
-            {/* Analytics grid: 1 col mobile → 2 col tablet → 3 col when container fits */}
-            <div className="grid grid-cols-1 gap-4 sm:gap-6 @[44rem]/analytics:grid-cols-2 @[60rem]/analytics:grid-cols-3">
-              {/* Discretionary breakdown */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.08 }}
-                className="flex min-w-0"
-              >
-                <Card className={cn(chartPanelClass, "flex h-[504px] w-full flex-col")}>
-                  <CardHeader className="pb-2">
-                    <CardTitle className={cn(chartTitleClass, "flex items-center gap-2")}>
-                      <span className={cn(chartIconBadgeClass, "bg-gradient-to-br from-[#FF6F69]/30 to-[#5DD3F3]/20")}>
-                        <PieChart className="h-4 w-4 text-[#F2C94C]" />
-                      </span>
-                      Discretionary vs Non-discretionary
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="flex min-h-0 flex-1 flex-col pt-0">
-                    <DiscretionaryBreakdown months={12} />
-                  </CardContent>
-                </Card>
-              </motion.div>
-
-              {/* Category Breakdown */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 }}
-                className="flex min-w-0"
-              >
-                <Card className={cn(chartPanelClass, "flex h-[504px] w-full flex-col")}>
-                  <CardHeader className="pb-2">
-                    <CardTitle className={chartTitleClass}>
-                      <BarChart3 className="w-4 h-4 inline mr-2 text-[#ECAA0B]" />
-                      Category Breakdown
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="flex min-h-0 flex-1 flex-col">
-                    <SpendingChart bars={data.categoryBreakdown} currency={data.primaryCurrency} />
-                  </CardContent>
-                </Card>
-              </motion.div>
-
-              {/* Merchants — infinite scroll, ranked by spend */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-                className="flex min-w-0"
-              >
-                <Card className={cn(chartPanelClass, "flex h-[504px] w-full flex-col")}>
-                  <CardHeader className="pb-2">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
-                      <div className="min-w-0">
-                        <CardTitle className={chartTitleClass}>
-                          <Store className="w-4 h-4 inline mr-2 text-[#0BC18D]" />
-                          Merchants
-                        </CardTitle>
-                        {merchantDateRange ? (
-                          <p className="mt-0.5 pl-6 text-[10px] font-normal text-muted-foreground">
-                            {merchantDateRange}
-                          </p>
-                        ) : null}
-                      </div>
-                      <label className="relative flex min-w-0 sm:max-w-[220px]">
-                        <Search
-                          className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
-                          aria-hidden
-                        />
-                        <input
-                          type="search"
-                          value={merchantFilter}
-                          onChange={(e) => setMerchantFilter(e.target.value)}
-                          placeholder="Filter…"
-                          className={chartInputClass}
-                          aria-label="Filter merchants by name"
-                          autoComplete="off"
-                        />
-                      </label>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="flex min-h-0 flex-1 flex-col">
-                    <MerchantsAnalyticsList
-                      filterQuery={merchantFilter}
-                      onDateRangeLabel={setMerchantDateRange}
-                    />
-                  </CardContent>
-                </Card>
-              </motion.div>
-            </div>
-          </div>
-        )}
+    <WorkspacePanelShell
+      leftLabel="Insights"
+      rightLabel="Details"
+      bottomLabel="Notes"
+      leftContent={insightsStack}
+      centerMode="fill"
+    >
+      <div
+        className="flex h-full min-h-0 flex-col overflow-hidden bg-app-canvas pt-0"
+        style={{
+          paddingLeft: "1cm",
+          paddingRight: "1cm",
+          paddingBottom: `calc(1cm + ${FINTRK_BOTTOM_PANEL_RAIL_H_PX}px)`,
+        }}
+      >
+        <motion.div
+          className="flex min-h-0 flex-1 flex-col"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05 }}
+        >
+          <MonthlyStackedSpend months={72} fill onFiltersChange={onChartFiltersChange} />
+        </motion.div>
       </div>
-    </div>
+    </WorkspacePanelShell>
   );
 }

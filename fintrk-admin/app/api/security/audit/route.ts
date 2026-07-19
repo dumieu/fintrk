@@ -2,13 +2,22 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 import { requireAdmin } from "@/lib/auth-admin";
-import { logAdminAudit } from "@/lib/admin-audit";
+import { ensureAdminAuditBuffer, logAdminAudit } from "@/lib/admin-audit";
 import { sql } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
 const postSchema = z.object({
-  action: z.string().min(1).max(128),
+  // Client-posted notes only. System mutations write their own audit rows;
+  // free-form actions would let an admin forge e.g. user_hard_delete.
+  action: z
+    .string()
+    .min(1)
+    .max(128)
+    .regex(
+      /^manual_[a-z0-9_]{1,64}$/,
+      "action must be manual_* (lowercase letters, digits, underscore)",
+    ),
   resource: z.string().min(1).max(128),
   detail: z.record(z.string(), z.unknown()).optional(),
 });
@@ -18,6 +27,8 @@ export async function GET() {
   if (!gate.ok) return NextResponse.json({ error: gate.reason }, { status: 401 });
 
   try {
+    await ensureAdminAuditBuffer();
+
     const rows = await sql`
       SELECT id, admin_identifier, action, resource, detail, created_at
       FROM admin_audit_buffer
@@ -52,17 +63,33 @@ export async function POST(request: NextRequest) {
   if (!gate.ok) return NextResponse.json({ error: gate.reason }, { status: 401 });
 
   try {
-    const parsed = postSchema.safeParse(await request.json());
+    const raw = (await request.json()) as Record<string, unknown>;
+    if (typeof raw.action === "string") {
+      raw.action = raw.action.trim().toLowerCase();
+    }
+    const parsed = postSchema.safeParse(raw);
     if (!parsed.success) {
-      return NextResponse.json({ error: "Invalid body" }, { status: 400 });
+      const issue = parsed.error.issues[0]?.message;
+      return NextResponse.json(
+        {
+          error:
+            issue && issue.startsWith("action must")
+              ? issue
+              : "Invalid body (action must be manual_*)",
+        },
+        { status: 400 },
+      );
     }
 
-    await logAdminAudit({
+    const ok = await logAdminAudit({
       adminIdentifier: gate.email || gate.userId,
       action: parsed.data.action,
       resource: parsed.data.resource,
       detail: parsed.data.detail,
     });
+    if (!ok) {
+      return NextResponse.json({ error: "Failed to persist audit event" }, { status: 500 });
+    }
 
     return NextResponse.json({ success: true });
   } catch (err) {

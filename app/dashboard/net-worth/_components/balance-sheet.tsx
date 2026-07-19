@@ -286,7 +286,7 @@ function Row({
         <button
           type="button"
           onClick={() => onRemove(idx)}
-          className="rounded-md p-1.5 text-muted-foreground/70 opacity-0 transition group-hover:opacity-100 hover:bg-white/10 hover:text-[#FF6F69]"
+          className="rounded-md p-1.5 text-muted-foreground/70 opacity-0 transition group-hover:opacity-100 hover:bg-chart-hover hover:text-[#FF6F69]"
           title="Delete"
         >
           <Trash2 className="h-3.5 w-3.5" />

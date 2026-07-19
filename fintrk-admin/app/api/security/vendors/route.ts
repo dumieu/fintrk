@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 import { requireAdmin } from "@/lib/auth-admin";
+import { logAdminAudit } from "@/lib/admin-audit";
 import { sql } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
@@ -98,6 +99,25 @@ export async function POST(request: NextRequest) {
       VALUES (${key}, ${JSON.stringify(value)}::jsonb, NOW())
       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
     `;
+
+    const audited = await logAdminAudit({
+      adminIdentifier: gate.email || gate.userId,
+      action: "vendor_checklist_update",
+      resource: "admin_settings",
+      detail: { vendorId, status, dateSigned: dateSigned ?? null },
+    });
+    if (!audited) {
+      return NextResponse.json(
+        {
+          error: "Vendor checklist updated but audit log failed to persist",
+          success: true,
+          vendorId,
+          ...value,
+          auditFailed: true,
+        },
+        { status: 500 },
+      );
+    }
 
     return NextResponse.json({ success: true, vendorId, ...value });
   } catch (err) {

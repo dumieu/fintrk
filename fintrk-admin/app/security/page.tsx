@@ -170,12 +170,19 @@ export default function SecurityPage() {
           detail: auditDetail ? { note: auditDetail } : {},
         }),
       });
-      if (!res.ok) throw new Error("fail");
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error || "fail");
+      }
       toast.success("Audit entry logged");
       setAuditDetail("");
       void loadAll();
-    } catch {
-      toast.error("Could not log audit entry");
+    } catch (err) {
+      toast.error(
+        err instanceof Error && err.message !== "fail"
+          ? err.message
+          : "Could not log audit entry",
+      );
     } finally {
       setPosting(false);
     }
@@ -270,7 +277,7 @@ export default function SecurityPage() {
               </p>
               <ul className="list-disc pl-5 space-y-1">
                 <li>Require a reason (min 10 characters); sessions expire after 12 hours</li>
-                <li>Access is audited via stdout JSON and optional admin_audit_buffer entries</li>
+                <li>Start / end is written to admin_audit_buffer (and stdout JSON); start fails closed if audit cannot persist</li>
                 <li>Use Security → Secrets to confirm FINTRK_ENCRYPTION_KEY is present</li>
               </ul>
               <p className="text-foreground">
@@ -290,7 +297,7 @@ export default function SecurityPage() {
               <Input
                 value={auditAction}
                 onChange={(e) => setAuditAction(e.target.value)}
-                placeholder="action"
+                placeholder="manual_note (manual_* only)"
               />
               <Input
                 value={auditResource}

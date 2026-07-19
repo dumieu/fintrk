@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { and, eq, inArray, sql } from "drizzle-orm";
 
-import { resilientAuth, unauthorizedResponse } from "@/lib/auth-resilient";
+import { requireAppAuth } from "@/lib/auth-resilient";
 import { db, resilientQuery } from "@/lib/db";
 import { transactionIgnores, transactions } from "@/lib/db/schema";
 import { ignoreNameKey } from "@/lib/db/excluded-transactions";
@@ -15,8 +15,9 @@ const NO_STORE = { "Cache-Control": "no-store" } as const;
 /** List all of the user's ignore rules, with how many transactions each hides. */
 export async function GET() {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
     await ensureTransactionIgnoresTable();
 
     const rules = await resilientQuery(() =>
@@ -85,8 +86,9 @@ export async function GET() {
 /** Create an ignore rule from a transaction (scope 'item' or 'name'). */
 export async function POST(request: NextRequest) {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
     await ensureTransactionIgnoresTable();
 
     const body = await request.json().catch(() => ({}));
@@ -148,8 +150,9 @@ export async function POST(request: NextRequest) {
 /** Remove ignore rule(s) by id, restoring the matching transactions everywhere. */
 export async function DELETE(request: NextRequest) {
   try {
-    const { userId } = await resilientAuth();
-    if (!userId) return unauthorizedResponse();
+    const gate = await requireAppAuth();
+    if (!gate.ok) return gate.response;
+    const { userId } = gate;
     await ensureTransactionIgnoresTable();
 
     const body = await request.json().catch(() => ({}));

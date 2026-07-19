@@ -167,7 +167,7 @@ export function PresetPicker({
                   <button
                     type="button"
                     onClick={() => setQuery("")}
-                    className="text-muted-foreground hover:text-white"
+                    className="text-muted-foreground hover:text-foreground"
                     aria-label="Clear search"
                   >
                     <X className="h-3.5 w-3.5" />
@@ -178,7 +178,7 @@ export function PresetPicker({
                 type="button"
                 onClick={onClose}
                 aria-label="Close"
-                className="rounded-md p-1 text-muted-foreground transition hover:bg-chart-hover hover:text-white"
+                className="rounded-md p-1 text-muted-foreground transition hover:bg-chart-hover hover:text-foreground"
               >
                 <X className="h-4 w-4" />
               </button>
