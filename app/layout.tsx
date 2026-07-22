@@ -73,9 +73,10 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "any" },
+      { url: "/icons/fintrk-launcher.png", type: "image/png", sizes: "192x192" },
       { url: "/favicon.png", type: "image/png", sizes: "512x512" },
-      { url: "/icons/fintrk-app-icon-512.png", type: "image/png", sizes: "512x512" },
     ],
+    shortcut: "/icons/fintrk-launcher.png",
     apple: [
       { url: "/icons/fintrk-app-icon-512.png", sizes: "512x512", type: "image/png" },
     ],

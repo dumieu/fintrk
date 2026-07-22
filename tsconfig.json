@@ -33,6 +33,7 @@
   "exclude": [
     "node_modules",
     "drizzle.config.ts",
-    "fintrk-admin"
+    "fintrk-admin",
+    "scripts"
   ]
 }
