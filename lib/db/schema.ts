@@ -747,7 +747,7 @@ export const mcpTokensTable = pgTable("mcp_tokens", {
   clientIdx: index("mcp_tokens_client_idx").on(table.clientId),
 }));
 
-// ─── Admin ops (fintrk-admin Crons / Errors / Messages / Security) ───────────
+// ─── Admin ops (xTRK Admin → FinTRK: Crons / Errors / Messages / Security) ───────────
 
 /** Cron job last success/failure (admin Crons dashboard). */
 export const cronRuns = pgTable("cron_runs", {
@@ -875,8 +875,8 @@ export const userQuickNotes = pgTable(
 );
 
 /**
- * Break-the-glass decryption sessions (fintrk-admin).
- * Columns match fintrk-admin/lib/decryption-session.ts.
+ * Break-the-glass decryption sessions (xTRK Admin → Admin → FinTRK).
+ * Columns match MktgTRK/lib/fintrk/decryption-session.ts.
  */
 export const adminDecryptionSessions = pgTable(
   "admin_decryption_sessions",

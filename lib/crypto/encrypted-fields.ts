@@ -11,7 +11,7 @@
  * `json`  = jsonb columns decrypted with `dfJson()` (ciphertext stored as a
  *           JSON string scalar).
  *
- * Keep this file in sync with the copy in `fintrk-admin/lib/crypto/`.
+ * Keep this file in sync with the copy in `MktgTRK/lib/fintrk/crypto/`.
  */
 
 export interface EncryptedTableSpec {

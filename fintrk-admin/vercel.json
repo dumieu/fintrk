@@ -1,0 +1,20 @@
+{
+  "name": "fintrk-admin-redirect",
+  "redirects": [
+    {
+      "source": "/api/(.*)",
+      "destination": "https://admin.xtrk.ai/api/admin/fintrk/$1",
+      "permanent": true
+    },
+    {
+      "source": "/",
+      "destination": "https://admin.xtrk.ai/admin/fintrk/overview",
+      "permanent": true
+    },
+    {
+      "source": "/(.*)",
+      "destination": "https://admin.xtrk.ai/admin/fintrk/$1",
+      "permanent": true
+    }
+  ]
+}

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
+import { AppsLauncher } from "@/components/apps-launcher";
 import { Button } from "@/components/ui/button";
 import {
   Upload,
@@ -96,7 +97,8 @@ export default async function Unauth1() {
               FinTRK
             </span>
           </Link>
-          <nav className="flex items-center gap-3 sm:gap-5" aria-label="Main navigation">
+          <nav className="flex items-center gap-2 sm:gap-3" aria-label="Main navigation">
+            <AppsLauncher current="fin" />
             <Link
               href={SIGN_IN_URL}
               className="text-sm text-white/65 transition-colors hover:text-white"

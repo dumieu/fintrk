@@ -8,7 +8,7 @@ const nextConfig: NextConfig = {
   devIndicators: false,
   poweredByHeader: false,
   compress: true,
-  // Pin tracing to this app so the nested fintrk-admin lockfile doesn't confuse Next.js.
+  // Pin tracing to this app (sibling fintrk-admin is a redirect stub only).
   outputFileTracingRoot: path.join(__dirname),
   // Large FinTRK JSON backups (exhaustive transaction dumps) for data import.
   experimental: {

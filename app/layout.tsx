@@ -69,6 +69,17 @@ export const metadata: Metadata = {
   alternates: {
     canonical: BASE_URL,
   },
+
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon.png", type: "image/png", sizes: "512x512" },
+      { url: "/icons/fintrk-app-icon-512.png", type: "image/png", sizes: "512x512" },
+    ],
+    apple: [
+      { url: "/icons/fintrk-app-icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+  },
 };
 
 export default function RootLayout({

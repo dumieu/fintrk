@@ -19,7 +19,7 @@ const origResolve = (Module as unknown as { _resolveFilename: (...a: unknown[]) 
 
 async function main() {
   const user = await import("../lib/crypto/encryption");
-  const admin = await import("../fintrk-admin/lib/crypto/encryption");
+  const admin = await import("../../MktgTRK/lib/fintrk/crypto/encryption");
 
   let pass = 0;
   let fail = 0;

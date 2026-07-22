@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS admin_settings (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
--- Matches fintrk-admin/lib/decryption-session.ts
+-- Matches MktgTRK/lib/fintrk/decryption-session.ts
 CREATE TABLE IF NOT EXISTS admin_decryption_sessions (
   id              SERIAL PRIMARY KEY,
   admin_email     TEXT NOT NULL,
