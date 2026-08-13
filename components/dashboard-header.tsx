@@ -13,6 +13,7 @@ import {
   TransactionsStatementsSlicer,
 } from "@/components/transactions-statements-slicer";
 import { AppsLauncher } from "@/components/apps-launcher";
+import { ConnectAiOrb } from "@/components/connect-ai-orb";
 
 /**
  * Static title for each top-level dashboard page. The header swaps its label
@@ -83,6 +84,7 @@ export function DashboardHeader({
           </div>
         ) : null}
         {sessionActive ? <SignOutControl variant="header" /> : null}
+        <ConnectAiOrb />
         <DashboardUserMenu />
         {/* Desktop scratch-pad corner sits fixed top-right — reserve its slot. */}
         <AppQuickNoteChromeSlot className="hidden md:block" />

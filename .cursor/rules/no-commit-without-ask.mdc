@@ -1,0 +1,13 @@
+---
+description: Never commit, push, or publish unless the user explicitly asks
+alwaysApply: true
+---
+
+# No commits without an explicit ask
+
+This rule is **non-negotiable**.
+
+- Never run `git commit`, `git push`, `git commit --amend`, tagging, or any deployment / publish command unless the user explicitly asked for that exact action in this conversation.
+- Do not commit or publish automatically after edits, fixes, refactors, or local deploys.
+- Code changes, tests, and local verification are fine without a commit request.
+- If it is unclear whether the user asked to commit, do **not** commit - ask first.

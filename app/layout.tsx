@@ -5,6 +5,7 @@ import { Providers } from "@/components/providers";
 import { ClerkDbUserSync } from "@/components/clerk-db-user-sync";
 import { ClerkProviderWrapper } from "@/components/clerk-theme-wrapper";
 import { SiteFooter } from "@/components/site-footer";
+import { TimeTracker } from "@/components/time-tracker";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -105,6 +106,7 @@ export default function RootLayout({
       >
         <ClerkProviderWrapper>
           <ClerkDbUserSync />
+          <TimeTracker />
           <Providers>
             <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
               {/* flex + min-h-0 so dashboard routes fill height; overflow-y-auto for long non-dashboard pages */}

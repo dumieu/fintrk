@@ -84,21 +84,23 @@ export default async function Unauth1() {
         style={{ background: "rgba(3, 10, 14, 0.74)" }}
       >
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
-          <Link href="/" className="flex items-center gap-2" aria-label="FinTRK home">
-            <span
-              className="font-aldhabi text-xl font-bold tracking-tight sm:text-2xl"
-              style={{
-                background: `linear-gradient(90deg, ${GREEN} 0%, ${BLUE} 55%, ${PURPLE} 100%)`,
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-                backgroundClip: "text",
-              }}
-            >
-              FinTRK
-            </span>
-          </Link>
-          <nav className="flex items-center gap-2 sm:gap-3" aria-label="Main navigation">
+          <div className="flex items-center gap-2 sm:gap-3">
             <AppsLauncher current="fin" />
+            <Link href="/" className="flex items-center gap-2" aria-label="FinTRK home">
+              <span
+                className="font-aldhabi text-xl font-bold tracking-tight sm:text-2xl"
+                style={{
+                  background: `linear-gradient(90deg, ${GREEN} 0%, ${BLUE} 55%, ${PURPLE} 100%)`,
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent",
+                  backgroundClip: "text",
+                }}
+              >
+                FinTRK
+              </span>
+            </Link>
+          </div>
+          <nav className="flex items-center gap-2 sm:gap-3" aria-label="Main navigation">
             <Link
               href={SIGN_IN_URL}
               className="text-sm text-white/65 transition-colors hover:text-white"

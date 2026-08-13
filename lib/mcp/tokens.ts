@@ -392,6 +392,23 @@ export async function createPat(input: {
   };
 }
 
+/**
+ * Cheap connectivity check for the in-app "Connect your AI" prompt.
+ * Connected = an active OAuth access token exists, or a PAT has actually been
+ * used by an AI client. One indexed lookup; safe to call on page load.
+ */
+export async function isMcpConnected(clerkUserId: string): Promise<boolean> {
+  await ensureMcpTables();
+  const rows = await rawSql`
+    SELECT 1 FROM mcp_tokens
+    WHERE clerk_user_id = ${clerkUserId}
+      AND revoked = false
+      AND (kind = 'access' OR (kind = 'pat' AND last_used_at IS NOT NULL))
+    LIMIT 1
+  `;
+  return rows.length > 0;
+}
+
 export async function listPats(clerkUserId: string): Promise<PatSummary[]> {
   await ensureMcpTables();
   const rows = await db

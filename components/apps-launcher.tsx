@@ -77,15 +77,34 @@ const CSS = `
 .al-tile:hover{background:rgba(128,128,128,.14);}
 .al-pop{animation:al-pop .15s cubic-bezier(.2,.9,.3,1);}
 @keyframes al-pop{from{opacity:0;transform:translateY(-6px) scale(.98);}to{opacity:1;transform:none;}}
+.al-ai{display:inline-flex!important;flex-direction:row!important;flex-wrap:nowrap!important;align-items:center!important;gap:4px;flex-shrink:0;margin-left:8px;line-height:1;vertical-align:middle;}
+.al-ai-svg{display:block;flex:0 0 auto;width:13px;height:13px;overflow:visible;filter:drop-shadow(0 0 5px rgba(167,139,250,.7));}
+.al-ai-orbit{transform-origin:12px 12px;animation:al-ai-orbit 3.2s linear infinite;}
+.al-ai-orbit-rev{transform-origin:12px 12px;animation:al-ai-orbit 4.4s linear infinite reverse;}
+.al-ai-core{transform-origin:12px 12px;animation:al-ai-pulse 1.8s ease-in-out infinite;}
+.al-ai-spark{animation:al-ai-spark 1.2s ease-in-out infinite;}
+.al-ai-glow{animation:al-ai-glow 1.8s ease-in-out infinite;}
+.al-ai-label{display:inline-block;font-size:9px;font-weight:650;letter-spacing:.045em;line-height:1;white-space:nowrap;background:linear-gradient(105deg,#c4b5fd 0%,#67e8f9 42%,#f0abfc 72%,#c4b5fd 100%);background-size:220% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent;animation:al-ai-shimmer 2.8s linear infinite;}
+@keyframes al-ai-orbit{to{transform:rotate(360deg);}}
+@keyframes al-ai-pulse{0%,100%{transform:scale(1);opacity:1;}50%{transform:scale(1.18);opacity:.85;}}
+@keyframes al-ai-spark{0%,100%{opacity:.35;transform:scale(.85);}50%{opacity:1;transform:scale(1.15);}}
+@keyframes al-ai-glow{0%,100%{opacity:.35;transform:scale(.92);}50%{opacity:.85;transform:scale(1.08);}}
+@keyframes al-ai-shimmer{0%{background-position:0% 50%;}100%{background-position:220% 50%;}}
+@media (prefers-reduced-motion:reduce){
+.al-ai-orbit,.al-ai-orbit-rev,.al-ai-core,.al-ai-spark,.al-ai-glow,.al-ai-label{animation:none;}
+.al-ai-label{background:none;-webkit-text-fill-color:rgba(196,181,253,.92);color:rgba(196,181,253,.92);}
+}
 `;
 
 function injectStyles() {
   if (typeof document === "undefined") return;
-  if (document.getElementById(STYLE_ID)) return;
-  const el = document.createElement("style");
-  el.id = STYLE_ID;
+  let el = document.getElementById(STYLE_ID) as HTMLStyleElement | null;
+  if (!el) {
+    el = document.createElement("style");
+    el.id = STYLE_ID;
+    document.head.appendChild(el);
+  }
   el.textContent = CSS;
-  document.head.appendChild(el);
 }
 
 function useIsDark() {
@@ -231,7 +250,7 @@ export function AppsLauncher({
             <div
               ref={panelRef}
               role="menu"
-              aria-label="My Personal Intelligence Apps"
+              aria-label="My Personal Intelligence Hub"
               className="al-pop"
               data-app-chrome
               onPointerDown={(e) => e.stopPropagation()}
@@ -262,7 +281,7 @@ export function AppsLauncher({
                   lineHeight: 1.35,
                 }}
               >
-                My Personal Intelligence Apps
+                My Personal Intelligence Hub
               </div>
               <div
                 style={{
@@ -348,13 +367,24 @@ export function AppsLauncher({
             >
               <div
                 style={{
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: hoveredApp.accent,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 8,
                   marginBottom: 3,
                 }}
               >
-                {hoveredApp.name}
+                <div
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: hoveredApp.accent,
+                    minWidth: 0,
+                  }}
+                >
+                  {hoveredApp.name}
+                </div>
+                <AiWovenMark />
               </div>
               <div style={{ fontSize: 12, lineHeight: 1.4, color: "rgba(255,255,255,0.82)" }}>
                 {hoveredApp.pitch}
@@ -380,6 +410,66 @@ export function AppsLauncher({
 }
 
 /* ---------------------------------- icons --------------------------------- */
+
+function AiWovenMark() {
+  return (
+    <span
+      className="al-ai"
+      aria-hidden="true"
+      style={{
+        display: "inline-flex",
+        flexDirection: "row",
+        flexWrap: "nowrap",
+        alignItems: "center",
+        gap: 4,
+        flexShrink: 0,
+        marginLeft: 8,
+        lineHeight: 1,
+      }}
+    >
+      <svg
+        className="al-ai-svg"
+        width="13"
+        height="13"
+        viewBox="0 0 24 24"
+        fill="none"
+        style={{ display: "block", flex: "0 0 auto" }}
+      >
+        <defs>
+          <linearGradient id="al-ai-grad" x1="4" y1="4" x2="20" y2="20" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stopColor="#c4b5fd" />
+            <stop offset="0.5" stopColor="#67e8f9" />
+            <stop offset="1" stopColor="#f0abfc" />
+          </linearGradient>
+          <radialGradient id="al-ai-glow" cx="0.5" cy="0.5" r="0.5">
+            <stop offset="0" stopColor="#a78bfa" stopOpacity="0.7" />
+            <stop offset="1" stopColor="#a78bfa" stopOpacity="0" />
+          </radialGradient>
+        </defs>
+        <circle className="al-ai-glow" cx="12" cy="12" r="10" fill="url(#al-ai-glow)" />
+        <g className="al-ai-orbit">
+          <circle cx="12" cy="3.2" r="1.45" fill="#67e8f9" />
+          <circle cx="20.8" cy="12" r="1.15" fill="#c4b5fd" opacity="0.9" />
+          <circle cx="12" cy="20.8" r="1.25" fill="#f0abfc" />
+        </g>
+        <g className="al-ai-orbit-rev">
+          <circle cx="5.2" cy="7.2" r="1" fill="#a5f3fc" opacity="0.85" />
+          <circle cx="18.8" cy="16.8" r="0.95" fill="#e9d5ff" opacity="0.8" />
+        </g>
+        <g className="al-ai-core">
+          <path
+            d="M12 6.4 L13.55 10.45 L17.8 12 L13.55 13.55 L12 17.6 L10.45 13.55 L6.2 12 L10.45 10.45 Z"
+            fill="url(#al-ai-grad)"
+          />
+          <circle className="al-ai-spark" cx="12" cy="12" r="1.55" fill="#ffffff" />
+        </g>
+      </svg>
+      <span className="al-ai-label" style={{ display: "inline-block", whiteSpace: "nowrap" }}>
+        AI-woven
+      </span>
+    </span>
+  );
+}
 
 function WaffleIcon() {
   const dots = [5, 12, 19];

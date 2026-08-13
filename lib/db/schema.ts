@@ -874,6 +874,22 @@ export const userQuickNotes = pgTable(
   ],
 );
 
+/** Append-only page visit durations (visibility-aware client tracker). */
+export const pageTimeTracking = pgTable(
+  "page_time_tracking",
+  {
+    id: serial("id").primaryKey(),
+    clerkUserId: varchar("clerk_user_id", { length: 255 }).notNull(),
+    pathname: varchar("pathname", { length: 512 }).notNull(),
+    durationMs: integer("duration_ms").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("page_time_tracking_user_idx").on(t.clerkUserId),
+    index("page_time_tracking_user_path_idx").on(t.clerkUserId, t.pathname),
+  ],
+);
+
 /**
  * Break-the-glass decryption sessions (xTRK Admin → Admin → FinTRK).
  * Columns match MktgTRK/lib/fintrk/decryption-session.ts.
