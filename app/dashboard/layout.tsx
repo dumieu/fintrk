@@ -4,6 +4,7 @@ import { DashboardShell } from "@/components/dashboard-shell";
 import { DashboardLayoutChrome } from "@/components/dashboard-layout-chrome";
 import { ProcessingBanner } from "@/components/processing-banner";
 import { AppQuickNote } from "@/components/quick-note/app-quick-note";
+import { FinAiChat } from "@/components/fin-ai/fin-ai-chat";
 import { UpgradeRedirectGuard } from "@/components/upgrade-redirect-guard";
 import { XrefCapture } from "@/components/xref-capture";
 import { StatementViewerHost } from "@/components/statement-viewer-host";
@@ -33,6 +34,7 @@ export default async function DashboardLayout({
       <DashboardLayoutChrome sessionActive>{children}</DashboardLayoutChrome>
       <ProcessingBanner />
       <StatementViewerHost />
+      <FinAiChat />
     </DashboardShell>
   );
 }

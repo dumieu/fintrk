@@ -16,6 +16,8 @@ import {
   pgEnum,
   unique,
   customType,
+  primaryKey,
+  smallint,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import type { UserJSON } from "@clerk/backend";
@@ -889,6 +891,46 @@ export const pageTimeTracking = pgTable(
     index("page_time_tracking_user_path_idx").on(t.clerkUserId, t.pathname),
   ],
 );
+
+// ─── Fin AI chat (in-app advisor) ────────────────────────────────────────────
+// The chat is strictly read-only over financial data. These two tables plus the
+// pre-existing `ai_costs` ledger are the ONLY things it ever writes.
+
+/** Per-user, per-UTC-day token meter backing the daily allowance. */
+export const finAiChatUsage = pgTable(
+  "fin_ai_chat_usage",
+  {
+    userId: varchar("user_id", { length: 255 }).notNull(),
+    /** UTC calendar day, "YYYY-MM-DD". */
+    day: varchar("day", { length: 10 }).notNull(),
+    inputTokens: integer("input_tokens").default(0).notNull(),
+    cachedInputTokens: integer("cached_input_tokens").default(0).notNull(),
+    outputTokens: integer("output_tokens").default(0).notNull(),
+    requestCount: integer("request_count").default(0).notNull(),
+    /** Internal accounting only; never surfaced as dollars in the UI. */
+    costMicroUsd: integer("cost_micro_usd").default(0).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.day], name: "fin_ai_chat_usage_pkey" }),
+    index("fin_ai_chat_usage_user_idx").on(t.userId),
+  ],
+);
+
+/**
+ * Rendered financial digest keyed by a fingerprint of the user's data. A hit
+ * skips the aggregation pass and, because the bytes are identical, keeps
+ * GPT-5.6 prompt caching discounting the prompt prefix.
+ */
+export const finAiDigestCache = pgTable("fin_ai_digest_cache", {
+  userId: varchar("user_id", { length: 255 }).primaryKey(),
+  fingerprint: varchar("fingerprint", { length: 32 }).notNull(),
+  windowStart: varchar("window_start", { length: 10 }).notNull(),
+  digest: text("digest").notNull(),
+  charCount: integer("char_count").default(0).notNull(),
+  compressionTier: smallint("compression_tier").default(0).notNull(),
+  builtAt: timestamp("built_at", { withTimezone: true }).defaultNow().notNull(),
+});
 
 /**
  * Break-the-glass decryption sessions (xTRK Admin → Admin → FinTRK).
