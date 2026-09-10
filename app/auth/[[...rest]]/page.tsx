@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { headers } from "next/headers";
 import { SignIn, SignUp } from "@clerk/nextjs";
 import { redirect } from "next/navigation";
 import { CardDescription, CardTitle } from "@/components/ui/card";
@@ -7,10 +6,13 @@ import { FintrkShortLogo } from "@/components/fintrk-short-logo";
 
 const CLERK_CONFIGURED = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
-export async function generateMetadata(): Promise<Metadata> {
-  const hdrs = await headers();
-  const url = hdrs.get("x-nextjs-url") ?? hdrs.get("x-url") ?? "";
-  const isSignUp = url.includes("/sign-up");
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ rest?: string[] }>;
+}): Promise<Metadata> {
+  const segments = (await params).rest ?? [];
+  const isSignUp = segments[0] === "sign-up";
   return {
     title: isSignUp ? "Sign Up" : "Sign In",
     robots: { index: false, follow: false },
@@ -63,7 +65,7 @@ export default async function AuthPage({
               routing="path"
               path="/auth/sign-up"
               signInUrl="/auth"
-              fallbackRedirectUrl="/dashboard"
+              fallbackRedirectUrl="/dashboard/upgrade"
             />
           ) : (
             <SignIn

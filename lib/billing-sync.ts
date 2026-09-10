@@ -36,7 +36,7 @@ export async function getOrCreateCustomerId(
   const stripe = getStripe();
   const customer = await stripe.customers.create({
     email: email ?? undefined,
-    metadata: { clerkUserId },
+    metadata: { clerkUserId, app: "fintrk" },
   });
 
   await client.users.updateUserMetadata(clerkUserId, {
@@ -64,7 +64,12 @@ async function claimOrRejectExistingCustomer(
       );
       return false;
     }
-    const owner = (customer as Stripe.Customer).metadata?.clerkUserId?.trim() ?? "";
+    const meta = (customer as Stripe.Customer).metadata ?? {};
+    const owner =
+      meta.clerkUserId?.trim() ||
+      // Clerk Billing leftover: older customers were tagged `user_id`.
+      meta.user_id?.trim() ||
+      "";
     if (owner && owner !== clerkUserId) {
       logServerError(
         "billing_sync_customer_owner_mismatch",
@@ -72,7 +77,7 @@ async function claimOrRejectExistingCustomer(
       );
       return false;
     }
-    if (!owner) {
+    if (meta.clerkUserId?.trim() !== clerkUserId) {
       await stripe.customers.update(customerId, {
         metadata: { clerkUserId },
       });
@@ -99,8 +104,9 @@ async function clerkUserIdForSubscription(sub: Stripe.Subscription): Promise<str
       const stripe = getStripe();
       const customer = await stripe.customers.retrieve(customerId);
       if (!customer.deleted) {
-        const raw = (customer as Stripe.Customer).metadata?.clerkUserId;
-        if (typeof raw === "string") fromCustomer = raw.trim();
+        const meta = (customer as Stripe.Customer).metadata ?? {};
+        const raw = meta.clerkUserId?.trim() || meta.user_id?.trim() || "";
+        if (raw) fromCustomer = raw;
       }
     } catch (err) {
       logServerError("billing_sync_customer_lookup", err);

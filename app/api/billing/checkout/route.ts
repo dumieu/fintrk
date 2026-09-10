@@ -10,7 +10,9 @@ import {
   TRIAL_DAYS,
 } from "@/lib/stripe";
 import { getOrCreateCustomerId } from "@/lib/billing-sync";
+import { PRO_STATUSES } from "@/lib/entitlement";
 import { logServerError } from "@/lib/safe-error";
+import { xrefCustomerMap } from "@/lib/xref";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -50,25 +52,41 @@ export async function POST(req: NextRequest) {
     }
 
     const customerId = await getOrCreateCustomerId(userId, email);
+    void xrefCustomerMap(userId, customerId);
+
+    const existing = await stripe.subscriptions.list({
+      customer: customerId,
+      status: "all",
+      limit: 20,
+    });
+    const live = existing.data.find((s) => PRO_STATUSES.has(s.status));
+    if (live) {
+      const portal = await stripe.billingPortal.sessions.create({
+        customer: customerId,
+        return_url: `${appOrigin()}/dashboard/upgrade`,
+      });
+      return NextResponse.json({ url: portal.url });
+    }
 
     // Only first-time subscribers get the free trial.
-    const hadSubscription = !!(user?.privateMetadata as Record<string, unknown> | null)?.[
-      "stripeSubscriptionId"
-    ];
+    const hadSubscription = existing.data.length > 0;
     const origin = appOrigin();
 
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       customer: customerId,
+      client_reference_id: userId,
       line_items: [{ price: price.id, quantity: 1 }],
       subscription_data: {
-        metadata: { clerkUserId: userId },
+        metadata: { clerkUserId: userId, app: "fintrk" },
         ...(hadSubscription ? {} : { trial_period_days: TRIAL_DAYS }),
       },
+      customer_update: { name: "auto", address: "auto" },
+      billing_address_collection: "auto",
       allow_promotion_codes: true,
       success_url: `${origin}/dashboard/cashflow?subscribed=1`,
       cancel_url: `${origin}/dashboard/upgrade?canceled=1`,
-      metadata: { clerkUserId: userId },
+      metadata: { clerkUserId: userId, app: "fintrk" },
     });
 
     if (!session.url) {
