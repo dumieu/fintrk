@@ -12,7 +12,6 @@ import {
 import { getOrCreateCustomerId } from "@/lib/billing-sync";
 import { PRO_STATUSES } from "@/lib/entitlement";
 import { logServerError } from "@/lib/safe-error";
-import { xrefCustomerMap } from "@/lib/xref";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -52,7 +51,6 @@ export async function POST(req: NextRequest) {
     }
 
     const customerId = await getOrCreateCustomerId(userId, email);
-    void xrefCustomerMap(userId, customerId);
 
     const existing = await stripe.subscriptions.list({
       customer: customerId,
