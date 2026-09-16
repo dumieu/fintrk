@@ -871,3 +871,242 @@ body.fintrk-bottom-panel-resizing {
   }
 }
 
+/* ── temporary phone landing (desktop nudge) ─────────────────────────────── */
+
+html[data-mobile-nudge="open"] {
+  overflow: hidden;
+}
+html[data-mobile-nudge="open"] body {
+  overflow: hidden;
+  touch-action: none;
+}
+html[data-device="desktop"] .m-nudge {
+  display: none;
+}
+
+.m-nudge {
+  --nudge-emerald: #0bc18d;
+  --nudge-cyan: #2ca2ff;
+  --nudge-violet: #ad74ff;
+  --nudge-gold: #ecaa0b;
+  --nudge-ink: #f4f7f5;
+  --nudge-muted: rgba(244, 247, 245, 0.7);
+  --nudge-bg: #02110d;
+  position: fixed;
+  inset: 0;
+  z-index: 40000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(env(safe-area-inset-top, 0px) + 1.5rem) 1.35rem
+    calc(env(safe-area-inset-bottom, 0px) + 1.5rem);
+  color: var(--nudge-ink);
+  animation: m-nudge-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+html[data-mobile-nudge="done"] .m-nudge {
+  animation: m-nudge-out 0.45s ease both;
+  pointer-events: none;
+}
+.m-nudge-veil {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(120% 70% at 50% -10%, color-mix(in srgb, var(--nudge-emerald) 26%, transparent), transparent 58%),
+    radial-gradient(90% 50% at 110% 110%, color-mix(in srgb, var(--nudge-cyan) 32%, transparent), transparent 60%),
+    radial-gradient(70% 42% at 0% 100%, color-mix(in srgb, var(--nudge-violet) 22%, transparent), transparent 55%),
+    linear-gradient(180deg, #02110d 0%, #051a18 48%, #04101f 100%);
+}
+.m-nudge-card {
+  position: relative;
+  z-index: 1;
+  width: min(22.5rem, 100%);
+  text-align: center;
+}
+.m-nudge-kicker {
+  display: inline-block;
+  font-family: "Aldhabi", ui-serif, Georgia, serif;
+  font-size: 1.7rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  margin: 0 0 1.15rem;
+  background: linear-gradient(
+    90deg,
+    var(--nudge-emerald) 0%,
+    var(--nudge-cyan) 55%,
+    var(--nudge-violet) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+.m-nudge-title {
+  margin: 0;
+  font-size: 1.12rem;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: -0.02em;
+  color: var(--nudge-ink);
+  text-wrap: balance;
+}
+.m-nudge-redirect {
+  margin: 1.15rem 0 0;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: var(--nudge-muted);
+  font-variant-numeric: tabular-nums;
+}
+.m-nudge-orbit {
+  position: relative;
+  width: 9.25rem;
+  height: 9.25rem;
+  margin: 1.85rem auto 0;
+}
+.m-nudge-orbit-glow {
+  position: absolute;
+  inset: 12%;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--nudge-emerald) 42%, transparent),
+    transparent 68%
+  );
+  filter: blur(8px);
+  animation: m-nudge-glow 3.4s ease-in-out infinite;
+}
+.m-nudge-orbit-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--nudge-emerald) 28%, transparent);
+  pointer-events: none;
+}
+.m-nudge-orbit-ring-a {
+  inset: 8%;
+  animation: m-nudge-spin 11s linear infinite;
+  border-style: dashed;
+}
+.m-nudge-orbit-ring-b {
+  inset: 18%;
+  animation: m-nudge-spin-rev 7s linear infinite;
+  border-color: color-mix(in srgb, var(--nudge-cyan) 38%, transparent);
+}
+.m-nudge-orbit-ring-c {
+  inset: 30%;
+  animation: m-nudge-spin 5.5s linear infinite;
+  border-color: color-mix(in srgb, var(--nudge-violet) 32%, transparent);
+  opacity: 0.7;
+}
+.m-nudge-bead {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0.42rem;
+  height: 0.42rem;
+  margin: -0.21rem 0 0 -0.21rem;
+  border-radius: 50%;
+  box-shadow: 0 0 10px currentColor;
+}
+.m-nudge-bead-a {
+  color: var(--nudge-emerald);
+  background: var(--nudge-emerald);
+  animation: m-nudge-bead-a 7s linear infinite;
+}
+.m-nudge-bead-b {
+  color: var(--nudge-cyan);
+  background: var(--nudge-cyan);
+  animation: m-nudge-bead-b 5.2s linear infinite;
+}
+.m-nudge-bead-c {
+  color: var(--nudge-violet);
+  background: var(--nudge-violet);
+  animation: m-nudge-bead-c 9s linear infinite;
+}
+.m-nudge-progress {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+.m-nudge-progress-track,
+.m-nudge-progress-fill {
+  fill: none;
+  stroke-width: 1.6;
+}
+.m-nudge-progress-track {
+  stroke: color-mix(in srgb, var(--nudge-emerald) 18%, transparent);
+}
+.m-nudge-progress-fill {
+  stroke: var(--nudge-emerald);
+  stroke-linecap: round;
+  stroke-dasharray: 339.3;
+  stroke-dashoffset: 339.3;
+  animation: m-nudge-progress 7s linear forwards;
+}
+.m-nudge-spark {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 2;
+  width: 3.35rem;
+  height: 1.86rem;
+  transform: translate(-50%, -46%);
+  overflow: visible;
+  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--nudge-emerald) 55%, transparent));
+  animation: m-nudge-breathe 3.4s ease-in-out infinite;
+}
+
+@keyframes m-nudge-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes m-nudge-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes m-nudge-breathe {
+  0%, 100% { opacity: 0.78; transform: translate(-50%, -46%) scale(1); }
+  50% { opacity: 1; transform: translate(-50%, -46%) scale(1.06); }
+}
+@keyframes m-nudge-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes m-nudge-spin-rev {
+  to { transform: rotate(-360deg); }
+}
+@keyframes m-nudge-bead-a {
+  from { transform: rotate(0deg) translate(3.55rem); }
+  to { transform: rotate(360deg) translate(3.55rem); }
+}
+@keyframes m-nudge-bead-b {
+  from { transform: rotate(120deg) translate(2.75rem); }
+  to { transform: rotate(480deg) translate(2.75rem); }
+}
+@keyframes m-nudge-bead-c {
+  from { transform: rotate(240deg) translate(2.05rem); }
+  to { transform: rotate(600deg) translate(2.05rem); }
+}
+@keyframes m-nudge-progress {
+  to { stroke-dashoffset: 0; }
+}
+@keyframes m-nudge-glow {
+  0%, 100% { opacity: 0.55; transform: scale(0.96); }
+  50% { opacity: 1; transform: scale(1.08); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .m-nudge,
+  html[data-mobile-nudge="done"] .m-nudge {
+    animation: none;
+  }
+  .m-nudge-orbit-glow,
+  .m-nudge-orbit-ring,
+  .m-nudge-bead,
+  .m-nudge-spark {
+    animation: none;
+  }
+  .m-nudge-progress-fill {
+    animation-duration: 7s;
+  }
+}
+

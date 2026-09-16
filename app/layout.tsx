@@ -1,11 +1,16 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
+import { headers } from "next/headers";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 import { ClerkDbUserSync } from "@/components/clerk-db-user-sync";
 import { ClerkProviderWrapper } from "@/components/clerk-theme-wrapper";
+import { DeviceProvider } from "@/components/device/device-context";
+import { MobileDesktopNudge } from "@/components/mobile/mobile-desktop-nudge";
 import { SiteFooter } from "@/components/site-footer";
 import { TimeTracker } from "@/components/time-tracker";
+import { detectPhoneFromHeaders } from "@/lib/device/detect";
+import { MOBILE_NUDGE_FAILSAFE_SCRIPT } from "@/lib/device/mobile-nudge";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -84,19 +89,33 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const initialIsPhone = detectPhoneFromHeaders(await headers());
+
   return (
-    <html lang="en" dir="ltr" suppressHydrationWarning>
+    <html
+      lang="en"
+      dir="ltr"
+      suppressHydrationWarning
+      data-device={initialIsPhone ? "phone" : "desktop"}
+      data-mobile-nudge={initialIsPhone ? "open" : undefined}
+    >
       <head>
         <script
           dangerouslySetInnerHTML={{
             __html: `(function(){try{var p=location.pathname;var t=localStorage.getItem('theme');if((p.startsWith('/dashboard')||p.startsWith('/blog'))&&t==='light'){document.documentElement.classList.remove('dark');}else{document.documentElement.classList.add('dark');}}catch(e){document.documentElement.classList.add('dark');}})();`,
           }}
         />
+        {initialIsPhone ? (
+          <script
+            id="fintrk-mobile-nudge-failsafe"
+            dangerouslySetInnerHTML={{ __html: MOBILE_NUDGE_FAILSAFE_SCRIPT }}
+          />
+        ) : null}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Aldhabi&display=swap" rel="stylesheet" />
@@ -105,17 +124,20 @@ export default function RootLayout({
         className={`${inter.className} flex h-dvh max-h-dvh min-h-0 min-w-0 flex-col overflow-hidden`}
       >
         <ClerkProviderWrapper>
-          <ClerkDbUserSync />
-          <TimeTracker />
-          <Providers>
-            <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
-              {/* flex + min-h-0 so dashboard routes fill height; overflow-y-auto for long non-dashboard pages */}
-              <div className="flex min-h-0 flex-1 flex-col overflow-x-clip overflow-y-auto">
-                {children}
-                <SiteFooter />
+          <DeviceProvider initialIsPhone={initialIsPhone}>
+            <MobileDesktopNudge />
+            <ClerkDbUserSync />
+            <TimeTracker />
+            <Providers>
+              <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+                {/* flex + min-h-0 so dashboard routes fill height; overflow-y-auto for long non-dashboard pages */}
+                <div className="flex min-h-0 flex-1 flex-col overflow-x-clip overflow-y-auto">
+                  {children}
+                  <SiteFooter />
+                </div>
               </div>
-            </div>
-          </Providers>
+            </Providers>
+          </DeviceProvider>
         </ClerkProviderWrapper>
       </body>
     </html>
