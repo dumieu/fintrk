@@ -2,6 +2,7 @@ import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse, type NextRequest } from "next/server";
 import { isBillingExemptUserId } from "@/lib/billing-exempt";
 import { hasPlanSessionClaim, isProFromSessionClaims } from "@/lib/entitlement";
+import { captureMtkRedirect } from "@/lib/xtrk-mtk";
 
 const authorizedParties =
   process.env.NODE_ENV === "development"
@@ -105,6 +106,8 @@ function redirectUnauthenticatedToLanding(req: NextRequest) {
  * so visitors never see the authenticated shell.
  */
 async function middlewareWithoutClerk(req: NextRequest) {
+  const tracked = captureMtkRedirect(req);
+  if (tracked) return tracked;
   // No Clerk: treat as unauthenticated for demo-header handling.
   const demo = await handleDemoApi(req, null);
   if (demo) return demo;
@@ -120,6 +123,8 @@ async function middlewareWithoutClerk(req: NextRequest) {
 export default CLERK_KEYS_PRESENT
   ? clerkMiddleware(
       async (auth, req) => {
+        const tracked = captureMtkRedirect(req);
+        if (tracked) return tracked;
         const { userId, sessionClaims } = await auth();
 
         const demo = await handleDemoApi(req, userId);

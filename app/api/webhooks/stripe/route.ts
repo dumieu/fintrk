@@ -4,6 +4,7 @@ import type Stripe from "stripe";
 import { getStripe, hasStripeKey } from "@/lib/stripe";
 import { syncSubscriptionToClerk } from "@/lib/billing-sync";
 import { logServerError } from "@/lib/safe-error";
+import { reportXtrkConversion } from "@/lib/xtrk-mtk";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -66,6 +67,17 @@ export async function POST(req: NextRequest) {
               : session.subscription.id;
           const sub = await stripe.subscriptions.retrieve(subId);
           await syncSubscriptionToClerk(sub);
+        }
+        const email = session.customer_details?.email || session.customer_email || "";
+        const clerkUserId = session.client_reference_id || session.metadata?.clerkUserId || "";
+        if (email) {
+          void reportXtrkConversion({
+            type: "paid",
+            appKey: "fintrk",
+            email,
+            clerkUserId,
+            meta: { source: "stripe" },
+          });
         }
         break;
       }
