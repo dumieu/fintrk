@@ -28,10 +28,8 @@ const USER_ID_TABLES = [
   "user_quick_notes",
 ] as const;
 
-const CLERK_ID_TABLES = ["mcp_tokens", "mcp_auth_codes"] as const;
-
 /** Wiped only on full account delete (Clerk webhook), not on reset-data. */
-const ACCOUNT_DELETE_CLERK_ID_TABLES = ["error_logs", "mcp_access_log"] as const;
+const ACCOUNT_DELETE_CLERK_ID_TABLES = ["error_logs"] as const;
 
 const SUBMISSION_TABLES = ["feedback_submissions", "contact_submissions"] as const;
 
@@ -122,17 +120,7 @@ function buildWipeSteps(
     });
   }
 
-  for (const table of CLERK_ID_TABLES) {
-    if (!knownTables.has(table)) continue;
-    const camel = table.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
-    steps.push({
-      label: camel,
-      query: `DELETE FROM "${table}" WHERE clerk_user_id = $1 RETURNING 1`,
-      params: [clerkUserId],
-    });
-  }
-
-  // Account deletion must clear error_logs + mcp_access_log (path/IP/UA PII).
+  // Account deletion must clear error_logs (path/IP/UA PII).
   // Reset-data keeps the account, so leave ops logs for debugging.
   if (options.deleteUserRow) {
     for (const table of ACCOUNT_DELETE_CLERK_ID_TABLES) {
@@ -186,7 +174,7 @@ function buildWipeSteps(
 /**
  * Tables cleared for data-import `replace` mode. Must match what export/import
  * rebuilds (accounts, categories, ledger, merchant rules). Intentionally omits
- * net worth, budgets, goals, quick notes, MCP tokens, recurring, AI insights.
+ * net worth, budgets, goals, quick notes, recurring, AI insights.
  * Statements are dropped because they FK accounts and are not in the export.
  * Double-charge exclusions are cleared too (not in export; stale keys would
  * suppress watchlist hits against the rebuilt ledger).
@@ -203,7 +191,7 @@ const REPLACE_LEDGER_TABLES = [
 
 /**
  * Narrow wipe for replace-import: only ledger tables the export restores.
- * Atomic via Neon HTTP transaction. Does not touch net worth / MCP / notes.
+ * Atomic via Neon HTTP transaction. Does not touch net worth or notes.
  */
 export async function wipeLedgerForReplace(clerkUserId: string): Promise<WipeCounts> {
   const counts: WipeCounts = {};
@@ -329,7 +317,7 @@ export async function wipeLedgerForReplace(clerkUserId: string): Promise<WipeCou
 }
 
 /**
- * Deletes all user-scoped financial / MCP data for a Clerk user id.
+ * Deletes all user-scoped financial data for a Clerk user id.
  * Neon HTTP `rawSql.transaction` makes deletes atomic (all-or-nothing).
  * Does not delete the `users` row unless `deleteUserRow` is true
  * (account deletion webhook).
@@ -361,7 +349,6 @@ export async function wipeUserData(
 
   const candidateTables = [
     ...USER_ID_TABLES,
-    ...CLERK_ID_TABLES,
     ...ACCOUNT_DELETE_CLERK_ID_TABLES,
     ...SUBMISSION_TABLES,
     "merchants",

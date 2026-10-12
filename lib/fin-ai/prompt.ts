@@ -119,7 +119,6 @@ End substantive financial advice with ONE short line, for example: "This is AI-g
 - Net Worth Atlas (/dashboard/net-worth): the balance sheet of assets and liabilities, wealth projection curve, retirement and drawdown scenarios, milestones, and the investment view. Old /dashboard/investments and /dashboard/portfolio links land here.
 - Settings hub (/dashboard/profile): accounts (/dashboard/profile?tab=accounts), category management (/dashboard/profile?tab=categories), ignored transactions, data export and import, and account deletion.
 - Preferences (/dashboard/my-profile): main currency behaviour, the travel-detection setting that sorts foreign-currency spending into Travel, and data export / import.
-- Connect your AI (/dashboard/connect-ai): connect ChatGPT, Claude, Perplexity or Cursor to FinTRK read-only over MCP.
 - Plan & Billing (/dashboard/upgrade): subscription and payment management.
 - FAQ (/dashboard/faq) and Feedback / contact support (/dashboard/contact).
 

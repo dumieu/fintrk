@@ -13,7 +13,6 @@ import {
   TransactionsStatementsSlicer,
 } from "@/components/transactions-statements-slicer";
 import { AppsLauncher } from "@/components/apps-launcher";
-import { ConnectAiOrb } from "@/components/connect-ai-orb";
 
 /**
  * Static title for each top-level dashboard page. The header swaps its label
@@ -32,7 +31,6 @@ const PAGE_META: Array<{ match: (p: string) => boolean; title: string }> = [
   { match: (p) => p.startsWith("/dashboard/my-profile"), title: "My Profile" },
   { match: (p) => p.startsWith("/dashboard/profile"), title: "My Profile" },
   { match: (p) => p.startsWith("/dashboard/upgrade"), title: "Plan & Billing" },
-  { match: (p) => p.startsWith("/dashboard/connect-ai"), title: "Connect your AI" },
   { match: (p) => p.startsWith("/dashboard/contact"), title: "Feedback" },
   { match: (p) => p.startsWith("/dashboard/faq"), title: "FAQ" },
 ];
@@ -84,7 +82,6 @@ export function DashboardHeader({
           </div>
         ) : null}
         {sessionActive ? <SignOutControl variant="header" /> : null}
-        <ConnectAiOrb />
         <DashboardUserMenu />
         {/* Desktop scratch-pad corner sits fixed top-right — reserve its slot. */}
         <AppQuickNoteChromeSlot className="hidden md:block" />

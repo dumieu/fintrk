@@ -2,8 +2,8 @@ import "server-only";
 import { rawSql } from "@/lib/db";
 
 /**
- * Idempotent bootstrap for the two tables the FinTRK AI chat owns. Mirrors the
- * `mcp_access_log` pattern so the feature works before a migration is applied.
+ * Idempotent bootstrap for the two tables the FinTRK AI chat owns so the
+ * feature works before a migration is applied.
  * Safe (and cheap) to call on every cold start; a module flag makes it a no-op
  * for the rest of the isolate's life.
  *

@@ -206,7 +206,7 @@ export function ignoreNameKey(
 
 /**
  * Hides user-ignored transactions from EVERY read (lists, totals, analytics,
- * charts, cashflow, MCP, exports). Matches an ignore row by either the exact
+ * charts, cashflow, exports). Matches an ignore row by either the exact
  * transaction id (scope 'item') or the normalized display name (scope 'name').
  * Add to any `.where(and(...))` over the `transactions` table.
  */

@@ -14,7 +14,6 @@ const ACCENT_HEX = "#0BC18D";
 const FEATURES = [
   "Unlimited statement uploads with AI extraction",
   "Cashflow, spend analytics & the Net Worth Atlas",
-  "Connect ChatGPT, Claude & Perplexity to your data",
   "Category mapping, recurring detection & insights",
 ];
 

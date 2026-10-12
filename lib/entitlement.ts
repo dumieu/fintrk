@@ -4,7 +4,7 @@
  *
  * Entitlement is stored on the Clerk user and read in two places:
  *   - Edge middleware: from the session token claim (fast, no network).
- *   - Node server (layout, API, MCP): from `user.publicMetadata` directly.
+ *   - Node server (layout, API): from `user.publicMetadata` directly.
  *
  * A user is "Pro" while their Stripe subscription is trialing, active, or in
  * the short past_due grace window. Canceled/unpaid/incomplete => not Pro.

@@ -6,15 +6,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 const FAQ_ENTRIES: { q: string; a: string }[] = [
   {
     q: "What is FinTRK Pro?",
-    a: "FinTRK Pro unlocks the full dashboard: statement upload, spend intelligence, cashflow, net worth, and AI assistant connections. New subscribers get a 7-day free trial, then continue at $6.98/month or $59.76/year ($4.98/month; temporarily marked down from $9.98/month or $7.98/month billed annually). Cancel anytime before the trial ends and you won't be charged.",
+    a: "FinTRK Pro unlocks the full dashboard: statement upload, spend intelligence, cashflow, and net worth. New subscribers get a 7-day free trial, then continue at $6.98/month or $59.76/year ($4.98/month; temporarily marked down from $9.98/month or $7.98/month billed annually). Cancel anytime before the trial ends and you won't be charged.",
   },
   {
     q: "How do I cancel or change my plan?",
     a: "Open Plan & Billing (Upgrade) and use Manage billing to open the Stripe customer portal. You can cancel, update payment method, or switch monthly/annual there.",
-  },
-  {
-    q: "How do I connect Claude, ChatGPT, or another AI?",
-    a: "Go to Connect your AI while on Pro. You can authorize via OAuth from your AI tool or create a personal access token. Access is read-only and can be revoked anytime.",
   },
   {
     q: "How do I reset or export my data?",
@@ -32,7 +28,7 @@ export default function FaqPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold sm:text-3xl">FAQ</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Short answers for billing, data, and AI connections. Still stuck?{" "}
+          Short answers for billing and data. Still stuck?{" "}
           <Link href="/dashboard/contact" className="text-[#0BC18D] underline-offset-2 hover:underline">
             Send feedback
           </Link>

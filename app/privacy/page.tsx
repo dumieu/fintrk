@@ -19,7 +19,7 @@ export default function PrivacyPage() {
         </p>
         <p>
           Statement files and derived transaction data are processed to provide the product
-          (categorization, analytics, net worth tools, and optional AI connections you enable).
+          (categorization, analytics, and net worth tools).
           Data is encrypted in transit (TLS) and at rest. Your original statement files are
           retained so you can re-open and download them at any time; each file is compressed and
           encrypted with AES-256-GCM before it is written to the database, and sensitive fields

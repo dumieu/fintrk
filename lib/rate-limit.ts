@@ -37,10 +37,6 @@ interface RateLimitConfig {
 }
 
 const RATE_LIMITS: Record<string, RateLimitConfig> = {
-  "api-mcp-register": { windowMs: 300_000, maxRequests: 10 },
-  "api-mcp-token": { windowMs: 60_000, maxRequests: 30 },
-  /** Authorize triggers CIMD outbound fetches; keep per-IP budget tight. */
-  "api-mcp-authorize": { windowMs: 60_000, maxRequests: 30 },
   "api-contact": { windowMs: 300_000, maxRequests: 5 },
   "api-feedback": { windowMs: 300_000, maxRequests: 5 },
 };

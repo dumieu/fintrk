@@ -7,7 +7,7 @@ import { excludeCardPaymentsSql, excludeIgnoredSql } from "@/lib/db/excluded-tra
 import { ai, GEMINI_MODEL } from "@/lib/gemini";
 import { logAiCost } from "@/lib/ai-cost";
 import { logServerError } from "@/lib/safe-error";
-import { aiResponseSchema } from "@/lib/validations/ingest";
+import { interpretAiStatement } from "@/lib/ai-statement-parse";
 import { ef, df } from "@/lib/crypto/encryption";
 import { eq, and, asc, desc, sql, inArray, isNull } from "drizzle-orm";
 import { assignOccurrenceIndices, buildDedupeSignature, isStrongReferenceId, normalizeBaseAmount } from "@/lib/txn-dedupe";
@@ -158,6 +158,7 @@ For EACH transaction, you MUST:
    - You MUST emit EXACTLY ONE transaction object per statement line. NEVER output two transactions because a line shows two (or more) dates, wraps across multiple visual lines, or repeats a reference number.
    - Set posted_date (YYYY-MM-DD) to the TRANSACTION date (concept (a) above) whenever any transaction/purchase/value date is present. ONLY when no transaction date exists at all should you fall back to the posting/booking/settlement date. If exactly one date is present, use it. Be consistent: apply the same choice to every row of the statement.
    - Always normalize to YYYY-MM-DD regardless of the source format (e.g. DD/MM/YYYY, MM/DD/YYYY, DD-MMM-YY, YYYY年MM月DD日). Infer day/month order from the statement's country, currency, and surrounding dates; never swap day and month.
+   - Omit lines that are not money movements: column headers, previous balance, statement totals, minimum payment, credit limit, rewards summaries, and any row with no date or no amount. Never emit null for posted_date or base_amount.
 
 2. DESCRIPTIONS:
    - raw_description: exact text from the statement, unmodified
@@ -628,35 +629,20 @@ async function markUploadLogFailed(userId: string, fileName: string, fileSize: n
     .catch(() => {});
 }
 
-/** Normalize empty strings so Zod `.length(3)` fields don't fail on `""` (treated as present, not null). */
-function sanitizeAiJsonForValidation(input: unknown): unknown {
-  if (input === null || typeof input !== "object") return input;
-  if (Array.isArray(input)) return input.map(sanitizeAiJsonForValidation);
+/**
+ * Thinking tokens count against Gemini's output cap. Statement extraction is
+ * transcription, so thinking is off and the cap is the model maximum. A short
+ * cap truncates the JSON mid-statement.
+ */
+const STATEMENT_AI_CONFIG = {
+  responseMimeType: "application/json" as const,
+  temperature: 0.1,
+  maxOutputTokens: 65536,
+  thinkingConfig: { thinkingBudget: 0 },
+};
 
-  const o = input as Record<string, unknown>;
-  const out: Record<string, unknown> = { ...o };
-
-  const blankToNull = (v: unknown) => (v === "" ? null : v);
-
-  if (out.transactions && Array.isArray(out.transactions)) {
-    out.transactions = out.transactions.map((txn) => {
-      if (txn === null || typeof txn !== "object") return txn;
-      const t = { ...(txn as Record<string, unknown>) };
-      t.foreign_currency = blankToNull(t.foreign_currency);
-      t.country_iso = blankToNull(t.country_iso);
-      t.reference_id = t.reference_id === "" ? null : t.reference_id;
-      return t;
-    });
-  }
-
-  if (out.account_metadata && typeof out.account_metadata === "object" && out.account_metadata !== null) {
-    const m = { ...(out.account_metadata as Record<string, unknown>) };
-    m.country_iso = blankToNull(m.country_iso);
-    out.account_metadata = m;
-  }
-
-  return out;
-}
+const STATEMENT_RETRY_NUDGE =
+  "\n\nYour previous output could not be imported. Return ONE JSON object only. Every transaction needs posted_date as YYYY-MM-DD and base_amount as a number. Omit headers, totals, and any row missing either field.";
 
 async function updateUserMainCurrency(userId: string) {
   const [topCurrencies, totals] = await Promise.all([
@@ -737,11 +723,11 @@ export async function processStatement(statementId: number) {
     return;
   }
 
-  let aiText: string;
   let inputTokens = 0;
   let outputTokens = 0;
   let userMainCurrency: string | null = null;
   let detectTravel: "Yes" | "No" = "Yes";
+  let interpreted: ReturnType<typeof interpretAiStatement> | null = null;
 
   try {
     const parsed = JSON.parse(payload);
@@ -768,44 +754,44 @@ export async function processStatement(statementId: number) {
       detectTravel,
     );
 
-    if (parsed.type === "binary") {
-      const result = await ai.models.generateContent({
-        model: GEMINI_MODEL,
-        contents: [{
-          role: "user",
-          parts: [
-            { inlineData: { mimeType: parsed.mimeType, data: parsed.base64 } },
-            { text: `${historyBlock}${compactCurrencyHint}${fileHint}Extract all transactions from this bank statement.` },
-          ],
-        }],
-        config: {
-          systemInstruction,
-          responseMimeType: "application/json",
-          temperature: 0.1,
-          thinkingConfig: { thinkingBudget: 1024 },
-        },
-      });
-      aiText = result.text ?? "";
-      inputTokens = result.usageMetadata?.promptTokenCount ?? 0;
-      outputTokens = result.usageMetadata?.candidatesTokenCount ?? 0;
-    } else {
+    const askModel = async (nudge: string) => {
+      if (parsed.type === "binary") {
+        return ai.models.generateContent({
+          model: GEMINI_MODEL,
+          contents: [{
+            role: "user",
+            parts: [
+              { inlineData: { mimeType: parsed.mimeType, data: parsed.base64 } },
+              { text: `${historyBlock}${compactCurrencyHint}${fileHint}Extract all transactions from this bank statement.${nudge}` },
+            ],
+          }],
+          config: { ...STATEMENT_AI_CONFIG, systemInstruction },
+        });
+      }
       const markdown = dataToMarkdownTable(parsed.headers, parsed.data);
-      const result = await ai.models.generateContent({
+      return ai.models.generateContent({
         model: GEMINI_MODEL,
         contents: [{
           role: "user",
-          parts: [{ text: `${historyBlock}${compactCurrencyHint}${fileHint}Extract all transactions from this bank statement data:\n\n${markdown}` }],
+          parts: [{ text: `${historyBlock}${compactCurrencyHint}${fileHint}Extract all transactions from this bank statement data:\n\n${markdown}${nudge}` }],
         }],
-        config: {
-          systemInstruction,
-          responseMimeType: "application/json",
-          temperature: 0.1,
-          thinkingConfig: { thinkingBudget: 0 },
-        },
+        config: { ...STATEMENT_AI_CONFIG, systemInstruction },
       });
-      aiText = result.text ?? "";
-      inputTokens = result.usageMetadata?.promptTokenCount ?? 0;
-      outputTokens = result.usageMetadata?.candidatesTokenCount ?? 0;
+    };
+
+    for (let attempt = 0; attempt < 2 && !interpreted?.ok; attempt++) {
+      const result = await askModel(attempt === 0 ? "" : STATEMENT_RETRY_NUDGE);
+      const aiText = result.text ?? "";
+      inputTokens += result.usageMetadata?.promptTokenCount ?? 0;
+      outputTokens += result.usageMetadata?.candidatesTokenCount ?? 0;
+      interpreted = interpretAiStatement(aiText);
+      if (!interpreted.ok && attempt === 1) {
+        const finish = result.candidates?.[0]?.finishReason;
+        logServerError(
+          `process-statement/${statementId}/ai-json`,
+          new Error(`${interpreted.error} finish=${finish ?? "unknown"} chars=${aiText.length}`),
+        );
+      }
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : "AI call failed";
@@ -817,32 +803,15 @@ export async function processStatement(statementId: number) {
 
   logAiCost({ userId, model: GEMINI_MODEL, query: "ingest", inputTokens, outputTokens }).catch(() => {});
 
-  let aiParsed: unknown;
-  try {
-    aiParsed = JSON.parse(aiText);
-  } catch {
-    await db.update(statements).set({ status: "failed", aiError: ef("AI returned invalid JSON"), aiProcessedAt: new Date() }).where(eq(statements.id, statementId));
-    await markUploadLogFailed(userId, stmt.fileName, stmt.fileSize, stmt.fileHash);
-    return;
-  }
-
-  const validation = aiResponseSchema.safeParse(sanitizeAiJsonForValidation(aiParsed));
-  if (!validation.success) {
-    const brief =
-      validation.error.issues
-        .slice(0, 3)
-        .map((i) => `${i.path.join(".")}: ${i.message}`)
-        .join("; ") || "Schema validation failed";
-    await db
-      .update(statements)
-      .set({ status: "failed", aiError: ef(`Schema validation failed (${brief})`), aiProcessedAt: new Date() })
-      .where(eq(statements.id, statementId));
+  if (!interpreted?.ok) {
+    const message = interpreted?.error ?? "AI returned invalid JSON";
+    await db.update(statements).set({ status: "failed", aiError: ef(message), aiProcessedAt: new Date() }).where(eq(statements.id, statementId));
     await markUploadLogFailed(userId, stmt.fileName, stmt.fileSize, stmt.fileHash);
     return;
   }
 
   try {
-  const aiResult = validation.data;
+  const aiResult = interpreted.data;
   let meta = { ...aiResult.account_metadata };
 
   const fnUpper = stmt.fileName.toUpperCase();

@@ -25,11 +25,9 @@ import {
   Landmark,
   ChevronRight,
   Gauge,
-  Bot,
   Coins,
 } from "lucide-react";
 
-import { AiConnectBand } from "@/components/ai-connect-band";
 import { AdvantageValueLine } from "@/components/advantage-value-line";
 import { AnimatedDemoButton } from "@/components/animated-demo-button";
 import { UnauthScrollCue, UnauthSnapScrollInit } from "@/components/unauth-snap-scroll";
@@ -112,7 +110,7 @@ export default async function Unauth1() {
       </header>
 
       <main>
-        {/* Hero — full viewport splash; one scroll lands on AI connect band */}
+        {/* Hero — full viewport splash; one scroll lands on the product pillars */}
         <section
           data-unauth-snap="hero"
           className="relative flex min-h-svh flex-col overflow-x-clip"
@@ -205,7 +203,7 @@ export default async function Unauth1() {
             </div>
           </div>
 
-          <UnauthScrollCue targetId="ai-connect" />
+          <UnauthScrollCue targetId="pillars" />
 
           <div
             className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-32"
@@ -214,32 +212,10 @@ export default async function Unauth1() {
           />
         </section>
 
-        {/* ── AI Connect ── */}
-        <section
-          id="ai-connect"
-          data-unauth-snap="landing"
-          className="relative border-t border-white/[0.06] px-4 py-10 sm:px-6 sm:py-14"
-          style={{
-            background:
-              "linear-gradient(180deg, #050a12 0%, #04161a 42%, #05101c 58%, #050a12 100%)",
-          }}
-          aria-label="Connect FinTRK to ChatGPT, Claude, and Perplexity"
-        >
-          <div
-            className="pointer-events-none absolute inset-0"
-            style={{
-              background:
-                "radial-gradient(ellipse 70% 55% at 50% 40%, rgba(11,193,141,.08), transparent 65%), radial-gradient(ellipse 50% 40% at 50% 100%, rgba(44,162,255,.05), transparent)",
-            }}
-            aria-hidden="true"
-          />
-          <div className="relative z-10 mx-auto max-w-5xl">
-            <AiConnectBand />
-          </div>
-        </section>
-
         {/* ────────────────── Three Pillars ────────────────── */}
         <section
+          id="pillars"
+          data-unauth-snap="landing"
           className="relative overflow-hidden px-4 py-16 sm:px-6 sm:py-24"
           style={{ background: "#050a12" }}
           aria-labelledby="pillars-heading"
@@ -602,12 +578,6 @@ export default async function Unauth1() {
                   color: GOLD,
                   title: "Retirement & FI planning",
                   text: "Model pensions, Social Security, drawdown, and inflation. Find your financial-independence age and see how each lever moves it, in real time.",
-                },
-                {
-                  icon: Bot,
-                  color: GREEN,
-                  title: "Ask your money anything",
-                  text: "Connect ChatGPT, Claude, or any MCP-compatible AI to your private data and ask real questions about your cashflow, spending, and net worth in plain language.",
                 },
               ].map((item) => (
                 <article

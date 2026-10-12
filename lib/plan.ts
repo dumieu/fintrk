@@ -1,6 +1,6 @@
 import "server-only";
 
-import { auth, clerkClient, currentUser } from "@clerk/nextjs/server";
+import { auth, currentUser } from "@clerk/nextjs/server";
 import { headers } from "next/headers";
 
 import { isBillingExemptAccount, isBillingExemptUserId } from "@/lib/billing-exempt";
@@ -67,32 +67,6 @@ export async function hasProAccess(): Promise<boolean> {
   try {
     const user = await currentUser();
     return isProMetadata(user?.publicMetadata);
-  } catch {
-    return false;
-  }
-}
-
-/** Pro check for a Clerk user id (MCP bearer / PAT use; no request session). */
-export async function hasProAccessForClerkUserId(clerkUserId: string): Promise<boolean> {
-  if (!billingEnforced()) return true;
-
-  if (isBillingExemptUserId(clerkUserId)) {
-    try {
-      const client = await clerkClient();
-      const user = await client.users.getUser(clerkUserId);
-      return isBillingExemptAccount(
-        user.id,
-        user.primaryEmailAddress?.emailAddress ?? null,
-      );
-    } catch {
-      return false;
-    }
-  }
-
-  try {
-    const client = await clerkClient();
-    const user = await client.users.getUser(clerkUserId);
-    return isProMetadata(user.publicMetadata);
   } catch {
     return false;
   }

@@ -31,7 +31,7 @@ function DemoUpgradeContent() {
       </h1>
       <p className="mt-3 max-w-lg text-sm text-muted-foreground sm:text-base">
         Billing is not available inside the shared demo. Start a 7-day free trial on
-        your account to upload statements, connect AI, and keep your data private.
+        your account to upload statements and keep your data private.
       </p>
 
       <div className="mt-8 w-full rounded-2xl border border-border bg-card p-6 text-left shadow-sm">
@@ -48,7 +48,7 @@ function DemoUpgradeContent() {
           {[
             "Unlimited statement uploads with AI extraction",
             "Cashflow, spend analytics & the Net Worth Atlas",
-            "Connect ChatGPT, Claude & Perplexity to your data",
+            "Category mapping, recurring detection & insights",
             "7-day free trial · cancel anytime",
           ].map((f) => (
             <li key={f} className="flex items-start gap-2.5">

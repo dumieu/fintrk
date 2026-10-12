@@ -46,8 +46,8 @@ const isPublicRoute = createRouteMatcher([
   /** Optional auth; used by landing / in-app forms. */
   "/api/feedback",
   "/api/contact",
-  /** MCP server + OAuth: external GenAI clients authenticate via Bearer tokens. */
-  "/api/mcp(.*)",
+  /** No routes live here. Public so a missing discovery URL 404s instead of crashing Clerk. */
+  "/.well-known(.*)",
 ]);
 
 /**
@@ -175,7 +175,7 @@ export default CLERK_KEYS_PRESENT
 
 export const config = {
   matcher: [
-    "/((?!_next|\\.well-known|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
+    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
     "/(api|trpc)(.*)",
   ],
 };

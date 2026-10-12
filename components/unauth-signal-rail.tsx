@@ -9,7 +9,6 @@ import {
   Sparkles,
   Lock,
   ShieldCheck,
-  Bot,
 } from "lucide-react";
 
 const GREEN = "#0BC18D";
@@ -55,7 +54,6 @@ const STAGES = [
 const DEEPER = [
   { label: "No bank logins", icon: ShieldCheck },
   { label: "Encrypted at rest", icon: Lock },
-  { label: "Connect your AI", icon: Bot },
 ] as const;
 
 const HOLD_MS = 2600;

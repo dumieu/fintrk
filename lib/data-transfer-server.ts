@@ -264,7 +264,7 @@ export async function importUserDataExport(
 
   if (mode === "replace") {
     // Only clear tables the export rebuilds. Full wipeUserData would destroy
-    // net worth, budgets, goals, quick notes, and MCP tokens that are not exported.
+    // net worth, budgets, goals, and quick notes that are not exported.
     await wipeLedgerForReplace(userId);
   }
 

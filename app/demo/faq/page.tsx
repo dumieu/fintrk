@@ -11,11 +11,7 @@ const FAQ_ENTRIES: { q: string; a: string }[] = [
   },
   {
     q: "What is FinTRK Pro?",
-    a: "FinTRK Pro unlocks the full dashboard: statement upload, spend intelligence, cashflow, net worth, and AI assistant connections. New subscribers get a 7-day free trial, then continue at $6.98/month or $59.76/year ($4.98/month).",
-  },
-  {
-    q: "Can I connect ChatGPT or Claude in the demo?",
-    a: "You can browse Connect your AI and see how it works. Creating live OAuth or personal tokens needs your own FinTRK account - start a free trial to wire your assistants.",
+    a: "FinTRK Pro unlocks the full dashboard: statement upload, spend intelligence, cashflow, and net worth. New subscribers get a 7-day free trial, then continue at $6.98/month or $59.76/year ($4.98/month).",
   },
   {
     q: "How do I get my own account?",

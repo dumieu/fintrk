@@ -99,11 +99,6 @@ const SECONDARY_NAV: NavItem[] = [
     icon: Upload,
   },
   {
-    label: "Connect your AI",
-    href: "/demo/connect-ai",
-    icon: Sparkles,
-  },
-  {
     label: "Profile & settings",
     href: "/demo/profile",
     icon: UserRound,
@@ -139,7 +134,6 @@ const PAGE_META: Array<{ match: (p: string) => boolean; title: string }> = [
   { match: (p) => p.startsWith("/demo/net-worth"), title: "Net Worth Atlas" },
   { match: (p) => p.startsWith("/demo/accounts"), title: "Accounts" },
   { match: (p) => p.startsWith("/demo/categories"), title: "Categories" },
-  { match: (p) => p.startsWith("/demo/connect-ai"), title: "Connect your AI" },
   { match: (p) => p.startsWith("/demo/profile"), title: "Profile" },
   { match: (p) => p.startsWith("/demo/upgrade"), title: "Plan & Billing" },
   { match: (p) => p.startsWith("/demo/contact"), title: "Feedback" },
@@ -175,7 +169,7 @@ function NavLink({
             <Icon
               className="h-5 w-5 shrink-0"
               style={
-                item.href === "/demo/upgrade" || item.href === "/demo/connect-ai"
+                item.href === "/demo/upgrade"
                   ? { color: ACCENT }
                   : undefined
               }
