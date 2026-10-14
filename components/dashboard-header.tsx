@@ -54,8 +54,10 @@ export function DashboardHeader({
   return (
     <header className="sticky top-0 z-40 shrink-0 border-b border-border/40 bg-background/80 backdrop-blur-md">
       <div className="relative flex w-full flex-wrap items-center gap-x-2 gap-y-2 py-2 pl-1 pr-2 sm:min-h-14 sm:flex-nowrap sm:gap-x-3 sm:py-2 sm:pl-1.5 sm:pr-3">
-        <AppsLauncher current="fin" />
-        <HamburgerMenu sessionActive={sessionActive} />
+        <div className="flex shrink-0 items-center gap-2">
+          <AppsLauncher current="fin" size={44} />
+          <HamburgerMenu sessionActive={sessionActive} />
+        </div>
         <div className="flex min-w-0 flex-1 flex-col justify-center leading-tight">
           {showTxStatementsSlicer ? (
             <span className="sr-only">{meta.title}</span>

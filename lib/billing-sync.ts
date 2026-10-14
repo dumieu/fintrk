@@ -36,7 +36,7 @@ export async function getOrCreateCustomerId(
   const stripe = getStripe();
   const customer = await stripe.customers.create({
     email: email ?? undefined,
-    metadata: { clerkUserId, app: "fintrk" },
+    metadata: { clerkUserId, app: "fintrk", plan: "pro" },
   });
 
   await client.users.updateUserMetadata(clerkUserId, {
@@ -79,7 +79,7 @@ async function claimOrRejectExistingCustomer(
     }
     if (meta.clerkUserId?.trim() !== clerkUserId) {
       await stripe.customers.update(customerId, {
-        metadata: { clerkUserId },
+        metadata: { clerkUserId, app: "fintrk" },
       });
     }
     return true;

@@ -1,5 +1,6 @@
 import { Sparkles } from "lucide-react";
 
+import { CheckoutReturn } from "@/components/checkout-return";
 import { ManageBillingButton } from "@/components/manage-billing-button";
 import { UpgradeAccountActions } from "@/components/upgrade-account-actions";
 import { UpgradePricing } from "@/components/upgrade-pricing";
@@ -19,7 +20,13 @@ function statusLabel(status: string | null, renewsAt: number | null): string | n
   return status;
 }
 
-export default async function UpgradePage() {
+export default async function UpgradePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ session_id?: string }>;
+}) {
+  const params = await searchParams;
+  const sessionId = typeof params.session_id === "string" ? params.session_id.trim() : "";
   const { isPro, status, renewsAt, manageable } = await getPlanState();
   const label = statusLabel(status, renewsAt);
 
@@ -54,12 +61,14 @@ export default async function UpgradePage() {
               </h1>
               <p className="mx-auto mt-2 max-w-xl text-sm text-muted-foreground sm:text-base">
                 Start your <span style={{ color: ACCENT_HEX }}>7-day free trial</span> to use
-                uploads, cashflow, spend analytics, the Net Worth Atlas, and Connect-your-AI. No
-                charge until your trial ends, and you can cancel anytime.
+                uploads, cashflow, spend analytics, and the Net Worth Atlas. No charge until your
+                trial ends, and you can cancel anytime.
               </p>
             </>
           )}
         </div>
+
+        {sessionId ? <CheckoutReturn sessionId={sessionId} /> : null}
 
         {isPro && manageable ? <ManageBillingButton /> : <UpgradePricing canTrial={!manageable} />}
 

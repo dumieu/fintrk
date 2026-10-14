@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import type Stripe from "stripe";
 
-import { appOrigin, getStripe, hasStripeKey } from "@/lib/stripe";
+import { appOrigin, getStripe, hasStripeKey, resolvePortalConfigurationId } from "@/lib/stripe";
 import { logServerError } from "@/lib/safe-error";
 
 export const runtime = "nodejs";
@@ -46,9 +46,11 @@ export async function POST() {
       return NextResponse.json({ error: "No subscription found." }, { status: 404 });
     }
 
+    const configuration = await resolvePortalConfigurationId();
     const session = await stripe.billingPortal.sessions.create({
       customer: customerId,
       return_url: `${appOrigin()}/dashboard/upgrade`,
+      ...(configuration ? { configuration } : {}),
     });
     return NextResponse.json({ url: session.url });
   } catch (err) {

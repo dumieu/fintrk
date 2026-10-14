@@ -1,3 +1,5 @@
+import { chmodSync, writeFileSync } from "fs";
+
 import { config } from "dotenv";
 import { Module } from "module";
 
@@ -20,8 +22,15 @@ async function main() {
   }
   const { ensureStripeCatalog } = await import("../lib/setup-stripe-catalog");
   const result = await ensureStripeCatalog();
+  const { webhookSigningSecret, ...safe } = result;
   console.log("Stripe catalog ready");
-  console.log(JSON.stringify(result, null, 2));
+  console.log(JSON.stringify(safe, null, 2));
+  if (webhookSigningSecret) {
+    const secretFile = "/tmp/fintrk-stripe-whsec.txt";
+    writeFileSync(secretFile, webhookSigningSecret, { mode: 0o600 });
+    chmodSync(secretFile, 0o600);
+    console.log(`New webhook signing secret written to ${secretFile}. Add it to STRIPE_WEBHOOK_SECRET. Not printed here.`);
+  }
 }
 
 main().catch((e) => {

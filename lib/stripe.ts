@@ -24,6 +24,11 @@ export const PRO_PLAN = "pro";
 export const PRICE_LOOKUP_MONTHLY = "fintrk_pro_monthly";
 export const PRICE_LOOKUP_ANNUAL = "fintrk_pro_annual";
 
+/** Optional pinned Price ids. Lookup keys are the fallback. */
+export const PRICE_ENV_MONTHLY = "STRIPE_PRICE_PRO_MONTHLY";
+export const PRICE_ENV_ANNUAL = "STRIPE_PRICE_PRO_ANNUAL";
+export const PORTAL_CONFIGURATION_ENV = "STRIPE_PORTAL_CONFIGURATION_ID";
+
 export const TRIAL_DAYS = 7;
 
 let cached: Stripe | null = null;
@@ -51,4 +56,39 @@ export function appOrigin(): string {
   return process.env.NODE_ENV === "development"
     ? "http://localhost:3000"
     : "https://fintrk.io";
+}
+
+/**
+ * The FinTRK Stripe account is incorporated in Singapore, so its default
+ * currency is SGD. Checkout must use the USD Price we created. An env pin
+ * wins; otherwise the lookup key on the live key's mode.
+ */
+export async function resolveProPriceId(
+  interval: "month" | "year",
+): Promise<string | null> {
+  const envName = interval === "year" ? PRICE_ENV_ANNUAL : PRICE_ENV_MONTHLY;
+  const fromEnv = process.env[envName]?.trim();
+  if (fromEnv) return fromEnv;
+
+  const lookupKey = interval === "year" ? PRICE_LOOKUP_ANNUAL : PRICE_LOOKUP_MONTHLY;
+  const prices = await getStripe().prices.list({
+    lookup_keys: [lookupKey],
+    active: true,
+    limit: 1,
+  });
+  return prices.data[0]?.id ?? null;
+}
+
+/**
+ * FinTRK-only Customer Portal configuration. Passing this on every portal
+ * session keeps a later default configuration from opening the wrong portal.
+ */
+export async function resolvePortalConfigurationId(): Promise<string | undefined> {
+  const fromEnv = process.env[PORTAL_CONFIGURATION_ENV]?.trim();
+  if (fromEnv) return fromEnv;
+  const listed = await getStripe().billingPortal.configurations.list({
+    active: true,
+    limit: 100,
+  });
+  return listed.data.find((c) => c.metadata?.fintrk === "portal")?.id;
 }

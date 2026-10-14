@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
 
 import { getStripe, hasStripeKey } from "@/lib/stripe";
+import { subscriptionIdFromInvoice } from "@/lib/stripe-invoice";
 import { syncSubscriptionToClerk } from "@/lib/billing-sync";
 import { logServerError } from "@/lib/safe-error";
 import { reportXtrkConversion } from "@/lib/xtrk-mtk";
@@ -78,6 +79,18 @@ export async function POST(req: NextRequest) {
             clerkUserId,
             meta: { source: "stripe" },
           });
+        }
+        break;
+      }
+
+      case "invoice.paid":
+      case "invoice.payment_failed":
+      case "invoice.payment_action_required": {
+        const invoice = event.data.object as Stripe.Invoice;
+        const subId = subscriptionIdFromInvoice(invoice);
+        if (subId) {
+          const sub = await stripe.subscriptions.retrieve(subId);
+          await syncSubscriptionToClerk(sub);
         }
         break;
       }
