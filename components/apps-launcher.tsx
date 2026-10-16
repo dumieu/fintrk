@@ -70,6 +70,8 @@ const TIP_W = 232;
 const STYLE_ID = "apps-launcher-styles";
 
 const CSS = `
+html[data-xtrk-chrome="burger"] .app-launcher-anchor{visibility:hidden!important;pointer-events:none!important;}
+html[data-xtrk-chrome="waffle"] .app-burger-anchor{visibility:hidden!important;pointer-events:none!important;}
 .al-btn{background:transparent;border:none;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0;-webkit-tap-highlight-color:transparent;transition:background .15s ease,color .15s ease;color:inherit;}
 .al-btn:hover{background:rgba(128,128,128,.16);}
 .al-btn:focus-visible{outline:2px solid rgba(128,128,128,.5);outline-offset:2px;}
@@ -157,6 +159,15 @@ export function AppsLauncher({
     injectStyles();
   }, []);
 
+  useEffect(() => {
+    if (!open) return;
+    const root = document.documentElement;
+    root.dataset.xtrkChrome = "waffle";
+    return () => {
+      if (root.dataset.xtrkChrome === "waffle") delete root.dataset.xtrkChrome;
+    };
+  }, [open]);
+
   const place = useCallback(() => {
     const btn = btnRef.current;
     if (!btn) return;
@@ -235,7 +246,11 @@ export function AppsLauncher({
           e.stopPropagation();
           setOpen((v) => !v);
         }}
-        className={buttonClassName ? buttonClassName : "al-btn"}
+        className={
+          buttonClassName
+            ? `${buttonClassName} app-launcher-anchor`
+            : "al-btn app-launcher-anchor"
+        }
         style={
           buttonClassName
             ? undefined

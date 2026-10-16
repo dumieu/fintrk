@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import {
@@ -34,6 +34,15 @@ export function HamburgerMenu({ sessionActive = false }: { sessionActive?: boole
   const basePath = "/dashboard";
   const [sheetOpen, setSheetOpen] = useState(false);
 
+  useEffect(() => {
+    if (!sheetOpen) return;
+    const root = document.documentElement;
+    root.dataset.xtrkChrome = "burger";
+    return () => {
+      if (root.dataset.xtrkChrome === "burger") delete root.dataset.xtrkChrome;
+    };
+  }, [sheetOpen]);
+
   const navItems = [
     {
       label: "Transactions & Statements",
@@ -51,7 +60,7 @@ export function HamburgerMenu({ sessionActive = false }: { sessionActive?: boole
     <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
       <SheetTrigger
         render={
-          <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px]">
+          <Button variant="ghost" size="icon" className="app-burger-anchor min-h-[44px] min-w-[44px]">
             <Menu className="w-5 h-5" />
             <span className="sr-only">Open menu</span>
           </Button>
